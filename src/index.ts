@@ -1125,8 +1125,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply();
 
         try {
-          // Fetch public server list from Roblox API
-          const serverResponse = await fetch(`https://games.roblox.com/v1/games/${placeId}/servers/Public?limit=10`);
+          // Fetch public server list from Roblox API (excluding full servers to ensure availability)
+          const serverResponse = await fetch(`https://games.roblox.com/v1/games/${placeId}/servers/Public?limit=10&excludeFullGames=true`);
           if (!serverResponse.ok) {
             throw new Error(`Roblox Server API error: ${serverResponse.statusText}`);
           }
