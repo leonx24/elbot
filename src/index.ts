@@ -914,6 +914,69 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
           }
 
+          // 4. Fetch additional info in parallel
+          const [
+            followersRes,
+            followingRes,
+            friendsRes,
+            collectiblesRes,
+            historyRes
+          ] = await Promise.all([
+            fetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`).catch(() => null),
+            fetch(`https://friends.roblox.com/v1/users/${userId}/followings/count`).catch(() => null),
+            fetch(`https://friends.roblox.com/v1/users/${userId}/friends/count`).catch(() => null),
+            fetch(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?limit=100`).catch(() => null),
+            fetch(`https://users.roblox.com/v1/users/${userId}/username-history?limit=10`).catch(() => null)
+          ]);
+
+          // Parse Followers
+          let followersCount = "N/A";
+          if (followersRes?.ok) {
+            const data = await followersRes.json() as { count: number };
+            followersCount = data.count.toLocaleString("id-ID");
+          }
+
+          // Parse Following
+          let followingCount = "N/A";
+          if (followingRes?.ok) {
+            const data = await followingRes.json() as { count: number };
+            followingCount = data.count.toLocaleString("id-ID");
+          }
+
+          // Parse Friends
+          let friendsCount = "N/A";
+          if (friendsRes?.ok) {
+            const data = await friendsRes.json() as { count: number };
+            friendsCount = data.count.toLocaleString("id-ID");
+          }
+
+          // Parse RAP (Recent Average Price)
+          let rapText = "None / 🔒 Private";
+          if (collectiblesRes?.ok) {
+            const data = await collectiblesRes.json() as {
+              data: Array<{ recentAveragePrice?: number; value?: number }>
+            };
+            if (data.data && data.data.length > 0) {
+              const totalRap = data.data.reduce((sum, item) => sum + (item.recentAveragePrice || item.value || 0), 0);
+              rapText = totalRap > 0 ? `${totalRap.toLocaleString("id-ID")} Robux` : "None";
+            } else {
+              rapText = "None";
+            }
+          } else if (collectiblesRes?.status === 403) {
+            rapText = "🔒 Private";
+          }
+
+          // Parse Username History
+          let historyText = "Tidak ada riwayat nama.";
+          if (historyRes?.ok) {
+            const data = await historyRes.json() as {
+              data: Array<{ name: string }>
+            };
+            if (data.data && data.data.length > 0) {
+              historyText = data.data.map(item => `\`${item.name}\``).join(", ");
+            }
+          }
+
           // Format Creation Date
           const creationDate = new Date(details.created);
           const unixTimestamp = Math.floor(creationDate.getTime() / 1000);
@@ -934,8 +997,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
               { name: "Username", value: `\`${details.name}\``, inline: true },
               { name: "Display Name", value: `\`${details.displayName}\``, inline: true },
               { name: "Roblox ID", value: `\`${userId}\``, inline: true },
-              { name: "Tanggal Pembuatan", value: `<t:${unixTimestamp}:D> (<t:${unixTimestamp}:R>)`, inline: false },
-              { name: "Status Akun", value: details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**", inline: true }
+              { name: "Status Akun", value: details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**", inline: true },
+              { name: "💰 Total RAP (Limiteds)", value: `\`${rapText}\``, inline: true },
+              { name: "\u200B", value: "\u200B", inline: true }, // Spacer
+              { name: "👥 Statistik Sosial", value: `• **Teman:** ${friendsCount}\n• **Pengikut:** ${followersCount}\n• **Mengikuti:** ${followingCount}`, inline: false },
+              { name: "🏷️ Riwayat Nama Sebelumnya", value: historyText, inline: false },
+              { name: "📅 Tanggal Pembuatan", value: `<t:${unixTimestamp}:D> (<t:${unixTimestamp}:R>)`, inline: false }
             )
             .setFooter({ text: "LeonX Hub • Roblox Lookup" })
             .setTimestamp();
