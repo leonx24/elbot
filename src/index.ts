@@ -1168,35 +1168,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const embed = new EmbedBuilder()
             .setColor("Blue")
             .setTitle(`📈 Aktif Server List - Place ${placeId}`)
-            .setDescription("Klik tombol di bawah list ini untuk langsung bergabung dengan server pilihan Anda di Roblox!")
+            .setDescription("Salin link protokol di bawah ini, lalu paste di **Windows Run (Win + R)** atau di address bar browser Anda untuk bergabung secara instan!")
             .setTimestamp()
             .setFooter({ text: "LeonX Hub • Server Tracker" });
-
-          const buttonsList: ButtonBuilder[] = [];
 
           availableServers.forEach((server, index) => {
             const serverNum = index + 1;
             const joinUrl = `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${server.id}`;
 
             embed.addFields({
-              name: `🖥️ Server #${serverNum}`,
-              value: `• **Pemain:** \`${server.playing}/${server.maxPlayers}\`\n• **FPS:** \`${server.fps.toFixed(1)}\`\n• **Ping:** \`${server.ping}ms\``,
-              inline: true
+              name: `🖥️ Server #${serverNum} (${server.playing}/${server.maxPlayers})`,
+              value: `• **FPS:** \`${server.fps.toFixed(1)}\` | **Ping:** \`${server.ping}ms\`\n` +
+                     `• **Join Link (Klik untuk salin):**\n\`${joinUrl}\``,
+              inline: false
             });
-
-            buttonsList.push(
-              new ButtonBuilder()
-                .setLabel(`Join #${serverNum}`)
-                .setStyle(ButtonStyle.Link)
-                .setURL(joinUrl)
-            );
           });
 
-          const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(buttonsList);
-
           await interaction.editReply({
-            embeds: [embed],
-            components: [actionRow]
+            embeds: [embed]
           });
         } catch (error) {
           console.error("Gagal mendapatkan server game:", error);
