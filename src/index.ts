@@ -850,6 +850,102 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.reply({ embeds: [embed], ephemeral: true });
         }
       }
+
+      if (interaction.commandName === "roblox") {
+        const username = interaction.options.getString("username", true);
+        await interaction.deferReply();
+
+        try {
+          // 1. Get User ID from username
+          const userSearchResponse = await fetch("https://users.roblox.com/v1/usernames/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ usernames: [username], excludeBannedUsers: false })
+          });
+
+          if (!userSearchResponse.ok) {
+            throw new Error(`Roblox API error: ${userSearchResponse.statusText}`);
+          }
+
+          const searchResult = await userSearchResponse.json() as {
+            data: Array<{ id: number; name: string; displayName: string; hasVerifiedBadge?: boolean }>
+          };
+
+          if (!searchResult.data || searchResult.data.length === 0) {
+            await interaction.editReply(`❌ Pengguna Roblox dengan username \`${username}\` tidak ditemukan.`);
+            return;
+          }
+
+          const robloxUser = searchResult.data[0];
+          if (!robloxUser) {
+            await interaction.editReply(`❌ Pengguna Roblox dengan username \`${username}\` tidak ditemukan.`);
+            return;
+          }
+          const userId = robloxUser.id;
+
+          // 2. Get User Details
+          const userDetailsResponse = await fetch(`https://users.roblox.com/v1/users/${userId}`);
+          if (!userDetailsResponse.ok) {
+            throw new Error(`Roblox API error (details): ${userDetailsResponse.statusText}`);
+          }
+
+          const details = await userDetailsResponse.json() as {
+            description: string;
+            created: string;
+            isBanned: boolean;
+            displayName: string;
+            name: string;
+            hasVerifiedBadge?: boolean;
+          };
+
+          // 3. Get User Avatar Image
+          const avatarResponse = await fetch(
+            `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=150x150&format=Png&isCircular=false`
+          );
+
+          let avatarUrl: string | null = null;
+          if (avatarResponse.ok) {
+            const avatarResult = await avatarResponse.json() as {
+              data: Array<{ imageUrl: string }>
+            };
+            const avatarObj = avatarResult.data?.[0];
+            if (avatarObj) {
+              avatarUrl = avatarObj.imageUrl;
+            }
+          }
+
+          // Format Creation Date
+          const creationDate = new Date(details.created);
+          const unixTimestamp = Math.floor(creationDate.getTime() / 1000);
+
+          const verifiedBadge = details.hasVerifiedBadge ? " ☑️" : "";
+
+          const embed = new EmbedBuilder()
+            .setColor("Blue")
+            .setTitle(`👤 Profil Roblox: ${details.displayName}${verifiedBadge}`)
+            .setURL(`https://www.roblox.com/users/${userId}/profile`)
+            .setThumbnail(avatarUrl)
+            .setDescription(
+              details.description && details.description.trim() !== ""
+                ? `\`\`\`text\n${details.description.slice(0, 500)}\n\`\`\``
+                : "*Tidak ada deskripsi profil.*"
+            )
+            .addFields(
+              { name: "Username", value: `\`${details.name}\``, inline: true },
+              { name: "Display Name", value: `\`${details.displayName}\``, inline: true },
+              { name: "Roblox ID", value: `\`${userId}\``, inline: true },
+              { name: "Tanggal Pembuatan", value: `<t:${unixTimestamp}:D> (<t:${unixTimestamp}:R>)`, inline: false },
+              { name: "Status Akun", value: details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**", inline: true }
+            )
+            .setFooter({ text: "LeonX Hub • Roblox Lookup" })
+            .setTimestamp();
+
+          await interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+          console.error("Gagal melakukan lookup Roblox:", error);
+          await interaction.editReply("❌ Terjadi kesalahan saat menghubungi server Roblox. Silakan coba beberapa saat lagi.");
+        }
+      }
     }
 
     if (interaction.isButton() && interaction.customId === "verify:accept") {

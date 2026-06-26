@@ -160,7 +160,15 @@ export const commands = [
     ),
   new SlashCommandBuilder()
     .setName("stats").setDescription("Statistik bot dan server")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("roblox")
+    .setDescription("Cari dan lihat detail profil Roblox")
+    .addStringOption((o) =>
+      o.setName("username")
+        .setDescription("Username Roblox yang ingin dicari")
+        .setRequired(true)
+    )
 ].map((command) => command.toJSON());
 
 export type CommandData = {
