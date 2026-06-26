@@ -169,6 +169,24 @@ async function ensureVerificationPanel(): Promise<void> {
     if (existing) return;
   }
 
+  // Scan channel history for existing panel to handle database wipes on Railway redeployment
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (messages) {
+    const existingPanel = messages.find(
+      (m) =>
+        m.author.id === client.user?.id &&
+        m.embeds.some((e) => e.title === "Verifikasi Member")
+    );
+    if (existingPanel) {
+      db.prepare(`
+        INSERT INTO bot_settings (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(settingKey, existingPanel.id);
+      console.log(`Panel verifikasi ditemukan (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
+      return;
+    }
+  }
+
   const message = await channel.send(verificationPanel());
   db.prepare(`
     INSERT INTO bot_settings (key, value) VALUES (?, ?)
@@ -191,6 +209,24 @@ async function ensureTicketPanel(): Promise<void> {
   if (saved) {
     const existing = await channel.messages.fetch(saved.value).catch(() => null);
     if (existing) return;
+  }
+
+  // Scan channel history for existing panel to handle database wipes on Railway redeployment
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (messages) {
+    const existingPanel = messages.find(
+      (m) =>
+        m.author.id === client.user?.id &&
+        m.embeds.some((e) => e.title === "🎫 Support Ticket System")
+    );
+    if (existingPanel) {
+      db.prepare(`
+        INSERT INTO bot_settings (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(settingKey, existingPanel.id);
+      console.log(`Panel ticket ditemukan (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
+      return;
+    }
   }
 
   const message = await channel.send(createTicketPanel());
