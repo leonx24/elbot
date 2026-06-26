@@ -15,9 +15,7 @@ const schema = z.object({
   CHANGELOG_CHANNEL_ID: z.string().regex(/^\d+$/, "CHANGELOG_CHANNEL_ID harus berupa channel ID"),
   LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   STATUS_VOICE_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
-  TICKET_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
-  HTTP_PORT: z.string().regex(/^\d+$/).optional().default("3000"),
-  SCRIPT_API_KEY: z.string().optional().default("leonx-secret-key")
+  TICKET_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
 });
 
 export const config = schema.parse(process.env);

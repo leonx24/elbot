@@ -15,9 +15,8 @@ import {
   TextInputBuilder,
   TextInputStyle
 } from "discord.js";
-import http from "node:http";
 import { config } from "./config.js";
-import { db, trackCommand, logScriptExecution, getScriptExecutionStats } from "./database.js";
+import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList } from "./database.js";
 import {
   createTicketPanel,
   createTicketChannel,
@@ -34,7 +33,7 @@ const client = new Client({
 
 const cooldowns = new Map<string, number>();
 const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
-const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel"]);
+const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist"]);
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
@@ -266,6 +265,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "script") {
+        const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+        if (blacklistCheck.blacklisted) {
+          await interaction.reply({
+            content: `❌ Akses ditolak: Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`,
+            ephemeral: true
+          });
+          return;
+        }
+
         if (!(interaction.member instanceof GuildMember) ||
             !config.VERIFIED_ROLE_ID ||
             !interaction.member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
@@ -704,21 +712,105 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const openTickets = (db.prepare("SELECT COUNT(*) AS count FROM tickets WHERE status = 'open'").get() as { count: number }).count;
         const reports = (db.prepare("SELECT COUNT(*) AS count FROM bug_reports").get() as { count: number }).count;
         const uses = (db.prepare("SELECT COALESCE(SUM(uses), 0) AS count FROM command_usage").get() as { count: number }).count;
-        const scriptStats = getScriptExecutionStats();
-
         await interaction.reply({
-          embeds: [new EmbedBuilder().setTitle("Statistik Admin & Script").addFields(
-            { name: "👤 Member", value: String(interaction.guild?.memberCount ?? 0), inline: true },
-            { name: "🎫 Ticket aktif", value: String(openTickets), inline: true },
-            { name: "🐛 Bug report", value: String(reports), inline: true },
-            { name: "⚙️ Command digunakan", value: String(uses), inline: true },
-            { name: "📦 Total Eksekusi", value: String(scriptStats.total), inline: true },
-            { name: "📅 Eksekusi (24j)", value: String(scriptStats.last24h), inline: true },
-            { name: "🚀 Top Executor", value: scriptStats.topExecutor, inline: true },
-            { name: "🎮 Top Game (Place ID)", value: scriptStats.topGame, inline: true }
+          embeds: [new EmbedBuilder().setTitle("Statistik Admin").addFields(
+            { name: "Member", value: String(interaction.guild?.memberCount ?? 0), inline: true },
+            { name: "Ticket aktif", value: String(openTickets), inline: true },
+            { name: "Bug report", value: String(reports), inline: true },
+            { name: "Command digunakan", value: String(uses), inline: true }
           )],
           ephemeral: true
         });
+      }
+
+      if (interaction.commandName === "blacklist") {
+        const sub = interaction.options.getSubcommand();
+
+        if (sub === "add") {
+          const reason = interaction.options.getString("alasan", true);
+          const user = interaction.options.getUser("user");
+          const robloxId = interaction.options.getString("roblox_id");
+          const hwid = interaction.options.getString("hwid");
+
+          if (!user && !robloxId && !hwid) {
+            await interaction.reply({
+              content: "❌ Gagal: Anda harus menyertakan minimal salah satu dari parameter `user`, `roblox_id`, atau `hwid`.",
+              ephemeral: true
+            });
+            return;
+          }
+
+          addToBlacklist({
+            discordId: user?.id,
+            robloxId: robloxId || undefined,
+            hwid: hwid || undefined,
+            reason
+          });
+
+          let message = "✅ Berhasil menambahkan ke daftar blacklist:\n";
+          if (user) message += `• Discord User: <@${user.id}>\n`;
+          if (robloxId) message += `• Roblox ID: \`${robloxId}\`\n`;
+          if (hwid) message += `• HWID: \`${hwid}\`\n`;
+          message += `• Alasan: *${reason}*`;
+
+          await interaction.reply({ content: message, ephemeral: true });
+        }
+
+        if (sub === "remove") {
+          const user = interaction.options.getUser("user");
+          const robloxId = interaction.options.getString("roblox_id");
+          const hwid = interaction.options.getString("hwid");
+
+          if (!user && !robloxId && !hwid) {
+            await interaction.reply({
+              content: "❌ Gagal: Anda harus menyertakan minimal salah satu dari parameter `user`, `roblox_id`, atau `hwid`.",
+              ephemeral: true
+            });
+            return;
+          }
+
+          const removed = removeFromBlacklist({
+            discordId: user?.id,
+            robloxId: robloxId || undefined,
+            hwid: hwid || undefined
+          });
+
+          if (removed) {
+            await interaction.reply({
+              content: "✅ Berhasil menghapus target dari daftar blacklist.",
+              ephemeral: true
+            });
+          } else {
+            await interaction.reply({
+              content: "❌ Gagal: Target tidak ditemukan dalam daftar blacklist.",
+              ephemeral: true
+            });
+          }
+        }
+
+        if (sub === "list") {
+          const list = getBlacklistList();
+          if (list.length === 0) {
+            await interaction.reply({ content: "ℹ️ Daftar blacklist saat ini kosong.", ephemeral: true });
+            return;
+          }
+
+          const embed = new EmbedBuilder()
+            .setColor("Red")
+            .setTitle("🚫 Daftar Blacklist LeonX")
+            .setDescription(
+              list.map((item) => {
+                let details = "";
+                if (item.discord_id) details += `Discord: <@${item.discord_id}> `;
+                if (item.roblox_id) details += `Roblox ID: \`${item.roblox_id}\` `;
+                if (item.hwid) details += `HWID: \`${item.hwid}\` `;
+                return `**#${item.id}** — ${details}\n└ Alasan: *${item.reason}* (${item.created_at})`;
+              }).join("\n\n")
+            )
+            .setTimestamp();
+
+          await interaction.reply({ embeds: [embed], ephemeral: true });
+        }
       }
     }
 
@@ -995,59 +1087,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       else await interaction.reply(message).catch(() => undefined);
     }
   }
-});
-
-const server = http.createServer((req, res) => {
-  if (req.method === "POST" && req.url === "/api/execute") {
-    const apiKey = req.headers["x-api-key"];
-    if (!apiKey || apiKey !== config.SCRIPT_API_KEY) {
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Unauthorized: Invalid API Key" }));
-      return;
-    }
-
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk.toString();
-    });
-
-    req.on("end", () => {
-      try {
-        const data = JSON.parse(body);
-
-        if (!data.roblox_username || !data.roblox_id || !data.place_id || !data.executor) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Bad Request: Missing required fields" }));
-          return;
-        }
-
-        logScriptExecution({
-          discordId: data.discord_id ? String(data.discord_id) : undefined,
-          robloxUsername: String(data.roblox_username),
-          robloxId: String(data.roblox_id),
-          placeId: String(data.place_id),
-          executor: String(data.executor)
-        });
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: true, message: "Log saved successfully" }));
-      } catch (err) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Bad Request: Invalid JSON body" }));
-      }
-    });
-  } else if (req.method === "GET" && req.url === "/") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "online", service: "LeonX Script Log API" }));
-  } else {
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Not Found" }));
-  }
-});
-
-const port = parseInt(process.env.PORT || config.HTTP_PORT) || 3000;
-server.listen(port, () => {
-  console.log(`HTTP Server berjalan di port ${port} untuk log eksekusi script.`);
 });
 
 await client.login(config.DISCORD_TOKEN);

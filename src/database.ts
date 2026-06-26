@@ -58,14 +58,13 @@ db.exec(`
     value TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS script_executions (
+  CREATE TABLE IF NOT EXISTS blacklist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_id TEXT,
-    roblox_username TEXT NOT NULL,
-    roblox_id TEXT NOT NULL,
-    place_id TEXT NOT NULL,
-    executor TEXT NOT NULL,
-    executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    roblox_id TEXT,
+    hwid TEXT,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
 
@@ -93,54 +92,72 @@ export function trackCommand(command: string): void {
   `).run(command);
 }
 
-export function logScriptExecution(data: {
+
+
+export function addToBlacklist(data: {
   discordId?: string;
-  robloxUsername: string;
-  robloxId: string;
-  placeId: string;
-  executor: string;
+  robloxId?: string;
+  hwid?: string;
+  reason: string;
 }): void {
   db.prepare(`
-    INSERT INTO script_executions (discord_id, roblox_username, roblox_id, place_id, executor)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO blacklist (discord_id, roblox_id, hwid, reason)
+    VALUES (?, ?, ?, ?)
   `).run(
     data.discordId || null,
-    data.robloxUsername,
-    data.robloxId,
-    data.placeId,
-    data.executor
+    data.robloxId || null,
+    data.hwid || null,
+    data.reason
   );
 }
 
-export function getScriptExecutionStats() {
-  const total = (db.prepare("SELECT COUNT(*) as count FROM script_executions").get() as { count: number }).count;
+export function removeFromBlacklist(criteria: {
+  discordId?: string;
+  robloxId?: string;
+  hwid?: string;
+}): boolean {
+  let result;
+  if (criteria.discordId) {
+    result = db.prepare("DELETE FROM blacklist WHERE discord_id = ?").run(criteria.discordId);
+  } else if (criteria.robloxId) {
+    result = db.prepare("DELETE FROM blacklist WHERE roblox_id = ?").run(criteria.robloxId);
+  } else if (criteria.hwid) {
+    result = db.prepare("DELETE FROM blacklist WHERE hwid = ?").run(criteria.hwid);
+  } else {
+    return false;
+  }
+  return result.changes > 0;
+}
 
-  const last24h = (db.prepare(`
-    SELECT COUNT(*) as count 
-    FROM script_executions 
-    WHERE executed_at >= datetime('now', '-24 hours')
-  `).get() as { count: number }).count;
+export function isBlacklisted(criteria: {
+  discordId?: string;
+  robloxId?: string;
+  hwid?: string;
+}): { blacklisted: boolean; reason?: string } {
+  let row;
+  if (criteria.discordId) {
+    row = db.prepare("SELECT reason FROM blacklist WHERE discord_id = ? LIMIT 1").get(criteria.discordId) as { reason: string } | undefined;
+  }
+  if (!row && criteria.robloxId) {
+    row = db.prepare("SELECT reason FROM blacklist WHERE roblox_id = ? LIMIT 1").get(criteria.robloxId) as { reason: string } | undefined;
+  }
+  if (!row && criteria.hwid) {
+    row = db.prepare("SELECT reason FROM blacklist WHERE hwid = ? LIMIT 1").get(criteria.hwid) as { reason: string } | undefined;
+  }
 
-  const topExecutorRow = db.prepare(`
-    SELECT executor, COUNT(*) as count
-    FROM script_executions
-    GROUP BY executor
-    ORDER BY count DESC
-    LIMIT 1
-  `).get() as { executor: string; count: number } | undefined;
+  if (row) {
+    return { blacklisted: true, reason: row.reason };
+  }
+  return { blacklisted: false };
+}
 
-  const topGameRow = db.prepare(`
-    SELECT place_id, COUNT(*) as count
-    FROM script_executions
-    GROUP BY place_id
-    ORDER BY count DESC
-    LIMIT 1
-  `).get() as { place_id: string; count: number } | undefined;
-
-  return {
-    total,
-    last24h,
-    topExecutor: topExecutorRow ? `${topExecutorRow.executor} (${topExecutorRow.count}x)` : "Belum ada data",
-    topGame: topGameRow ? `${topGameRow.place_id} (${topGameRow.count}x)` : "Belum ada data"
-  };
+export function getBlacklistList(): Array<{
+  id: number;
+  discord_id: string | null;
+  roblox_id: string | null;
+  hwid: string | null;
+  reason: string;
+  created_at: string;
+}> {
+  return db.prepare("SELECT * FROM blacklist ORDER BY id DESC").all() as any;
 }

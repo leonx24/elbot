@@ -132,6 +132,29 @@ export const commands = [
         .setRequired(true)
     ),
   new SlashCommandBuilder()
+    .setName("blacklist")
+    .setDescription("Kelola daftar blacklist (Owner Only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((sub) =>
+      sub.setName("add")
+        .setDescription("Tambahkan target ke blacklist")
+        .addStringOption((o) => o.setName("alasan").setDescription("Alasan").setRequired(true))
+        .addUserOption((o) => o.setName("user").setDescription("User Discord"))
+        .addStringOption((o) => o.setName("roblox_id").setDescription("Roblox User ID"))
+        .addStringOption((o) => o.setName("hwid").setDescription("Hardware ID (HWID)"))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("remove")
+        .setDescription("Hapus target dari blacklist")
+        .addUserOption((o) => o.setName("user").setDescription("User Discord"))
+        .addStringOption((o) => o.setName("roblox_id").setDescription("Roblox User ID"))
+        .addStringOption((o) => o.setName("hwid").setDescription("Hardware ID (HWID)"))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("list")
+        .setDescription("Lihat daftar blacklist")
+    ),
+  new SlashCommandBuilder()
     .setName("stats").setDescription("Statistik bot dan server")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 ].map((command) => command.toJSON());
