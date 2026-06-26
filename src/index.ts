@@ -1460,6 +1460,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
             await interaction.editReply("❌ Terjadi kesalahan saat mengambil daftar pemantauan.");
           }
         }
+
+        if (sub === "test") {
+          const placeIdRaw = interaction.options.getString("place_id", true);
+          const placeId = extractPlaceId(placeIdRaw);
+          await interaction.deferReply({ ephemeral: true });
+
+          try {
+            const item = db.prepare("SELECT * FROM monitored_places WHERE place_id = ?").get(placeId) as {
+              place_id: string;
+              name: string;
+              universe_id: number;
+              last_updated: string;
+            } | undefined;
+
+            if (!item) {
+              await interaction.editReply(`❌ Game dengan Place ID \`${placeId}\` tidak ditemukan dalam daftar pemantauan. Tambahkan terlebih dahulu menggunakan \`/monitor add\`.`);
+              return;
+            }
+
+            // Set last_updated ke epoch agar loop mendeteksi perbedaan
+            db.prepare("UPDATE monitored_places SET last_updated = ? WHERE place_id = ?")
+              .run("1970-01-01T00:00:00.000Z", placeId);
+
+            // Jalankan deteksi
+            await checkMonitoredPlaces();
+
+            await interaction.editReply(`✅ Berhasil mensimulasikan update untuk **${item.name}**! Silakan periksa channel <#1519980835116286053>.`);
+          } catch (error) {
+            console.error("Gagal menjalankan simulasi update:", error);
+            await interaction.editReply("❌ Terjadi kesalahan saat mensimulasikan update.");
+          }
+        }
       }
     }
 

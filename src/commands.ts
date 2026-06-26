@@ -207,6 +207,11 @@ export const commands = [
       sub.setName("list")
         .setDescription("Lihat daftar game Roblox yang sedang dipantau")
     )
+    .addSubcommand((sub) =>
+      sub.setName("test")
+        .setDescription("Uji coba detektor update untuk game tertentu (Simulasikan Update)")
+        .addStringOption((o) => o.setName("place_id").setDescription("Place ID game Roblox").setRequired(true))
+    )
 ].map((command) => command.toJSON());
 
 export type CommandData = {
