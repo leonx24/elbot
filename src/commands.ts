@@ -46,6 +46,10 @@ export const commands = [
           o.setName("ringkasan")
             .setDescription("Kalimat pembuka update (opsional)")
         )
+        .addStringOption((o) =>
+          o.setName("game")
+            .setDescription("Nama game/place, contoh: Universal, Fish It (opsional)")
+        )
     ),
   new SlashCommandBuilder()
     .setName("ticket")

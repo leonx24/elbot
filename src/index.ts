@@ -57,17 +57,17 @@ function formatChangelogContent(content: string): string {
 }
 
 const changeSections = {
-  NEW: { title: "✨ FITUR BARU", badge: "🟢 `NEW`" },
-  IMPR: { title: "⚡ PENINGKATAN", badge: "🔵 `IMPR`" },
-  FIX: { title: "🔧 PERBAIKAN BUG", badge: "🟡 `FIX`" },
-  REM: { title: "🗑️ DIHAPUS", badge: "🔴 `REM`" }
+  NEW: { title: "Added", emoji: "✨" },
+  FIX: { title: "Fixed", emoji: "🔧" },
+  IMPR: { title: "Improved", emoji: "⚡" },
+  REM: { title: "Removed", emoji: "🗑️" }
 } as const;
 
 function buildEnhancedChanges(content: string): string {
   const grouped: Record<keyof typeof changeSections, string[]> = {
     NEW: [],
-    IMPR: [],
     FIX: [],
+    IMPR: [],
     REM: []
   };
 
@@ -84,10 +84,14 @@ function buildEnhancedChanges(content: string): string {
   const sections = Object.entries(changeSections)
     .filter(([key]) => grouped[key as keyof typeof changeSections].length > 0)
     .map(([key, section]) => {
-      const items = grouped[key as keyof typeof changeSections]
-        .map((item) => `${section.badge} ${item}`)
+      const itemsList = grouped[key as keyof typeof changeSections];
+      const items = itemsList
+        .map((item, index) => {
+          const prefix = index === itemsList.length - 1 ? "└─" : "├─";
+          return `\`${prefix}\` ${item}`;
+        })
         .join("\n");
-      return `### ${section.title}\n${items}`;
+      return `${section.emoji} **${section.title}**\n${items}`;
     });
 
   return sections.join("\n\n").slice(0, 4000);
@@ -591,27 +595,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
             statusFooterText = "Systems under maintenance";
           }
 
-          const consolidatedEmbed = new EmbedBuilder()
+          const gameName = interaction.options.getString("game") || "Universal";
+
+          const consolidatedEmbed1 = new EmbedBuilder()
             .setColor(type.color)
-            .setAuthor({
-              name: "LeonX Hub Official",
-              iconURL: guildIcon
-            })
-            .setTitle(`🚀 LeonX Hub Update  •  ${version}`)
+            .setTitle(`LeonX Script Update Logs`)
             .setDescription(
-              `${summary}\n\n` +
-              `### 📝 Changelog — Apa yang Baru?\n${formattedContent}\n\n` +
-              `⚠️ **Dilarang membagikan script ke luar server. Pelanggaran dapat menyebabkan blacklist permanen.**`
+              `• **Place:** ${gameName}\n` +
+              `• **Version:** ${version}\n` +
+              `• **Developer Notes:**\n` +
+              `> ${summary}`
             )
-            .addFields(
-              { name: "📦 SCRIPT", value: "**LeonX Hub**", inline: true },
-              { name: "👤 DEVELOPER", value: `<@${interaction.user.id}>`, inline: true },
-              { name: "📅 RELEASE", value: `<t:${Math.floor(Date.now() / 1000)}:D>`, inline: true },
-              { name: "🛡️ STATUS", value: statusText, inline: true },
-              { name: "📦 VERSION", value: `🟣 **${version}**`, inline: true },
-              { name: "💬 SUPPORT", value: "Gunakan sistem **ticket**", inline: true }
+            .setThumbnail(botAvatar ?? null);
+
+          const consolidatedEmbed2 = new EmbedBuilder()
+            .setColor(type.color)
+            .setDescription(
+              formattedContent + "\n\n" +
+              `⚠️ *Dilarang membagikan script ke luar server. Pelanggaran dapat menyebabkan blacklist.*`
             )
-            .setThumbnail(botAvatar ?? null)
             .setFooter({
               text: `LeonX Hub ${version} • ${statusFooterText}`,
               iconURL: botAvatar
@@ -657,7 +659,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               name: `${version} — ${title}`.slice(0, 100),
               message: {
                 content: `@everyone  ${type.emoji} **${type.label}**`,
-                embeds: [consolidatedEmbed],
+                embeds: [consolidatedEmbed1, consolidatedEmbed2],
                 components: [links]
               },
               reason: `Changelog ${version}`
@@ -665,7 +667,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           } else if (channel?.isSendable()) {
             await channel.send({
               content: `@everyone  ${type.emoji} **${type.label}**`,
-              embeds: [consolidatedEmbed],
+              embeds: [consolidatedEmbed1, consolidatedEmbed2],
               components: [links]
             });
           } else {
