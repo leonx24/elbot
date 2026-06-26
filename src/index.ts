@@ -1119,6 +1119,155 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.editReply("❌ Terjadi kesalahan saat mengambil data game. Silakan coba beberapa saat lagi.");
         }
       }
+
+      if (interaction.commandName === "game-servers") {
+        const placeId = interaction.options.getString("place_id", true);
+        await interaction.deferReply();
+
+        try {
+          // Fetch public server list from Roblox API
+          const serverResponse = await fetch(`https://games.roblox.com/v1/games/${placeId}/servers/Public?limit=10`);
+          if (!serverResponse.ok) {
+            throw new Error(`Roblox Server API error: ${serverResponse.statusText}`);
+          }
+
+          const serverData = await serverResponse.json() as {
+            data: Array<{
+              id: string;
+              maxPlayers: number;
+              playing: number;
+              fps: number;
+              ping: number;
+            }>;
+          };
+
+          if (!serverData.data || serverData.data.length === 0) {
+            await interaction.editReply(`❌ Tidak ada server aktif yang ditemukan untuk Place ID \`${placeId}\`.`);
+            return;
+          }
+
+          // Filter out full servers and get up to 5 servers
+          const availableServers = serverData.data
+            .filter((s) => s.playing < s.maxPlayers)
+            .slice(0, 5);
+
+          if (availableServers.length === 0) {
+            await interaction.editReply(`❌ Semua server aktif saat ini penuh untuk Place ID \`${placeId}\`.`);
+            return;
+          }
+
+          const embed = new EmbedBuilder()
+            .setColor("Blue")
+            .setTitle(`📈 Aktif Server List - Place ${placeId}`)
+            .setDescription("Klik tombol di bawah list ini untuk langsung bergabung dengan server pilihan Anda di Roblox!")
+            .setTimestamp()
+            .setFooter({ text: "LeonX Hub • Server Tracker" });
+
+          const buttonsList: ButtonBuilder[] = [];
+
+          availableServers.forEach((server, index) => {
+            const serverNum = index + 1;
+            const joinUrl = `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${server.id}`;
+
+            embed.addFields({
+              name: `🖥️ Server #${serverNum}`,
+              value: `• **Pemain:** \`${server.playing}/${server.maxPlayers}\`\n• **FPS:** \`${server.fps.toFixed(1)}\`\n• **Ping:** \`${server.ping}ms\``,
+              inline: true
+            });
+
+            buttonsList.push(
+              new ButtonBuilder()
+                .setLabel(`Join #${serverNum}`)
+                .setStyle(ButtonStyle.Link)
+                .setURL(joinUrl)
+            );
+          });
+
+          const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(buttonsList);
+
+          await interaction.editReply({
+            embeds: [embed],
+            components: [actionRow]
+          });
+        } catch (error) {
+          console.error("Gagal mendapatkan server game:", error);
+          await interaction.editReply("❌ Terjadi kesalahan saat mengambil daftar server. Pastikan Place ID benar.");
+        }
+      }
+
+      if (interaction.commandName === "send-rules") {
+        if (interaction.user.id !== config.OWNER_ID) {
+          await interaction.reply({
+            content: "Hanya owner yang dapat mengirimkan rules.",
+            ephemeral: true
+          });
+          return;
+        }
+
+        const channelId = "1515261709147705537";
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+
+        if (!channel || !channel.isTextBased() || !channel.isSendable()) {
+          await interaction.reply({
+            content: "❌ Gagal: Channel rules tidak ditemukan atau bot tidak dapat mengirim pesan di sana.",
+            ephemeral: true
+          });
+          return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const embedWelcome = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("✨ Welcome to LeonX Hub Server ✨")
+            .setDescription(
+              "Selamat datang di server resmi LeonX Hub. Server ini adalah wadah diskusi, pembaruan script, laporan bug, serta layanan bantuan bagi seluruh pengguna LeonX Hub.\n\n" +
+              "Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama di dalam server ini."
+            );
+
+          const embedRules = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("📜 SERVER RULES & GUIDELINES")
+            .setDescription(
+              "Dengan bergabung di server ini, Anda dianggap telah membaca dan menyetujui seluruh ketentuan di bawah ini:\n\n" +
+              "**1. 🚫 Larangan Keras Crack, Leak, & Bypass**\n" +
+              "Dilarang keras mencoba melakukan cracking/dekripsi loader, membagikan/leaking script LeonX ke luar server, atau menggunakan bypass ilegal. Pelanggaran berat ini akan berakibat pada **Blacklist HWID + Roblox ID + Discord ID secara permanen** dari seluruh layanan kami.\n\n" +
+              "**2. 🤝 Saling Menghormati & Jaga Etika**\n" +
+              "Gunakan bahasa yang sopan. Dilarang melakukan cyberbullying, harassment, memicu drama/debat kusir, toxic berlebih, SARA, atau mengirim konten NSFW/pornografi.\n\n" +
+              "**3. 🛡️ Saluran Chat Sesuai Fungsi**\n" +
+              "Gunakan channel sesuai dengan tujuannya. Jangan melakukan spam chat, spam tag staf/developer tanpa alasan mendesak, atau membagikan iklan/link promosi server lain (Anti-Link aktif).\n\n" +
+              "**4. 🎫 Penggunaan Sistem Ticket & Bug Report**\n" +
+              "Buka ticket support hanya untuk masalah teknis/transaksi yang mendesak. Kirim laporan bug nyata via `/bug-report`. Menyalahgunakan sistem tiket/laporan bug untuk spam atau bercanda akan dikenakan sanksi.\n\n" +
+              "**5. 🔒 Keamanan Akun & Transaksi Resmi**\n" +
+              "Staf LeonX Hub **TIDAK PERNAH** meminta password akun Roblox atau token Discord Anda. Segala bentuk transaksi resmi hanya dilakukan melalui bot resmi atau langsung dengan Admin."
+            );
+
+          const embedFooter = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("⚖️ SISTEM SANKSI & KONSEKUENSI")
+            .setDescription(
+              "Moderator berhak mengambil keputusan mutlak berdasarkan pelanggaran yang Anda lakukan:\n" +
+              "• **Pelanggaran Ringan:** Peringatan tertulis (Warning) via database bot.\n" +
+              "• **Pelanggaran Sedang:** Timeout (Mute otomatis) mulai dari 10 menit hingga 7 hari.\n" +
+              "• **Pelanggaran Berat:** Kick, Banned permanen dari Discord, serta **Blacklist HWID & Roblox ID** di server database game.\n\n" +
+              "Jika Anda belum terverifikasi, silakan selesaikan proses verifikasi dengan menekan tombol **Verify** di channel verifikasi."
+            )
+            .setFooter({ text: "LeonX Hub • Official Guidelines" })
+            .setTimestamp();
+
+          await channel.send({ embeds: [embedWelcome, embedRules, embedFooter] });
+
+          await interaction.editReply({
+            content: `✅ Sukses mengirimkan rules ke channel <#${channelId}>.`
+          });
+        } catch (error) {
+          console.error("Gagal mengirimkan rules:", error);
+          await interaction.editReply({
+            content: "❌ Terjadi kesalahan saat mengirimkan rules ke channel."
+          });
+        }
+      }
     }
 
     if (interaction.isButton() && interaction.customId === "verify:accept") {

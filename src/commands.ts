@@ -176,7 +176,19 @@ export const commands = [
       o.setName("place_id")
         .setDescription("Place ID game Roblox yang ingin dipantau")
         .setRequired(true)
-    )
+    ),
+  new SlashCommandBuilder()
+    .setName("game-servers")
+    .setDescription("Lihat daftar server aktif game Roblox dan dapatkan link join instan")
+    .addStringOption((o) =>
+      o.setName("place_id")
+        .setDescription("Place ID game Roblox")
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("send-rules")
+    .setDescription("Kirim panel rules premium ke channel peraturan (Owner/Admin Only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 ].map((command) => command.toJSON());
 
 export type CommandData = {
