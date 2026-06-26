@@ -66,6 +66,14 @@ db.exec(`
     reason TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS monitored_places (
+    place_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    universe_id INTEGER NOT NULL,
+    last_updated TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;

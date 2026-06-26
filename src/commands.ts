@@ -188,7 +188,25 @@ export const commands = [
   new SlashCommandBuilder()
     .setName("send-rules")
     .setDescription("Kirim panel rules premium ke channel peraturan (Owner/Admin Only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("monitor")
+    .setDescription("Kelola daftar game Roblox yang dipantau (Owner Only)")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((sub) =>
+      sub.setName("add")
+        .setDescription("Tambah game Roblox ke pemantauan")
+        .addStringOption((o) => o.setName("place_id").setDescription("Place ID game Roblox").setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("remove")
+        .setDescription("Hapus game Roblox dari pemantauan")
+        .addStringOption((o) => o.setName("place_id").setDescription("Place ID game Roblox").setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("list")
+        .setDescription("Lihat daftar game Roblox yang sedang dipantau")
+    )
 ].map((command) => command.toJSON());
 
 export type CommandData = {

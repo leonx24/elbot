@@ -33,7 +33,7 @@ const client = new Client({
 
 const cooldowns = new Map<string, number>();
 const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
-const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist"]);
+const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules"]);
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
@@ -273,6 +273,81 @@ async function updateVoiceChannelStatus(status?: string): Promise<void> {
   }
 }
 
+async function checkMonitoredPlaces(): Promise<void> {
+  const monitoredChannelId = "1519980835116286053";
+  try {
+    const list = db.prepare("SELECT * FROM monitored_places").all() as Array<{
+      place_id: string;
+      name: string;
+      universe_id: number;
+      last_updated: string;
+    }>;
+
+    if (list.length === 0) return;
+
+    const channel = await client.channels.fetch(monitoredChannelId).catch(() => null);
+    if (!channel || !channel.isTextBased() || !channel.isSendable()) {
+      console.warn(`[Update Detector] Channel update-logs (${monitoredChannelId}) tidak ditemukan atau tidak dapat dikirimi pesan.`);
+      return;
+    }
+
+    for (const item of list) {
+      const response = await fetch(`https://games.roblox.com/v1/games?universeIds=${item.universe_id}`).catch(() => null);
+      if (!response || !response.ok) continue;
+
+      const result = await response.json() as {
+        data: Array<{
+          name: string;
+          updated: string;
+        }>
+      };
+
+      const gameData = result.data?.[0];
+      if (!gameData) continue;
+
+      const apiUpdated = gameData.updated;
+
+      // Jika waktu pembaruan di API berbeda dengan yang disimpan di database
+      if (apiUpdated !== item.last_updated) {
+        // 1. Perbarui di database
+        db.prepare("UPDATE monitored_places SET last_updated = ?, name = ? WHERE place_id = ?")
+          .run(apiUpdated, gameData.name, item.place_id);
+
+        const updatedDate = new Date(apiUpdated);
+        const unixTimestamp = Math.floor(updatedDate.getTime() / 1000);
+
+        // 2. Kirim pesan Embed Alert ke channel update-logs
+        const embed = new EmbedBuilder()
+          .setColor("Red")
+          .setTitle(`🚨 GAME UPDATE DETECTED: ${gameData.name}`)
+          .setDescription(
+            `Sebuah pembaruan baru terdeteksi pada game yang sedang dipantau!\n\n` +
+            `• **Nama Game:** ${gameData.name}\n` +
+            `• **Place ID:** \`${item.place_id}\`\n` +
+            `• **Universe ID:** \`${item.universe_id}\`\n` +
+            `• **Tanggal Pembaruan:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n\n` +
+            `⚠️ **Status Bot Otomatis Diubah:** Status bot kini dialihkan ke **Testing/Updating** dan status suara disesuaikan. Pengembang diharapkan untuk segera mengecek kecocokan script loader.`
+          )
+          .setFooter({ text: "LeonX Hub • Auto-Update Detector" })
+          .setTimestamp();
+
+        await channel.send({ content: "@everyone", embeds: [embed] }).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
+
+        // 3. Otomatis set status bot ke 'testing'
+        db.prepare(`
+          INSERT INTO bot_settings (key, value) VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run("script_status", "testing");
+
+        // 4. Perbarui voice channel status secara instan
+        await updateVoiceChannelStatus().catch(() => null);
+      }
+    }
+  } catch (error) {
+    console.error("Gagal menjalankan polling Update Detector:", error);
+  }
+}
+
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Bot aktif sebagai ${readyClient.user.tag}`);
   await ensureVerificationPanel().catch((error) => {
@@ -284,6 +359,16 @@ client.once(Events.ClientReady, async (readyClient) => {
   await updateVoiceChannelStatus().catch((error) => {
     console.error("Gagal menjalankan update voice channel status:", error);
   });
+
+  // Jalankan detektor update game Roblox secara berkala
+  checkMonitoredPlaces().catch((error) => {
+    console.error("Gagal melakukan pengecekan update game awal:", error);
+  });
+  setInterval(() => {
+    checkMonitoredPlaces().catch((error) => {
+      console.error("Gagal melakukan pengecekan update game berkala:", error);
+    });
+  }, 5 * 60 * 1000);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -1264,6 +1349,116 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.editReply({
             content: "❌ Terjadi kesalahan saat mengirimkan rules ke channel."
           });
+        }
+      }
+
+      if (interaction.commandName === "monitor") {
+        const sub = interaction.options.getSubcommand();
+
+        if (sub === "add") {
+          const placeIdRaw = interaction.options.getString("place_id", true);
+          const placeId = extractPlaceId(placeIdRaw);
+          await interaction.deferReply({ ephemeral: true });
+
+          try {
+            // Get Universe ID from Place ID using public API
+            const detailsResponse = await fetch(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`);
+            if (!detailsResponse.ok) {
+              throw new Error(`Roblox API error: ${detailsResponse.statusText}`);
+            }
+
+            const universeInfo = await detailsResponse.json() as { universeId?: number | null };
+            if (!universeInfo || !universeInfo.universeId) {
+              await interaction.editReply(`❌ Game dengan Place ID \`${placeId}\` tidak ditemukan.`);
+              return;
+            }
+
+            const universeId = universeInfo.universeId;
+
+            // Get Game Name
+            const gameDetailsResponse = await fetch(`https://games.roblox.com/v1/games?universeIds=${universeId}`);
+            let gameName = "Unknown Game";
+            let lastUpdated = new Date().toISOString();
+
+            if (gameDetailsResponse.ok) {
+              const gameDetails = await gameDetailsResponse.json() as {
+                data: Array<{ name: string; updated: string }>
+              };
+              const firstItem = gameDetails.data[0];
+              if (firstItem) {
+                gameName = firstItem.name;
+                lastUpdated = firstItem.updated;
+              }
+            }
+
+            // Save to database
+            db.prepare(`
+              INSERT INTO monitored_places (place_id, name, universe_id, last_updated)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(place_id) DO UPDATE SET
+                name = excluded.name,
+                universe_id = excluded.universe_id,
+                last_updated = excluded.last_updated
+            `).run(placeId, gameName, universeId, lastUpdated);
+
+            await interaction.editReply(`✅ Berhasil menambahkan **${gameName}** (\`${placeId}\`) ke daftar pemantauan update game.`);
+          } catch (error) {
+            console.error("Gagal menambahkan game ke pemantauan:", error);
+            await interaction.editReply("❌ Terjadi kesalahan saat mendaftarkan game ke pemantauan.");
+          }
+        }
+
+        if (sub === "remove") {
+          const placeIdRaw = interaction.options.getString("place_id", true);
+          const placeId = extractPlaceId(placeIdRaw);
+          await interaction.deferReply({ ephemeral: true });
+
+          try {
+            const result = db.prepare("DELETE FROM monitored_places WHERE place_id = ?").run(placeId);
+            if (result.changes > 0) {
+              await interaction.editReply(`✅ Berhasil menghapus Place ID \`${placeId}\` dari pemantauan.`);
+            } else {
+              await interaction.editReply(`❌ Place ID \`${placeId}\` tidak ditemukan dalam daftar pemantauan.`);
+            }
+          } catch (error) {
+            console.error("Gagal menghapus game dari pemantauan:", error);
+            await interaction.editReply("❌ Terjadi kesalahan saat menghapus game dari pemantauan.");
+          }
+        }
+
+        if (sub === "list") {
+          await interaction.deferReply({ ephemeral: true });
+
+          try {
+            const list = db.prepare("SELECT * FROM monitored_places ORDER BY created_at DESC").all() as Array<{
+              place_id: string;
+              name: string;
+              universe_id: number;
+              last_updated: string;
+            }>;
+
+            if (list.length === 0) {
+              await interaction.editReply("ℹ️ Daftar pemantauan game saat ini kosong.");
+              return;
+            }
+
+            const embed = new EmbedBuilder()
+              .setColor("Blue")
+              .setTitle("🔍 Roblox Game Update Monitoring List")
+              .setDescription(
+                list.map((item) => {
+                  const updatedDate = new Date(item.last_updated);
+                  const unixTimestamp = Math.floor(updatedDate.getTime() / 1000);
+                  return `• **${item.name}** (\`${item.place_id}\`)\n  └ Last Updated: <t:${unixTimestamp}:f> (<t:${unixTimestamp}:R>)`;
+                }).join("\n\n")
+              )
+              .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+          } catch (error) {
+            console.error("Gagal mengambil daftar pemantauan:", error);
+            await interaction.editReply("❌ Terjadi kesalahan saat mengambil daftar pemantauan.");
+          }
         }
       }
     }
