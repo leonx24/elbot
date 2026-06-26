@@ -56,6 +56,13 @@ function formatChangelogContent(content: string): string {
   return items.map((item) => `> • ${item}`).join("\n").slice(0, 4000);
 }
 
+function extractPlaceId(input: string): string {
+  const cleanInput = input.trim();
+  const match = cleanInput.match(/(?:games|places)\/(\d+)/i);
+  if (match?.[1]) return match[1];
+  return cleanInput.replace(/\D/g, "");
+}
+
 const changeSections = {
   NEW: { title: "Added", emoji: "✨" },
   FIX: { title: "Fixed", emoji: "🔧" },
@@ -1015,7 +1022,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "monitor-game") {
-        const placeId = interaction.options.getString("place_id", true);
+        const placeIdRaw = interaction.options.getString("place_id", true);
+        const placeId = extractPlaceId(placeIdRaw);
         await interaction.deferReply();
 
         try {
@@ -1121,7 +1129,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "game-servers") {
-        const placeId = interaction.options.getString("place_id", true);
+        const placeIdRaw = interaction.options.getString("place_id", true);
+        const placeId = extractPlaceId(placeIdRaw);
         await interaction.deferReply();
 
         try {
