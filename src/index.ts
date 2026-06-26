@@ -1013,6 +1013,117 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.editReply("❌ Terjadi kesalahan saat menghubungi server Roblox. Silakan coba beberapa saat lagi.");
         }
       }
+
+      if (interaction.commandName === "monitor-game") {
+        const placeId = interaction.options.getString("place_id", true);
+        await interaction.deferReply();
+
+        try {
+          // 1. Get Universe ID from Place ID
+          const detailsResponse = await fetch(`https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`);
+          if (!detailsResponse.ok) {
+            throw new Error(`Place details fetch error: ${detailsResponse.statusText}`);
+          }
+
+          const placeDetailsList = await detailsResponse.json() as Array<{
+            universeId?: number;
+            name?: string;
+            description?: string;
+            builder?: string;
+            url?: string;
+          }>;
+
+          const placeData = placeDetailsList?.[0];
+          if (!placeData || !placeData.universeId) {
+            await interaction.editReply(`❌ Game dengan Place ID \`${placeId}\` tidak ditemukan.`);
+            return;
+          }
+
+          const universeId = placeData.universeId;
+
+          // 2. Fetch Universe details, votes, and icon in parallel
+          const [gameRes, votesRes, iconRes] = await Promise.all([
+            fetch(`https://games.roblox.com/v1/games?universeIds=${universeId}`).catch(() => null),
+            fetch(`https://games.roblox.com/v1/games/${universeId}/votes`).catch(() => null),
+            fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=150x150&format=Png&isCircular=false`).catch(() => null)
+          ]);
+
+          // Parse Game Info
+          let playing = 0;
+          let visits = 0;
+          let favoritedCount = 0;
+          let creatorName = placeData.builder || "Unknown";
+          let gameName = placeData.name || "Unknown Game";
+
+          if (gameRes?.ok) {
+            const gameData = await gameRes.json() as {
+              data: Array<{
+                name: string;
+                playing: number;
+                visits: number;
+                favoritedCount: number;
+                creator: { name: string };
+              }>
+            };
+            const uData = gameData.data?.[0];
+            if (uData) {
+              gameName = uData.name;
+              playing = uData.playing;
+              visits = uData.visits;
+              favoritedCount = uData.favoritedCount;
+              creatorName = uData.creator.name;
+            }
+          }
+
+          // Parse Votes (Likes & Dislikes)
+          let likes = 0;
+          let dislikes = 0;
+          let likeRatio = "100%";
+          if (votesRes?.ok) {
+            const votesData = await votesRes.json() as { upVotes: number; downVotes: number };
+            likes = votesData.upVotes;
+            dislikes = votesData.downVotes;
+            const totalVotes = likes + dislikes;
+            if (totalVotes > 0) {
+              likeRatio = `${((likes / totalVotes) * 100).toFixed(1)}%`;
+            }
+          }
+
+          // Parse Icon
+          let iconUrl: string | null = null;
+          if (iconRes?.ok) {
+            const iconData = await iconRes.json() as { data: Array<{ imageUrl: string }> };
+            const iconObj = iconData.data?.[0];
+            if (iconObj) {
+              iconUrl = iconObj.imageUrl;
+            }
+          }
+
+          const embed = new EmbedBuilder()
+            .setColor("Green")
+            .setTitle(`🎮 Game Monitor: ${gameName}`)
+            .setURL(`https://www.roblox.com/games/${placeId}`)
+            .setThumbnail(iconUrl)
+            .addFields(
+              { name: "Creator", value: `\`${creatorName}\``, inline: true },
+              { name: "Place ID", value: `\`${placeId}\``, inline: true },
+              { name: "Universe ID", value: `\`${universeId}\``, inline: true },
+              { name: "🟢 Playing", value: `\`${playing.toLocaleString("id-ID")}\``, inline: true },
+              { name: "📈 Total Visits", value: `\`${visits.toLocaleString("id-ID")}\``, inline: true },
+              { name: "⭐ Favorites", value: `\`${favoritedCount.toLocaleString("id-ID")}\``, inline: true },
+              { name: "👍 Likes", value: `\`${likes.toLocaleString("id-ID")}\``, inline: true },
+              { name: "👎 Dislikes", value: `\`${dislikes.toLocaleString("id-ID")}\``, inline: true },
+              { name: "📊 Like Ratio", value: `\`${likeRatio}\` 👍`, inline: true }
+            )
+            .setFooter({ text: "LeonX Hub • Game Monitor" })
+            .setTimestamp();
+
+          await interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+          console.error("Gagal memantau game Roblox:", error);
+          await interaction.editReply("❌ Terjadi kesalahan saat mengambil data game. Silakan coba beberapa saat lagi.");
+        }
+      }
     }
 
     if (interaction.isButton() && interaction.customId === "verify:accept") {
@@ -1286,6 +1397,134 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isRepliable()) {
       if (interaction.replied || interaction.deferred) await interaction.followUp(message).catch(() => undefined);
       else await interaction.reply(message).catch(() => undefined);
+    }
+  }
+});
+
+const userSpamCache = new Map<string, {
+  timestamps: number[];
+  lastContent: string;
+  repeatCount: number;
+}>();
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot || !message.guild) return;
+
+  const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+  if (!member) return;
+
+  // Lewati pengecekan jika pengirim adalah owner atau staf dengan permission ManageMessages
+  if (
+    member.permissions.has(PermissionFlagsBits.ManageMessages) ||
+    member.id === config.OWNER_ID
+  ) {
+    return;
+  }
+
+  // 1. Anti-Link Invite Server Lain
+  const inviteRegex = /(discord\.(gg|io|me|li)\/.+|discord(app)?\.com\/invite\/.+)/i;
+  if (inviteRegex.test(message.content)) {
+    try {
+      await message.delete();
+      const warnMsg = await message.channel.send(`❌ <@${message.author.id}>, dilarang menyebarkan link server lain!`);
+      setTimeout(() => warnMsg.delete().catch(() => null), 5000);
+
+      // Catat warning ke Database SQLite
+      db.prepare(`
+        INSERT INTO warnings (guild_id, user_id, moderator_id, reason)
+        VALUES (?, ?, ?, ?)
+      `).run(message.guild.id, message.author.id, client.user?.id || "System", "Mengirim link invite server lain (Auto Mod)");
+
+      // Kirim log ke LOG_CHANNEL_ID jika diset
+      if (config.LOG_CHANNEL_ID) {
+        const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
+        if (logChannel?.isSendable()) {
+          const embed = new EmbedBuilder()
+            .setColor("Red")
+            .setTitle("🛡️ Auto Mod: Link Terblokir")
+            .setDescription(`Pesan dari <@${message.author.id}> otomatis dihapus karena mengandung link invite server lain.`)
+            .addFields(
+              { name: "Pengguna", value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+              { name: "Channel", value: `<#${message.channel.id}>`, inline: true },
+              { name: "Isi Pesan", value: `\`\`\`text\n${message.content.slice(0, 1000)}\n\`\`\`` }
+            )
+            .setTimestamp();
+          await logChannel.send({ embeds: [embed] });
+        }
+      }
+    } catch (err) {
+      console.error("Gagal menjalankan Anti-Link:", err);
+    }
+    return;
+  }
+
+  // 2. Anti-Spam
+  const now = Date.now();
+  const userId = message.author.id;
+  let userData = userSpamCache.get(userId);
+
+  if (!userData) {
+    userData = {
+      timestamps: [],
+      lastContent: "",
+      repeatCount: 0
+    };
+    userSpamCache.set(userId, userData);
+  }
+
+  // Bersihkan timestamp yang lebih lama dari 5 detik
+  userData.timestamps = userData.timestamps.filter((t) => now - t < 5000);
+  userData.timestamps.push(now);
+
+  // Periksa pesan duplikat
+  const normalizedContent = message.content.trim().toLowerCase();
+  if (normalizedContent === userData.lastContent && normalizedContent.length > 3) {
+    userData.repeatCount++;
+  } else {
+    userData.lastContent = normalizedContent;
+    userData.repeatCount = 1;
+  }
+
+  const isSpammingFast = userData.timestamps.length > 5;
+  const isSpammingRepeat = userData.repeatCount > 3;
+
+  if (isSpammingFast || isSpammingRepeat) {
+    try {
+      await message.delete();
+      const warnMsg = await message.channel.send(`⚠️ <@${message.author.id}>, mohon jangan melakukan spam di server!`);
+      setTimeout(() => warnMsg.delete().catch(() => null), 5000);
+
+      // Jika spam terus berlanjut (timestamps > 7), lakukan timeout selama 10 menit
+      if (userData.timestamps.length > 7 && member.moderatable) {
+        await member.timeout(10 * 60 * 1000, "Spamming (Auto Mod)");
+        const timeoutMsg = await message.channel.send(`🔇 <@${message.author.id}> telah di-timeout selama 10 menit karena melakukan spam.`);
+        setTimeout(() => timeoutMsg.delete().catch(() => null), 10000);
+
+        // Catat warning ke database warnings
+        db.prepare(`
+          INSERT INTO warnings (guild_id, user_id, moderator_id, reason)
+          VALUES (?, ?, ?, ?)
+        `).run(message.guild.id, message.author.id, client.user?.id || "System", "Spamming berlebih (Auto Mod Timeout)");
+
+        // Kirim log ke LOG_CHANNEL_ID
+        if (config.LOG_CHANNEL_ID) {
+          const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
+          if (logChannel?.isSendable()) {
+            const embed = new EmbedBuilder()
+              .setColor("Orange")
+              .setTitle("🛡️ Auto Mod: Tindakan Mute (Timeout)")
+              .setDescription(`Pengguna <@${message.author.id}> secara otomatis di-timeout selama 10 menit karena spamming.`)
+              .addFields(
+                { name: "Pengguna", value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+                { name: "Deteksi", value: isSpammingFast ? "Mengirim pesan terlalu cepat" : "Mengirim pesan duplikat berulang", inline: true }
+              )
+              .setTimestamp();
+            await logChannel.send({ embeds: [embed] });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Gagal menjalankan Anti-Spam:", err);
     }
   }
 });

@@ -168,6 +168,14 @@ export const commands = [
       o.setName("username")
         .setDescription("Username Roblox yang ingin dicari")
         .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("monitor-game")
+    .setDescription("Pantau status dan statistik real-time game Roblox")
+    .addStringOption((o) =>
+      o.setName("place_id")
+        .setDescription("Place ID game Roblox yang ingin dipantau")
+        .setRequired(true)
     )
 ].map((command) => command.toJSON());
 
