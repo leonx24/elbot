@@ -1019,27 +1019,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply();
 
         try {
-          // 1. Get Universe ID from Place ID
-          const detailsResponse = await fetch(`https://games.roblox.com/v1/games/multiget-place-details?placeIds=${placeId}`);
+          // 1. Get Universe ID from Place ID using public endpoint
+          const detailsResponse = await fetch(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`);
           if (!detailsResponse.ok) {
             throw new Error(`Place details fetch error: ${detailsResponse.statusText}`);
           }
 
-          const placeDetailsList = await detailsResponse.json() as Array<{
-            universeId?: number;
-            name?: string;
-            description?: string;
-            builder?: string;
-            url?: string;
-          }>;
+          const universeInfo = await detailsResponse.json() as {
+            universeId?: number | null;
+          };
 
-          const placeData = placeDetailsList?.[0];
-          if (!placeData || !placeData.universeId) {
+          if (!universeInfo || !universeInfo.universeId) {
             await interaction.editReply(`❌ Game dengan Place ID \`${placeId}\` tidak ditemukan.`);
             return;
           }
 
-          const universeId = placeData.universeId;
+          const universeId = universeInfo.universeId;
 
           // 2. Fetch Universe details, votes, and icon in parallel
           const [gameRes, votesRes, iconRes] = await Promise.all([
@@ -1052,8 +1047,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           let playing = 0;
           let visits = 0;
           let favoritedCount = 0;
-          let creatorName = placeData.builder || "Unknown";
-          let gameName = placeData.name || "Unknown Game";
+          let creatorName = "Unknown";
+          let gameName = "Unknown Game";
 
           if (gameRes?.ok) {
             const gameData = await gameRes.json() as {
