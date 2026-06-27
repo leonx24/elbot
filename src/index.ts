@@ -1944,6 +1944,13 @@ http.createServer((req, res) => {
       console.error("Database query failed inside HTTP server:", e);
     }
 
+    const guildsList = client.guilds.cache.map(guild => ({
+      name: guild.name,
+      id: guild.id,
+      members: guild.memberCount,
+      icon: guild.iconURL({ size: 128 }) || null
+    }));
+
     res.writeHead(200);
     res.end(JSON.stringify({
       status: "ONLINE",
@@ -1956,6 +1963,9 @@ http.createServer((req, res) => {
         tickets: totalTickets,
         warnings: totalWarnings
       },
+      avatar: client.user?.displayAvatarURL({ size: 128 }) || null,
+      botTag: client.user?.tag || "El Bot#8981",
+      guildsList,
       commandUsage,
       blacklist,
       tickets: recentTickets,
