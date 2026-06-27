@@ -1946,7 +1946,7 @@ http.createServer((req, res) => {
     res.writeHead(404);
     res.end(JSON.stringify({ error: "Not Found" }));
   }
-}).listen(serverPort, () => {
+}).listen(Number(serverPort), "0.0.0.0", () => {
   console.log(`[HTTP] stats server listening on port ${serverPort}`);
 });
 
