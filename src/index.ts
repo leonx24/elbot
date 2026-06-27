@@ -15,6 +15,7 @@ import {
   TextInputBuilder,
   TextInputStyle
 } from "discord.js";
+import http from "node:http";
 import { config } from "./config.js";
 import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList } from "./database.js";
 import {
@@ -1896,6 +1897,57 @@ client.on(Events.MessageCreate, async (message) => {
       console.error("Gagal menjalankan Anti-Spam:", err);
     }
   }
+});
+
+// Spin up a lightweight stats HTTP server for web dashboard integration
+const serverPort = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  // CORS Headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Content-Type", "application/json");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  if (req.url === "/api/stats") {
+    const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
+    
+    // Retrieve table counts from SQLite database
+    let totalTickets = 0;
+    let totalWarnings = 0;
+    try {
+      const ticketsRow = db.prepare("SELECT COUNT(*) as count FROM tickets").get() as { count: number };
+      totalTickets = ticketsRow?.count || 0;
+      const warningsRow = db.prepare("SELECT COUNT(*) as count FROM warnings").get() as { count: number };
+      totalWarnings = warningsRow?.count || 0;
+    } catch {
+      // Database might be uninitialized
+    }
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      status: "ONLINE",
+      ping: client.ws.ping || 14,
+      guilds: client.guilds.cache.size,
+      users: client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0),
+      uptime: client.uptime || 0,
+      memory: memoryUsageMB,
+      stats: {
+        tickets: totalTickets,
+        warnings: totalWarnings
+      }
+    }));
+  } else {
+    res.writeHead(404);
+    res.end(JSON.stringify({ error: "Not Found" }));
+  }
+}).listen(serverPort, () => {
+  console.log(`[HTTP] stats server listening on port ${serverPort}`);
 });
 
 await client.login(config.DISCORD_TOKEN);
