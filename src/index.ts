@@ -1904,7 +1904,7 @@ const serverPort = process.env.PORT || 3000;
 http.createServer((req, res) => {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Content-Type", "application/json");
 
@@ -1914,19 +1914,34 @@ http.createServer((req, res) => {
     return;
   }
 
-  if (req.url === "/api/stats") {
+  // Parse path and query params
+  const urlObj = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
+  const pathname = urlObj.pathname;
+
+  if (pathname === "/api/stats" && req.method === "GET") {
     const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
     
-    // Retrieve table counts from SQLite database
+    // Retrieve tables dynamically from SQLite database
     let totalTickets = 0;
     let totalWarnings = 0;
+    let commandUsage: any[] = [];
+    let blacklist: any[] = [];
+    let recentTickets: any[] = [];
+    let recentWarnings: any[] = [];
+
     try {
       const ticketsRow = db.prepare("SELECT COUNT(*) as count FROM tickets").get() as { count: number };
       totalTickets = ticketsRow?.count || 0;
+      
       const warningsRow = db.prepare("SELECT COUNT(*) as count FROM warnings").get() as { count: number };
       totalWarnings = warningsRow?.count || 0;
-    } catch {
-      // Database might be uninitialized
+
+      commandUsage = db.prepare("SELECT * FROM command_usage ORDER BY uses DESC").all();
+      blacklist = db.prepare("SELECT * FROM blacklist ORDER BY id DESC").all();
+      recentTickets = db.prepare("SELECT * FROM tickets ORDER BY id DESC LIMIT 10").all();
+      recentWarnings = db.prepare("SELECT * FROM warnings ORDER BY id DESC LIMIT 10").all();
+    } catch (e: any) {
+      console.error("Database query failed inside HTTP server:", e);
     }
 
     res.writeHead(200);
@@ -1940,9 +1955,59 @@ http.createServer((req, res) => {
       stats: {
         tickets: totalTickets,
         warnings: totalWarnings
-      }
+      },
+      commandUsage,
+      blacklist,
+      tickets: recentTickets,
+      warnings: recentWarnings
     }));
-  } else {
+  } 
+  else if (pathname === "/api/blacklist" && req.method === "POST") {
+    let body = "";
+    req.on("data", chunk => { body += chunk; });
+    req.on("end", () => {
+      try {
+        const data = JSON.parse(body);
+        if (!data.discordId && !data.robloxId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: "discordId or robloxId required" }));
+          return;
+        }
+        addToBlacklist({
+          discordId: data.discordId,
+          robloxId: data.robloxId,
+          hwid: data.hwid,
+          reason: data.reason || "Banned from Web Panel"
+        });
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true }));
+      } catch (err: any) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+  } 
+  else if (pathname === "/api/blacklist" && req.method === "DELETE") {
+    const discordId = urlObj.searchParams.get("discord_id");
+    const id = urlObj.searchParams.get("id");
+    try {
+      if (discordId) {
+        db.prepare("DELETE FROM blacklist WHERE discord_id = ?").run(discordId);
+      } else if (id) {
+        db.prepare("DELETE FROM blacklist WHERE id = ?").run(id);
+      } else {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "id or discord_id required" }));
+        return;
+      }
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true }));
+    } catch (err: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  } 
+  else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: "Not Found" }));
   }
