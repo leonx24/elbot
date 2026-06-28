@@ -17,7 +17,7 @@ import {
 } from "discord.js";
 import http from "node:http";
 import { config } from "./config.js";
-import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList } from "./database.js";
+import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, validateUserKey } from "./database.js";
 import {
   createTicketPanel,
   createTicketChannel,
@@ -422,10 +422,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
         await interaction.deferReply({ ephemeral: true });
-        await interaction.user.send(
-          '**LeonX Hub Loader**\n```lua\nloadstring(game:HttpGet("https://raw.githubusercontent.com/leonx24/Leon-x/main/loader.lua"))()\n```'
-        );
-        await interaction.editReply("Script berhasil dikirim melalui DM.");
+        const userKey = getOrCreateUserKey(interaction.user.id);
+        const dmContent = 
+          `**LeonX Hub Loader**\n` +
+          `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
+          `\`\`\`lua\n` +
+          `_G.Key = "${userKey}"\n` +
+          `loadstring(game:HttpGet("https://raw.githubusercontent.com/leonx24/Leon-x/main/loader.lua"))()\n` +
+          `\`\`\`;`;
+        await interaction.user.send(dmContent);
+        await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
       }
 
       if (interaction.commandName === "status") {
@@ -1918,7 +1924,50 @@ http.createServer(async (req, res) => {
   const urlObj = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
   const pathname = urlObj.pathname;
 
-  if (pathname === "/api/stats" && req.method === "GET") {
+  if (pathname === "/api/validate-key" && req.method === "GET") {
+    const key = urlObj.searchParams.get("key");
+    const robloxId = urlObj.searchParams.get("roblox_id") || undefined;
+    const hwid = urlObj.searchParams.get("hwid") || undefined;
+
+    if (!key) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ valid: false, error: "Parameter 'key' wajib diisi." }));
+      return;
+    }
+
+    try {
+      const result = validateUserKey(key, robloxId, hwid);
+      if (!result.valid) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ valid: false, error: result.message }));
+        return;
+      }
+
+      if (result.discordId) {
+        const guild = client.guilds.cache.get(config.GUILD_ID);
+        const member = await guild?.members.fetch(result.discordId).catch(() => null);
+
+        if (!member) {
+          res.writeHead(403);
+          res.end(JSON.stringify({ valid: false, error: "Akses ditolak: Pengguna tidak ditemukan di server Discord." }));
+          return;
+        }
+
+        if (config.VERIFIED_ROLE_ID && !member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
+          res.writeHead(403);
+          res.end(JSON.stringify({ valid: false, error: "Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi." }));
+          return;
+        }
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({ valid: true, message: result.message }));
+    } catch (error: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ valid: false, error: error.message }));
+    }
+  }
+  else if (pathname === "/api/stats" && req.method === "GET") {
     const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
     
     // Retrieve tables dynamically from SQLite database

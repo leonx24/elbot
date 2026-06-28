@@ -74,6 +74,14 @@ db.exec(`
     last_updated TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS user_keys (
+    discord_id TEXT PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,
+    roblox_id TEXT,
+    hwid TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
@@ -168,4 +176,76 @@ export function getBlacklistList(): Array<{
   created_at: string;
 }> {
   return db.prepare("SELECT * FROM blacklist ORDER BY id DESC").all() as any;
+}
+
+export function generateUniqueKey(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const segment = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return `LEONX-${segment()}-${segment()}-${segment()}`;
+}
+
+export function getOrCreateUserKey(discordId: string): string {
+  const existing = db.prepare("SELECT key FROM user_keys WHERE discord_id = ?").get(discordId) as { key: string } | undefined;
+  if (existing) {
+    return existing.key;
+  }
+
+  let newKey = generateUniqueKey();
+  // Ensure uniqueness
+  while (db.prepare("SELECT 1 FROM user_keys WHERE key = ?").get(newKey)) {
+    newKey = generateUniqueKey();
+  }
+
+  db.prepare("INSERT INTO user_keys (discord_id, key) VALUES (?, ?)").run(discordId, newKey);
+  return newKey;
+}
+
+export function validateUserKey(
+  key: string,
+  robloxId?: string,
+  hwid?: string
+): { valid: boolean; message: string; discordId?: string } {
+  const row = db.prepare("SELECT * FROM user_keys WHERE key = ?").get(key) as {
+    discord_id: string;
+    key: string;
+    roblox_id: string | null;
+    hwid: string | null;
+    created_at: string;
+  } | undefined;
+
+  if (!row) {
+    return { valid: false, message: "Key tidak valid atau tidak terdaftar." };
+  }
+
+  // Key Binding Verification
+  // If key already has roblox_id registered, it must match
+  if (row.roblox_id && robloxId && row.roblox_id !== robloxId) {
+    return { valid: false, message: "Key ini sudah terdaftar untuk akun Roblox lain." };
+  }
+
+  // If key already has hwid registered, it must match
+  if (row.hwid && hwid && row.hwid !== hwid) {
+    return { valid: false, message: "Key ini sudah terdaftar untuk perangkat (HWID) lain." };
+  }
+
+  // Bind key to robloxId / hwid if not yet bound
+  const updates: string[] = [];
+  const params: any[] = [];
+
+  if (!row.roblox_id && robloxId) {
+    updates.push("roblox_id = ?");
+    params.push(robloxId);
+  }
+  if (!row.hwid && hwid) {
+    updates.push("hwid = ?");
+    params.push(hwid);
+  }
+
+  if (updates.length > 0) {
+    params.push(key);
+    db.prepare(`UPDATE user_keys SET ${updates.join(", ")} WHERE key = ?`).run(...params);
+    return { valid: true, message: "Key berhasil divalidasi dan dikaitkan ke akun/perangkat Anda.", discordId: row.discord_id };
+  }
+
+  return { valid: true, message: "Key valid.", discordId: row.discord_id };
 }
