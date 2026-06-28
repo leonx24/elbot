@@ -80,6 +80,7 @@ db.exec(`
     key TEXT NOT NULL UNIQUE,
     roblox_id TEXT,
     hwid TEXT,
+    last_reset_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -99,6 +100,13 @@ for (const [column, sql] of ticketMigrations) {
     db.exec(sql);
     console.log(`Database migration: tickets.${column} ditambahkan`);
   }
+}
+
+const userKeyColumns = db.prepare("PRAGMA table_info(user_keys)").all() as Array<{ name: string }>;
+const existingUserKeyColumns = new Set(userKeyColumns.map((column) => column.name));
+if (!existingUserKeyColumns.has("last_reset_at")) {
+  db.exec("ALTER TABLE user_keys ADD COLUMN last_reset_at TEXT");
+  console.log("Database migration: user_keys.last_reset_at ditambahkan");
 }
 
 export function trackCommand(command: string): void {
@@ -248,4 +256,30 @@ export function validateUserKey(
   }
 
   return { valid: true, message: "Key valid.", discordId: row.discord_id };
+}
+
+export function resetUserKeyBinding(discordId: string): { success: boolean; message: string } {
+  const row = db.prepare("SELECT last_reset_at, key FROM user_keys WHERE discord_id = ?").get(discordId) as { last_reset_at: string | null; key: string } | undefined;
+
+  if (!row) {
+    return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
+  }
+
+  // Check 24 hour cooldown
+  if (row.last_reset_at) {
+    const lastReset = new Date(row.last_reset_at).getTime();
+    const now = Date.now();
+    const diffHours = (now - lastReset) / (1000 * 60 * 60);
+
+    if (diffHours < 24) {
+      const remainingHours = Math.ceil(24 - diffHours);
+      return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 24 jam. Silakan coba lagi dalam ${remainingHours} jam.` };
+    }
+  }
+
+  const nowString = new Date().toISOString();
+  db.prepare("UPDATE user_keys SET roblox_id = NULL, hwid = NULL, last_reset_at = ? WHERE discord_id = ?")
+    .run(nowString, discordId);
+
+  return { success: true, message: "Berhasil mereset data HWID dan Roblox ID Anda. Silakan jalankan script kembali di Roblox untuk mengaitkannya ke perangkat/akun baru." };
 }

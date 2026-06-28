@@ -211,7 +211,10 @@ export const commands = [
       sub.setName("test")
         .setDescription("Uji coba detektor update untuk game tertentu (Simulasikan Update)")
         .addStringOption((o) => o.setName("place_id").setDescription("Place ID game Roblox").setRequired(true))
-    )
+    ),
+  new SlashCommandBuilder()
+    .setName("resethwid")
+    .setDescription("Reset data HWID dan Roblox ID yang tertaut di key Anda (Batas 1x / 24 jam)")
 ].map((command) => command.toJSON());
 
 export type CommandData = {

@@ -17,7 +17,7 @@ import {
 } from "discord.js";
 import http from "node:http";
 import { config } from "./config.js";
-import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, validateUserKey } from "./database.js";
+import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
 import {
   createTicketPanel,
   createTicketChannel,
@@ -432,6 +432,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `\`\`\`;`;
         await interaction.user.send(dmContent);
         await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
+      }
+
+      if (interaction.commandName === "resethwid") {
+        const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+        if (blacklistCheck.blacklisted) {
+          await interaction.reply({
+            content: `❌ Akses ditolak: Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`,
+            ephemeral: true
+          });
+          return;
+        }
+
+        if (!(interaction.member instanceof GuildMember) ||
+            !config.VERIFIED_ROLE_ID ||
+            !interaction.member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
+          await interaction.reply({
+            content: `Kamu harus verifikasi dahulu di <#${config.VERIFY_CHANNEL_ID}>.`,
+            ephemeral: true
+          });
+          return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+        const result = resetUserKeyBinding(interaction.user.id);
+        await interaction.editReply(result.message);
       }
 
       if (interaction.commandName === "status") {
