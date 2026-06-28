@@ -2017,6 +2017,28 @@ http.createServer((req, res) => {
       res.end(JSON.stringify({ error: err.message }));
     }
   } 
+  else if (pathname === "/api/proxy" && req.method === "GET") {
+    const targetUrl = urlObj.searchParams.get("url");
+    if (!targetUrl) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "url parameter is required" }));
+      return;
+    }
+    
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      const body = await response.text();
+      res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") || "application/json" });
+      res.end(body);
+    } catch (err: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  }
   else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: "Not Found" }));
