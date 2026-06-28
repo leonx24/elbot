@@ -1901,7 +1901,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 // Spin up a lightweight stats HTTP server for web dashboard integration
 const serverPort = process.env.PORT || 3000;
-http.createServer((req, res) => {
+http.createServer(async (req, res) => {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
