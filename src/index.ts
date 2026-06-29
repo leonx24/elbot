@@ -17,7 +17,7 @@ import {
 } from "discord.js";
 import http from "node:http";
 import { config } from "./config.js";
-import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
+import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, forceGenerateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
 import {
   createTicketPanel,
   createTicketChannel,
@@ -34,7 +34,7 @@ const client = new Client({
 
 const cooldowns = new Map<string, number>();
 const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
-const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules"]);
+const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey"]);
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
@@ -457,6 +457,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
         const result = resetUserKeyBinding(interaction.user.id);
         await interaction.editReply(result.message);
+      }
+
+      if (interaction.commandName === "generatekey") {
+        const user = interaction.options.getUser("user", true);
+        const newKey = forceGenerateUserKey(user.id);
+
+        await interaction.reply({
+          content: `🔑 **Key Baru Berhasil Dihasilkan!**\nPengguna: <@${user.id}>\nKey: \`${newKey}\`\n\n*Catatan: Key lama (jika ada) telah dinonaktifkan, dan semua data binding (Roblox ID & HWID) untuk pengguna ini telah di-reset.*`,
+          ephemeral: true
+        });
+
+        // Kirim DM ke pengguna
+        try {
+          const dmContent = 
+            `**LeonX Hub Loader (Key Baru)**\n` +
+            `Administrator telah membuatkan/memperbarui key baru untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
+            `\`\`\`lua\n` +
+            `_G.Key = "${newKey}"\n` +
+            `loadstring(game:HttpGet("https://raw.githubusercontent.com/leonx24/Leon-x/main/loader.lua"))()\n` +
+            `\`\`\``;
+          await user.send(dmContent);
+        } catch {
+          // Abaikan jika DM ditutup
+        }
       }
 
       if (interaction.commandName === "status") {

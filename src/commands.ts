@@ -214,7 +214,16 @@ export const commands = [
     ),
   new SlashCommandBuilder()
     .setName("resethwid")
-    .setDescription("Reset data HWID dan Roblox ID yang tertaut di key Anda (Batas 1x / 24 jam)")
+    .setDescription("Reset data HWID dan Roblox ID yang tertaut di key Anda (Batas 1x / 24 jam)"),
+  new SlashCommandBuilder()
+    .setName("generatekey")
+    .setDescription("Hasilkan key baru untuk pengguna Discord (Owner/Admin Only)")
+    .addUserOption((o) =>
+      o.setName("user")
+        .setDescription("Pengguna Discord yang ingin dibuatkan/diperbarui key-nya")
+        .setRequired(true)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 ].map((command) => command.toJSON());
 
 export type CommandData = {

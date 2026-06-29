@@ -208,6 +208,26 @@ export function getOrCreateUserKey(discordId: string): string {
   return newKey;
 }
 
+export function forceGenerateUserKey(discordId: string): string {
+  let newKey = generateUniqueKey();
+  // Ensure uniqueness
+  while (db.prepare("SELECT 1 FROM user_keys WHERE key = ?").get(newKey)) {
+    newKey = generateUniqueKey();
+  }
+
+  db.prepare(`
+    INSERT INTO user_keys (discord_id, key, roblox_id, hwid, last_reset_at)
+    VALUES (?, ?, NULL, NULL, NULL)
+    ON CONFLICT(discord_id) DO UPDATE SET
+      key = excluded.key,
+      roblox_id = NULL,
+      hwid = NULL,
+      last_reset_at = NULL
+  `).run(discordId, newKey);
+
+  return newKey;
+}
+
 export function validateUserKey(
   key: string,
   robloxId?: string,
@@ -225,22 +245,16 @@ export function validateUserKey(
     return { valid: false, message: "Key tidak valid atau tidak terdaftar." };
   }
 
-  // Key Binding Verification
-  // If key already has roblox_id registered, it must match
-  if (row.roblox_id && robloxId && row.roblox_id !== robloxId) {
-    return { valid: false, message: "Key ini sudah terdaftar untuk akun Roblox lain." };
-  }
-
   // If key already has hwid registered, it must match
   if (row.hwid && hwid && row.hwid !== hwid) {
     return { valid: false, message: "Key ini sudah terdaftar untuk perangkat (HWID) lain." };
   }
 
-  // Bind key to robloxId / hwid if not yet bound
+  // Bind key to hwid if not yet bound, and update robloxId if it changed or was not set (without restricting)
   const updates: string[] = [];
   const params: any[] = [];
 
-  if (!row.roblox_id && robloxId) {
+  if (robloxId && row.roblox_id !== robloxId) {
     updates.push("roblox_id = ?");
     params.push(robloxId);
   }
@@ -252,7 +266,7 @@ export function validateUserKey(
   if (updates.length > 0) {
     params.push(key);
     db.prepare(`UPDATE user_keys SET ${updates.join(", ")} WHERE key = ?`).run(...params);
-    return { valid: true, message: "Key berhasil divalidasi dan dikaitkan ke akun/perangkat Anda.", discordId: row.discord_id };
+    return { valid: true, message: "Key berhasil divalidasi dan dikaitkan ke perangkat Anda.", discordId: row.discord_id };
   }
 
   return { valid: true, message: "Key valid.", discordId: row.discord_id };
