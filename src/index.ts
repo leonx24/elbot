@@ -16,6 +16,8 @@ import {
   TextInputStyle
 } from "discord.js";
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import { config } from "./config.js";
 import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, forceGenerateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
 import {
@@ -428,7 +430,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
           `\`\`\`lua\n` +
           `_G.Key = "${userKey}"\n` +
-          `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+          `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
           `\`\`\`;`;
         await interaction.user.send(dmContent);
         await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
@@ -475,7 +477,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             `Administrator telah membuatkan/memperbarui key baru untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
             `\`\`\`lua\n` +
             `_G.Key = "${newKey}"\n` +
-            `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+            `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
             `\`\`\``;
           await user.send(dmContent);
         } catch {
@@ -1972,8 +1974,74 @@ http.createServer(async (req, res) => {
   // Parse path and query params
   const urlObj = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
   const pathname = urlObj.pathname;
+  if (pathname === "/loader.lua" && req.method === "GET") {
+    const loaderPath = path.join(process.cwd(), "lua", "loader.lua");
+    try {
+      if (fs.existsSync(loaderPath)) {
+        const content = fs.readFileSync(loaderPath, "utf8");
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(content);
+      } else {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`warn("Gagal memuat script loader: file loader.lua tidak ditemukan di server.")`);
+      }
+    } catch (error: any) {
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`warn("Internal server error: ${error.message.replace(/"/g, '\\"')}")`);
+    }
+  }
+  else if (pathname === "/load.php" && req.method === "GET") {
+    const key = urlObj.searchParams.get("key");
+    const robloxId = urlObj.searchParams.get("roblox_id") || undefined;
+    const hwid = urlObj.searchParams.get("hwid") || undefined;
 
-  if (pathname === "/api/validate-key" && req.method === "GET") {
+    if (!key) {
+      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Parameter 'key' wajib diisi.")`);
+      return;
+    }
+
+    try {
+      const result = validateUserKey(key, robloxId, hwid);
+      if (!result.valid) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: ${result.message.replace(/"/g, '\\"')}")`);
+        return;
+      }
+
+      if (result.discordId) {
+        const guild = client.guilds.cache.get(config.GUILD_ID);
+        const member = await guild?.members.fetch(result.discordId).catch(() => null);
+
+        if (!member) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak ditemukan di server Discord.")`);
+          return;
+        }
+
+        if (config.VERIFIED_ROLE_ID && !member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi.")`);
+          return;
+        }
+      }
+
+      // Serve the main.lua file
+      const mainLuaPath = path.join(process.cwd(), "lua", "main.lua");
+      if (fs.existsSync(mainLuaPath)) {
+        const content = fs.readFileSync(mainLuaPath, "utf8");
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(content);
+      } else {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`warn("Gagal memuat script utama: file main.lua tidak ditemukan di server.")`);
+      }
+    } catch (error: any) {
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Internal server error: ${error.message.replace(/"/g, '\\"')}")`);
+    }
+  }
+  else if (pathname === "/api/validate-key" && req.method === "GET") {
     const key = urlObj.searchParams.get("key");
     const robloxId = urlObj.searchParams.get("roblox_id") || undefined;
     const hwid = urlObj.searchParams.get("hwid") || undefined;
