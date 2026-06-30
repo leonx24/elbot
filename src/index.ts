@@ -428,7 +428,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
           `\`\`\`lua\n` +
           `_G.Key = "${userKey}"\n` +
-          `loadstring(game:HttpGet("https://raw.githubusercontent.com/leonx24/Leon-x/main/loader.lua"))()\n` +
+          `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
           `\`\`\`;`;
         await interaction.user.send(dmContent);
         await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
@@ -475,7 +475,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             `Administrator telah membuatkan/memperbarui key baru untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
             `\`\`\`lua\n` +
             `_G.Key = "${newKey}"\n` +
-            `loadstring(game:HttpGet("https://raw.githubusercontent.com/leonx24/Leon-x/main/loader.lua"))()\n` +
+            `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
             `\`\`\``;
           await user.send(dmContent);
         } catch {
