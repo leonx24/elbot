@@ -1551,6 +1551,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }
         }
       }
+
+      if (interaction.commandName === "lock") {
+        const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
+        
+        if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
+          await interaction.reply({ content: "❌ Target harus berupa text channel.", ephemeral: true });
+          return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+        
+        try {
+          const everyoneRole = interaction.guild!.roles.everyone;
+          await (targetChannel as TextChannel).permissionOverwrites.edit(everyoneRole, {
+            SendMessages: false
+          });
+          
+          await interaction.editReply(`🔒 Channel <#${targetChannel.id}> berhasil dikunci.`);
+          await (targetChannel as TextChannel).send("🔒 **Channel ini telah dikunci oleh administrator/staf.**");
+        } catch (err: any) {
+          console.error("Gagal mengunci channel:", err);
+          await interaction.editReply(`❌ Gagal mengunci channel: ${err.message}`);
+        }
+      }
+
+      if (interaction.commandName === "unlock") {
+        const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
+        
+        if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
+          await interaction.reply({ content: "❌ Target harus berupa text channel.", ephemeral: true });
+          return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+        
+        try {
+          const everyoneRole = interaction.guild!.roles.everyone;
+          await (targetChannel as TextChannel).permissionOverwrites.edit(everyoneRole, {
+            SendMessages: null
+          });
+          
+          await interaction.editReply(`🔓 Kunci channel <#${targetChannel.id}> berhasil dibuka.`);
+          await (targetChannel as TextChannel).send("🔓 **Kunci channel ini telah dibuka. Member dapat mengirim pesan kembali.**");
+        } catch (err: any) {
+          console.error("Gagal membuka kunci channel:", err);
+          await interaction.editReply(`❌ Gagal membuka kunci channel: ${err.message}`);
+        }
+      }
     }
 
     if (interaction.isButton() && interaction.customId === "verify:accept") {
@@ -1834,6 +1882,56 @@ const userSpamCache = new Map<string, {
   repeatCount: number;
 }>();
 
+const FAQ_RULES = [
+  {
+    keywords: [
+      "ambil script",
+      "cara ambil script",
+      "dapat script",
+      "dapetin script",
+      "dapat key",
+      "cara dapat key",
+      "cara dapetin key",
+      "cara verifikasi",
+      "get script",
+      "how to get script",
+      "get key"
+    ],
+    response: `Untuk mendapatkan script, silakan ikuti langkah berikut:\n` +
+              `1. Verifikasi akun Anda di channel <#${config.VERIFY_CHANNEL_ID}> dengan menekan tombol verifikasi atau mengetik \`/verify\`.\n` +
+              `2. Gunakan slash command \`/script\` di channel bot untuk mendapatkan loader script dan key khusus Anda melalui DM.\n` +
+              `3. Jangan bagikan key tersebut kepada siapa pun!`
+  },
+  {
+    keywords: [
+      "script error",
+      "ga jalan",
+      "gagal execute",
+      "tidak berfungsi",
+      "tidak bisa di-execute",
+      "gabisa di execute",
+      "error execute",
+      "script crash",
+      "execute error"
+    ],
+    response: `Jika script tidak berjalan atau error, silakan periksa hal berikut:\n` +
+              `- Pastikan Anda sudah mengatur \`_G.Key = "KEY_ANDA"\` di baris pertama sebelum baris \`loadstring\`.\n` +
+              `- Pastikan executor Roblox Anda didukung dan versi terbaru.\n` +
+              `- Jika masih terjadi kendala, silakan buat tiket bantuan di channel <#${config.TICKET_CHANNEL_ID || "support"}>.`
+  },
+  {
+    keywords: [
+      "reset hwid",
+      "reset key",
+      "ganti perangkat",
+      "ganti device",
+      "reset device",
+      "hwid reset"
+    ],
+    response: `Anda dapat mereset data HWID atau Roblox ID yang tertaut pada key Anda menggunakan slash command \`/resethwid\` (Batas 1x / 24 jam). Setelah di-reset, jalankan kembali script di Roblox untuk menautkan perangkat/akun baru.`
+  }
+];
+
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
 
@@ -1846,6 +1944,17 @@ client.on(Events.MessageCreate, async (message) => {
     member.id === config.OWNER_ID
   ) {
     return;
+  }
+
+  // 0. Auto-Reply FAQ
+  const contentLower = message.content.toLowerCase();
+  for (const rule of FAQ_RULES) {
+    if (rule.keywords.some(keyword => contentLower.includes(keyword))) {
+      await message.reply({
+        content: `💡 **Auto FAQ:**\n${rule.response}`
+      });
+      return;
+    }
   }
 
   // 1. Anti-Link Invite Server Lain

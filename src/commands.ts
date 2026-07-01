@@ -1,5 +1,6 @@
 import {
   ApplicationCommandOptionType,
+  ChannelType,
   PermissionFlagsBits,
   SlashCommandBuilder
 } from "discord.js";
@@ -223,7 +224,25 @@ export const commands = [
         .setDescription("Pengguna Discord yang ingin dibuatkan/diperbarui key-nya")
         .setRequired(true)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("lock")
+    .setDescription("Kunci channel agar member tidak bisa mengirim pesan")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Channel yang ingin dikunci (opsional, default channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText)
+    ),
+  new SlashCommandBuilder()
+    .setName("unlock")
+    .setDescription("Buka kunci channel agar member bisa kembali mengirim pesan")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Channel yang ingin dibuka kunci (opsional, default channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText)
+    )
 ].map((command) => command.toJSON());
 
 export type CommandData = {
