@@ -1946,6 +1946,36 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  // 0. Auto-Ban Kata Terlarang (selingkuh)
+  if (message.content.toLowerCase().includes("selingkuh")) {
+    try {
+      await message.delete().catch(() => null);
+      await message.author.send("Anda telah di-ban secara otomatis dari server karena mengucapkan kata terlarang (selingkuh).").catch(() => null);
+      await member.ban({ reason: "Mengucapkan kata terlarang (selingkuh) - Auto Ban" });
+      await message.channel.send(`🚨 <@${message.author.id}> telah di-ban secara otomatis karena mengucapkan kata terlarang.`);
+      
+      if (config.LOG_CHANNEL_ID) {
+        const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
+        if (logChannel?.isSendable()) {
+          const embed = new EmbedBuilder()
+            .setColor("Red")
+            .setTitle("🛡️ Auto Mod: Banned User")
+            .setDescription(`Pengguna <@${message.author.id}> di-ban otomatis karena menulis kata terlarang.`)
+            .addFields(
+              { name: "Pengguna", value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+              { name: "Channel", value: `<#${message.channel.id}>`, inline: true },
+              { name: "Kata Terlarang", value: "\`selingkuh\`", inline: true }
+            )
+            .setTimestamp();
+          await logChannel.send({ embeds: [embed] });
+        }
+      }
+    } catch (err) {
+      console.error("Gagal melakukan auto-ban:", err);
+    }
+    return;
+  }
+
   // 0. Auto-Reply FAQ
   const contentLower = message.content.toLowerCase();
   for (const rule of FAQ_RULES) {
