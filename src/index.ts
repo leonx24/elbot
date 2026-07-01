@@ -435,7 +435,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
           `\`\`\`lua\n` +
           `_G.Key = "${userKey}"\n` +
-          `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
+          `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
           `\`\`\`;`;
         await interaction.user.send(dmContent);
         await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
