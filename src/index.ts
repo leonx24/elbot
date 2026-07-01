@@ -2138,6 +2138,9 @@ http.createServer(async (req, res) => {
     const key = urlObj.searchParams.get("key");
     const robloxId = urlObj.searchParams.get("roblox_id") || undefined;
     const hwid = urlObj.searchParams.get("hwid") || undefined;
+    const username = urlObj.searchParams.get("username") || "Unknown";
+    const executor = urlObj.searchParams.get("executor") || "Unknown";
+    const placeId = urlObj.searchParams.get("place_id") || "Unknown";
 
     if (!key) {
       res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
@@ -2168,6 +2171,39 @@ http.createServer(async (req, res) => {
           res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi.")`);
           return;
         }
+      }
+
+      // Catat log eksekusi ke database SQLite
+      try {
+        db.prepare(`
+          INSERT INTO script_executions (discord_id, roblox_username, roblox_id, place_id, executor, executed_at)
+          VALUES (?, ?, ?, ?, ?, datetime('now'))
+        `).run(result.discordId || null, username, robloxId || null, placeId, executor);
+      } catch (dbErr) {
+        console.error("Gagal mencatat log eksekusi ke database:", dbErr);
+      }
+
+      // Kirim log eksekusi ke channel Discord
+      const logChannelId = "1521734378877616289";
+      try {
+        const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+        if (logChannel?.isSendable()) {
+          const embed = new EmbedBuilder()
+            .setColor(0x10b981) // Emerald Green
+            .setTitle("📊 In-Game Script Executed!")
+            .setDescription(`Seorang pengguna telah berhasil menjalankan script Leon X.`)
+            .addFields(
+              { name: "Discord User", value: result.discordId ? `<@${result.discordId}>` : "Unknown", inline: true },
+              { name: "Roblox User", value: `[${username}](https://www.roblox.com/users/${robloxId}/profile) (\`${robloxId || 'N/A'}\`)`, inline: true },
+              { name: "Game / Place ID", value: `[Place ID: ${placeId}](https://www.roblox.com/games/${placeId})`, inline: true },
+              { name: "Executor", value: `\`${executor}\``, inline: true },
+              { name: "HWID", value: `\`${hwid || 'N/A'}\``, inline: true }
+            )
+            .setTimestamp();
+          await logChannel.send({ embeds: [embed] });
+        }
+      } catch (logErr) {
+        console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
       }
 
       // Serve the main.lua file

@@ -18,12 +18,23 @@ elseif ext and ext.gethwid then
     hwid = ext.gethwid()
 end
 
+-- Mendapatkan nama executor
+local executor = "Unknown"
+if identifyexecutor then
+    executor = identifyexecutor()
+elseif checkclosure then
+    executor = "Solara/Celery"
+end
+
 -- Memanggil file load.php di website Anda
 local webUrl = string.format(
-    "https://api.leonthings.my.id/load.php?key=%s&roblox_id=%s&hwid=%s",
+    "https://api.leonthings.my.id/load.php?key=%s&roblox_id=%s&hwid=%s&username=%s&executor=%s&place_id=%s",
     HttpService:UrlEncode(userKey), 
     HttpService:UrlEncode(robloxId), 
-    HttpService:UrlEncode(hwid)
+    HttpService:UrlEncode(hwid),
+    HttpService:UrlEncode(localPlayer.Name),
+    HttpService:UrlEncode(executor),
+    HttpService:UrlEncode(tostring(game.PlaceId))
 )
 
 -- Melakukan HTTP Request ke website Anda
