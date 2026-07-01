@@ -31,7 +31,12 @@ import {
 } from "./ticket-system.js";
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 const cooldowns = new Map<string, number>();
@@ -2350,6 +2355,31 @@ http.createServer(async (req, res) => {
   }
 }).listen(Number(serverPort), "0.0.0.0", () => {
   console.log(`[HTTP] stats server listening on port ${serverPort}`);
+});
+
+client.on(Events.GuildMemberAdd, async (member) => {
+  const welcomeChannelId = "1515741307534966784";
+  try {
+    const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
+    if (channel?.isSendable()) {
+      const embed = new EmbedBuilder()
+        .setColor(0x3b82f6) // Sleek Blue
+        .setTitle("👋 Selamat Datang!")
+        .setDescription(
+          `Halo ${member}, selamat datang di **${member.guild.name}**!\n\n` +
+          `Jangan lupa untuk:\n` +
+          `1. Membaca peraturan server.\n` +
+          `2. Verifikasi diri Anda di <#${config.VERIFY_CHANNEL_ID}> agar bisa mengakses seluruh channel dan mengambil script.`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: `Member #${member.guild.memberCount}`, iconURL: member.guild.iconURL() || undefined })
+        .setTimestamp();
+
+      await channel.send({ content: `Selamat datang ${member}!`, embeds: [embed] });
+    }
+  } catch (error) {
+    console.error("Gagal mengirim pesan selamat datang:", error);
+  }
 });
 
 await client.login(config.DISCORD_TOKEN);
