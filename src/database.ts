@@ -289,15 +289,15 @@ export function resetUserKeyBinding(discordId: string): { success: boolean; mess
     return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
   }
 
-  // Check 24 hour cooldown
+  // Check 10 minute cooldown
   if (row.last_reset_at) {
     const lastReset = new Date(row.last_reset_at).getTime();
     const now = Date.now();
-    const diffHours = (now - lastReset) / (1000 * 60 * 60);
+    const diffMinutes = (now - lastReset) / (1000 * 60);
 
-    if (diffHours < 24) {
-      const remainingHours = Math.ceil(24 - diffHours);
-      return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 24 jam. Silakan coba lagi dalam ${remainingHours} jam.` };
+    if (diffMinutes < 10) {
+      const remainingMinutes = Math.ceil(10 - diffMinutes);
+      return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 10 menit. Silakan coba lagi dalam ${remainingMinutes} menit.` };
     }
   }
 

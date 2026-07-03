@@ -45,7 +45,8 @@ const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "s
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
-  ticket: "Gunakan `/ticket`, kemudian tekan tombol **Buka Ticket**."
+  ticket: "Gunakan `/ticket`, kemudian tekan tombol **Buka Ticket**.",
+  website: "Silakan kunjungi website kami di https://leonthings.my.id. Untuk mengelola key dan reset HWID, silakan buka halaman console bot di https://leonthings.my.id/bot."
 };
 
 const changelogTypes = {
@@ -574,6 +575,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "faq") {
         const topic = interaction.options.getString("topik", true);
         await interaction.reply({ content: faq[topic] ?? "Topik tidak ditemukan.", ephemeral: true });
+      }
+
+      if (interaction.commandName === "website") {
+        await interaction.reply({
+          content: `🌐 **Website Utama:** https://leonthings.my.id\n🤖 **Bot Console Page:** https://leonthings.my.id/bot`,
+          ephemeral: true
+        });
       }
 
       if (interaction.commandName === "ticket") {
@@ -1933,7 +1941,25 @@ const FAQ_RULES = [
       "reset device",
       "hwid reset"
     ],
-    response: `Anda dapat mereset data HWID atau Roblox ID yang tertaut pada key Anda menggunakan slash command \`/resethwid\` (Batas 1x / 24 jam). Setelah di-reset, jalankan kembali script di Roblox untuk menautkan perangkat/akun baru.`
+    response: `Anda dapat mereset data HWID atau Roblox ID yang tertaut pada key Anda menggunakan slash command \`/resethwid\` (Batas 1x / 10 menit). Setelah di-reset, jalankan kembali script di Roblox untuk menautkan perangkat/akun baru.`
+  },
+  {
+    keywords: [
+      "link website",
+      "link web",
+      "website leonthings",
+      "web leonthings",
+      "url website",
+      "url web",
+      "website bot",
+      "web bot",
+      "link bot",
+      "halaman bot",
+      "halaman web"
+    ],
+    response: `Silakan kunjungi website resmi kami di:\n` +
+              `🌐 Website Utama: https://leonthings.my.id\n` +
+              `🤖 Bot Console / Kelola Key & Reset HWID: https://leonthings.my.id/bot`
   }
 ];
 
@@ -2296,13 +2322,15 @@ http.createServer(async (req, res) => {
         return;
       }
 
+      let cooldownRemainingMinutes = 0;
       let cooldownRemainingHours = 0;
       if (row.last_reset_at) {
         const lastReset = new Date(row.last_reset_at).getTime();
         const now = Date.now();
-        const diffHours = (now - lastReset) / (1000 * 60 * 60);
-        if (diffHours < 24) {
-          cooldownRemainingHours = Math.ceil(24 - diffHours);
+        const diffMinutes = (now - lastReset) / (1000 * 60);
+        if (diffMinutes < 10) {
+          cooldownRemainingMinutes = Math.ceil(10 - diffMinutes);
+          cooldownRemainingHours = Math.ceil(cooldownRemainingMinutes / 60);
         }
       }
 
@@ -2313,6 +2341,7 @@ http.createServer(async (req, res) => {
         robloxId: row.roblox_id,
         hwid: row.hwid,
         lastResetAt: row.last_reset_at,
+        cooldownRemainingMinutes,
         cooldownRemainingHours
       }));
     } catch (error: any) {
