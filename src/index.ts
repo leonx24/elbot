@@ -2264,6 +2264,94 @@ http.createServer(async (req, res) => {
       res.end(JSON.stringify({ valid: false, error: error.message }));
     }
   }
+  else if (pathname === "/api/my-key" && req.method === "GET") {
+    const token = urlObj.searchParams.get("token") || req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ hasKey: false, error: "Access token is required." }));
+      return;
+    }
+
+    try {
+      const discordRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ hasKey: false, error: "Unauthorized access token." }));
+        return;
+      }
+
+      const user = await discordRes.json() as { id: string; username: string };
+      const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(user.id) as {
+        key: string;
+        roblox_id: string | null;
+        hwid: string | null;
+        last_reset_at: string | null;
+      } | undefined;
+
+      if (!row) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ hasKey: false, message: "Anda belum memiliki key terdaftar. Silakan gunakan `/script` terlebih dahulu di Discord." }));
+        return;
+      }
+
+      let cooldownRemainingHours = 0;
+      if (row.last_reset_at) {
+        const lastReset = new Date(row.last_reset_at).getTime();
+        const now = Date.now();
+        const diffHours = (now - lastReset) / (1000 * 60 * 60);
+        if (diffHours < 24) {
+          cooldownRemainingHours = Math.ceil(24 - diffHours);
+        }
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        hasKey: true,
+        key: row.key,
+        robloxId: row.roblox_id,
+        hwid: row.hwid,
+        lastResetAt: row.last_reset_at,
+        cooldownRemainingHours
+      }));
+    } catch (error: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ hasKey: false, error: error.message }));
+    }
+  }
+  else if (pathname === "/api/reset-my-hwid" && req.method === "POST") {
+    const token = urlObj.searchParams.get("token") || req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ success: false, error: "Access token is required." }));
+      return;
+    }
+
+    try {
+      const discordRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ success: false, error: "Unauthorized access token." }));
+        return;
+      }
+
+      const user = await discordRes.json() as { id: string };
+      const result = resetUserKeyBinding(user.id);
+      if (result.success) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, message: result.message }));
+      } else {
+        res.writeHead(400);
+        res.end(JSON.stringify({ success: false, error: result.message }));
+      }
+    } catch (error: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+  }
   else if (pathname === "/api/stats" && req.method === "GET") {
     const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
     

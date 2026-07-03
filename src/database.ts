@@ -83,6 +83,16 @@ db.exec(`
     last_reset_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS script_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT,
+    roblox_username TEXT,
+    roblox_id TEXT,
+    place_id TEXT,
+    executor TEXT,
+    executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
