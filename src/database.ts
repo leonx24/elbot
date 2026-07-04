@@ -27,7 +27,8 @@ db.exec(`
     closed_at TEXT,
     close_reason TEXT,
     rating INTEGER,
-    rating_feedback TEXT
+    rating_feedback TEXT,
+    ai_responded INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS bug_reports (
@@ -102,7 +103,8 @@ const ticketMigrations: Array<[string, string]> = [
   ["claimed_by", "ALTER TABLE tickets ADD COLUMN claimed_by TEXT"],
   ["close_reason", "ALTER TABLE tickets ADD COLUMN close_reason TEXT"],
   ["rating", "ALTER TABLE tickets ADD COLUMN rating INTEGER"],
-  ["rating_feedback", "ALTER TABLE tickets ADD COLUMN rating_feedback TEXT"]
+  ["rating_feedback", "ALTER TABLE tickets ADD COLUMN rating_feedback TEXT"],
+  ["ai_responded", "ALTER TABLE tickets ADD COLUMN ai_responded INTEGER DEFAULT 0"]
 ];
 
 for (const [column, sql] of ticketMigrations) {

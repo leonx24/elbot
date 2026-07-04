@@ -9,6 +9,7 @@ import {
   Events,
   GatewayIntentBits,
   GuildMember,
+  Message,
   ModalBuilder,
   PermissionFlagsBits,
   TextChannel,
@@ -121,6 +122,7 @@ type TicketRecord = {
   category: string;
   status: string;
   claimed_by: string | null;
+  ai_responded: number;
 };
 
 function getOrRecoverTicket(channel: TextChannel): TicketRecord | undefined {
@@ -466,6 +468,218 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const result = resetUserKeyBinding(interaction.user.id);
         await interaction.editReply(result.message);
       }
+
+      if (interaction.commandName === "ai") {
+        if (!config.GEMINI_API_KEY) {
+          await interaction.reply({
+            content: "Fitur AI belum dikonfigurasi oleh owner bot (GEMINI_API_KEY kosong).",
+            ephemeral: true
+          });
+          return;
+        }
+
+        const query = interaction.options.getString("tanya", true);
+        await interaction.deferReply();
+
+        try {
+          const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+Website Resmi: https://leonthings.my.id
+Halaman Dashboard/Bot Console: https://leonthings.my.id/bot
+Perintah Discord yang tersedia:
+- /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
+- /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
+- /resethwid : Mereset kaitan perangkat/Roblox ID (cooldown reset adalah 10 menit sekali). Bisa juga dilakukan mandiri di website console.
+- /website : Mendapatkan link website utama dan halaman bot console.
+- /status : Cek status operational script LeonX Hub.
+- /faq : Tanya jawab seputar permasalahan umum.
+- /bug-report : Melaporkan bug/error langsung ke staff developer.
+- /ticket : Membuat tiket keluhan bantuan jika ada masalah yang tidak terselesaikan.
+
+Panduan penyelesaian masalah umum:
+1. Script tidak berjalan atau gagal eksekusi:
+   - Pastikan meletakkan \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum baris loadstring.
+   - Pastikan executor Roblox yang digunakan mendukung loadstring dan versi paling ter-update.
+2. Key terdaftar di perangkat lain / HWID Error:
+   - Gunakan command /resethwid di Discord atau buka website LeonThings bagian Bot Console -> My Key, lalu klik tombol "Reset HWID & Roblox ID". Ingat batas reset adalah 1x per 10 menit.
+3. Mendapatkan Role Member:
+   - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
+   - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
+
+TINDAKAN KELUARAN KHUSUS (ACTION TAGS):
+Anda dapat mengontrol tindakan bot secara langsung dengan menyertakan tag khusus ini tepat di akhir balasan Anda jika user memintanya (bot akan memprosesnya dan menggantinya dengan hasil nyata):
+1. Jika pengguna meminta dikirimi script loader, key lisensi mereka, atau menyuruh "ambilin script", sertakan tag: [ACTION: SEND_SCRIPT]
+2. Jika pengguna menanyakan statistik server bot, kapasitas, memori, atau performa bot, sertakan tag: [ACTION: GET_STATS]
+3. Jika pengguna meminta untuk mereset HWID atau Roblox ID mereka, sertakan tag: [ACTION: RESET_HWID]
+4. Jika pengguna menanyakan detail status key lisensi aktif mereka saat ini, sertakan tag: [ACTION: CHECK_MY_KEY]
+
+Format balasan:
+- Jawab secara singkat, padat, ramah, dan solutif.
+- Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
+- Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
+- Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${query}"` }]
+                }
+              ]
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json() as any;
+            const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+            let finalReply = replyText.trim();
+
+            const member = interaction.member instanceof GuildMember ? interaction.member : null;
+
+            // 1. Action: SEND_SCRIPT
+            if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {
+              const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+              if (blacklistCheck.blacklisted) {
+                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+              } else {
+                const hasRole = member && config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+                if (!hasRole) {
+                  finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+                } else {
+                  try {
+                    const userKey = getOrCreateUserKey(interaction.user.id);
+                    const dmContent = 
+                      `**LeonX Hub Loader**\n` +
+                      `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
+                      `\`\`\`lua\n` +
+                      `_G.Key = "${userKey}"\n` +
+                      `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                      `\`\`\`;`;
+                    await interaction.user.send(dmContent);
+                    finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+                  } catch (dmErr) {
+                    finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+                  }
+                }
+              }
+            }
+
+            // 2. Action: GET_STATS
+            if (finalReply.includes("[ACTION: GET_STATS]")) {
+              try {
+                const guildCount = client.guilds.cache.size;
+                const activeKeys = db.prepare("SELECT COUNT(*) as count FROM user_keys").get() as { count: number } | undefined;
+                const totalKeys = activeKeys?.count || 0;
+                const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
+                
+                let uptimeString = "0s";
+                if (client.uptime) {
+                  const secs = Math.floor(client.uptime / 1000);
+                  const mins = Math.floor(secs / 60);
+                  const hours = Math.floor(mins / 60);
+                  const days = Math.floor(hours / 24);
+                  uptimeString = days > 0 
+                    ? `${days}hari ${hours % 24}jam`
+                    : hours > 0 
+                    ? `${hours}jam ${mins % 60}menit`
+                    : `${mins}menit ${secs % 60}detik`;
+                }
+
+                const statsBlock = 
+                  `\n\n📊 **Statistik Live Server LeonX Bot:**\n` +
+                  `• Jumlah Guild Server: \`${guildCount}\`\n` +
+                  `• Pengguna Lisensi (Keys): \`${totalKeys}\`\n` +
+                  `• Uptime Sistem: \`${uptimeString}\`\n` +
+                  `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
+                  
+                finalReply = finalReply.replace("[ACTION: GET_STATS]", statsBlock);
+              } catch (statsErr) {
+                finalReply = finalReply.replace("[ACTION: GET_STATS]", `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+              }
+            }
+
+            // 3. Action: RESET_HWID
+            if (finalReply.includes("[ACTION: RESET_HWID]")) {
+              const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+              if (blacklistCheck.blacklisted) {
+                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+              } else {
+                const hasRole = member && config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+                if (!hasRole) {
+                  finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+                } else {
+                  const resetResult = resetUserKeyBinding(interaction.user.id);
+                  if (resetResult.success) {
+                    finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+                  } else {
+                    finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+                  }
+                }
+              }
+            }
+
+            // 4. Action: CHECK_MY_KEY
+            if (finalReply.includes("[ACTION: CHECK_MY_KEY]")) {
+              try {
+                const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(interaction.user.id) as {
+                  key: string;
+                  roblox_id: string | null;
+                  hwid: string | null;
+                  last_reset_at: string | null;
+                } | undefined;
+
+                if (!row) {
+                  finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
+                } else {
+                  let cooldownRemainingMinutes = 0;
+                  if (row.last_reset_at) {
+                    const lastReset = new Date(row.last_reset_at).getTime();
+                    const now = Date.now();
+                    const diffMinutes = (now - lastReset) / (1000 * 60);
+                    if (diffMinutes < 10) {
+                      cooldownRemainingMinutes = Math.ceil(10 - diffMinutes);
+                    }
+                  }
+
+                  const infoBlock = 
+                    `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
+                    `• **Key**: \`${row.key.replace(/LeonX-.*-.*/, "LEONX-••••-••••")}\` (Disensor demi keamanan)\n` +
+                    `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                    `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                    `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
+                    
+                  finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+                }
+              } catch (keyErr) {
+                finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
+              }
+            }
+
+            if (finalReply.length > 2000) {
+              const chunks = finalReply.match(/[\s\S]{1,1950}/g) || [finalReply];
+              for (let i = 0; i < chunks.length; i++) {
+                if (i === 0) {
+                  await interaction.editReply(chunks[i]);
+                } else {
+                  await interaction.followUp(chunks[i]);
+                }
+              }
+            } else {
+              await interaction.editReply(finalReply);
+            }
+          } else {
+            await interaction.editReply("Gagal menghubungi AI. Silakan coba lagi nanti.");
+          }
+        } catch (err) {
+          console.error("AI Command error:", err);
+          await interaction.editReply("Terjadi error internal saat menghubungi AI.");
+        }
+      }
+
 
       if (interaction.commandName === "generatekey") {
         const user = interaction.options.getUser("user", true);
@@ -1963,26 +2177,102 @@ const FAQ_RULES = [
   }
 ];
 
+async function handleTicketAiResponse(message: Message, ticket: TicketRecord) {
+  if (!config.GEMINI_API_KEY) return;
+
+  if ("sendTyping" in message.channel) {
+    await (message.channel as TextChannel).sendTyping().catch(() => null);
+  }
+
+  try {
+    const userMessage = message.content.trim();
+    if (!userMessage) return;
+
+    const catKey = ticket.category as TicketCategory;
+    const categoryInfo = TICKET_CATEGORIES[catKey] || TICKET_CATEGORIES.general;
+    const categoryLabel = categoryInfo.label;
+
+    const systemPrompt = `Anda adalah LeonX AI Ticket Assistant, agen support otomatis cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+Pengguna baru saja membuka tiket bantuan dengan kategori: "${categoryLabel}".
+Berikut adalah deskripsi masalah/pertanyaan awal dari user:
+"${userMessage}"
+
+Tugas Anda:
+1. Berikan analisis awal dan saran troubleshooting yang praktis, jelas, dan ramah sesuai kategori tiket.
+2. Jika mereka memiliki kendala teknis (script error/tidak jalan), ingatkan mereka untuk:
+   - Menaruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama script sebelum baris loadstring.
+   - Menggunakan executor Roblox yang ter-update dan kompatibel.
+3. Jika masalah berkaitan dengan HWID Error / Key Terikat Perangkat Lain, jelaskan cara mereset HWID mereka menggunakan perintah /resethwid di Discord atau melalui panel Bot Console di website resmi kami (https://leonthings.my.id/bot).
+4. Beri tahu mereka dengan ramah bahwa tim staff support manusia tetap akan datang untuk membantu secara langsung jika solusi otomatis ini tidak menyelesaikan masalah mereka.
+5. Jawab secara singkat, padat, profesional, dan gunakan format markdown Discord (seperti bullet points, bold text, dll) agar mudah dibaca.
+6. Berbahasa Indonesia secara sopan dan membantu.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: systemPrompt }]
+          }
+        ]
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json() as any;
+      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.";
+      const finalReply = replyText.trim();
+
+      const embed = new EmbedBuilder()
+        .setColor("Blue")
+        .setTitle("🤖 AI Support Assistant (Solusi Awal)")
+        .setDescription(finalReply)
+        .setFooter({ text: "Tim support manusia akan segera membantu jika masalah belum teratasi." })
+        .setTimestamp();
+
+      await message.reply({ embeds: [embed] });
+
+      // Update database agar tidak merespons lagi di tiket ini
+      db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
+    } else {
+      const errData = await response.text();
+      console.error("Gemini API Error in Ticket Assistant:", errData);
+    }
+  } catch (err) {
+    console.error("Error in handleTicketAiResponse:", err);
+  }
+}
+
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
 
   const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member) return;
 
-  // AI Chatbot Integration
-  const isMentioned = client.user && message.mentions.has(client.user);
+  // Check if message is in a ticket channel
+  if (message.channel.type === ChannelType.GuildText) {
+    const ticketData = getOrRecoverTicket(message.channel as TextChannel);
+    if (ticketData && ticketData.status === "open" && !ticketData.claimed_by && !ticketData.ai_responded) {
+      if (message.author.id === ticketData.user_id) {
+        await handleTicketAiResponse(message, ticketData);
+        return;
+      }
+    }
+  }
+
+  // AI Chatbot Integration - Only trigger in the specified AI channel without requiring tag/prefix
   const isAiChannel = config.AI_CHANNEL_ID && message.channel.id === config.AI_CHANNEL_ID;
 
-  if ((isMentioned || isAiChannel) && config.GEMINI_API_KEY) {
+  if (isAiChannel && config.GEMINI_API_KEY) {
     // Show typing status
     await message.channel.sendTyping().catch(() => null);
 
     try {
       const userMessage = message.content.replace(new RegExp(`<@!?${client.user?.id}>`, 'g'), "").trim();
-      if (!userMessage && isMentioned) {
-        await message.reply("Halo! Ada yang bisa saya bantu terkait LeonX Hub? Silakan tanyakan di sini.");
-        return;
-      }
       if (!userMessage) return; // Ignore empty messages in AI channel
 
       const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).

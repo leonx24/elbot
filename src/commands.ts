@@ -246,6 +246,14 @@ export const commands = [
       o.setName("channel")
         .setDescription("Channel yang ingin dibuka kunci (opsional, default channel saat ini)")
         .addChannelTypes(ChannelType.GuildText)
+    ),
+  new SlashCommandBuilder()
+    .setName("ai")
+    .setDescription("Tanya sesuatu kepada LeonX AI Assistant")
+    .addStringOption((o) =>
+      o.setName("tanya")
+        .setDescription("Pertanyaan yang ingin diajukan ke AI")
+        .setRequired(true)
     )
 ].map((command) => command.toJSON());
 
