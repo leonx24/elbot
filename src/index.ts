@@ -1969,6 +1969,90 @@ client.on(Events.MessageCreate, async (message) => {
   const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member) return;
 
+  // AI Chatbot Integration
+  const isMentioned = client.user && message.mentions.has(client.user);
+  const isAiChannel = config.AI_CHANNEL_ID && message.channel.id === config.AI_CHANNEL_ID;
+
+  if ((isMentioned || isAiChannel) && config.GEMINI_API_KEY) {
+    // Show typing status
+    await message.channel.sendTyping().catch(() => null);
+
+    try {
+      const userMessage = message.content.replace(new RegExp(`<@!?${client.user?.id}>`, 'g'), "").trim();
+      if (!userMessage && isMentioned) {
+        await message.reply("Halo! Ada yang bisa saya bantu terkait LeonX Hub? Silakan tanyakan di sini.");
+        return;
+      }
+      if (!userMessage) return; // Ignore empty messages in AI channel
+
+      const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+Website Resmi: https://leonthings.my.id
+Halaman Dashboard/Bot Console: https://leonthings.my.id/bot
+Perintah Discord yang tersedia:
+- /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
+- /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
+- /resethwid : Mereset kaitan perangkat/Roblox ID (cooldown reset adalah 10 menit sekali). Bisa juga dilakukan mandiri di website console.
+- /website : Mendapatkan link website utama dan halaman bot console.
+- /status : Cek status operational script LeonX Hub.
+- /faq : Tanya jawab seputar permasalahan umum.
+- /bug-report : Melaporkan bug/error langsung ke staff developer.
+- /ticket : Membuat tiket keluhan bantuan jika ada masalah yang tidak terselesaikan.
+
+Panduan penyelesaian masalah umum:
+1. Script tidak berjalan atau gagal eksekusi:
+   - Pastikan meletakkan \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum baris loadstring.
+   - Pastikan executor Roblox yang digunakan mendukung loadstring dan versi paling ter-update.
+2. Key terdaftar di perangkat lain / HWID Error:
+   - Gunakan command /resethwid di Discord atau buka website LeonThings bagian Bot Console -> My Key, lalu klik tombol "Reset HWID & Roblox ID". Ingat batas reset adalah 1x per 10 menit.
+3. Mendapatkan Role Member:
+   - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
+   - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
+
+Format balasan:
+- Jawab secara singkat, padat, ramah, dan solutif.
+- Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
+- Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
+- Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${userMessage}"` }]
+            }
+          ]
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json() as any;
+        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+        const trimmedReply = replyText.trim();
+        if (trimmedReply.length > 2000) {
+          const chunks = trimmedReply.match(/[\s\S]{1,1950}/g) || [trimmedReply];
+          for (const chunk of chunks) {
+            await message.reply(chunk);
+          }
+        } else {
+          await message.reply(trimmedReply);
+        }
+      } else {
+        const errData = await response.text();
+        console.error("Gemini API Error details:", errData);
+        await message.reply("Maaf, terjadi kesalahan koneksi saat menghubungi modul AI saya. Silakan coba sesaat lagi.");
+      }
+    } catch (err) {
+      console.error("AI Chatbot error:", err);
+      await message.reply("Maaf, terjadi error internal dalam sistem chatbot AI. Hubungi staf jika masalah berlanjut.");
+    }
+    return;
+  }
+
   // Lewati pengecekan jika pengirim adalah owner atau staf dengan permission ManageMessages
   if (
     member.permissions.has(PermissionFlagsBits.ManageMessages) ||
