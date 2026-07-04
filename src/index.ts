@@ -2126,6 +2126,39 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
+// Helper functions for Roblox API integration
+async function getRobloxUserInfo(robloxId: string): Promise<{ username: string; displayName: string } | null> {
+  try {
+    const res = await fetch(`https://users.roblox.com/v1/users/${robloxId}`);
+    if (res.ok) {
+      const data = await res.json() as { name: string; displayName: string };
+      return {
+        username: data.name,
+        displayName: data.displayName
+      };
+    }
+  } catch (error) {
+    console.error(`Failed to fetch Roblox user info for ${robloxId}:`, error);
+  }
+  return null;
+}
+
+async function getRobloxAvatarUrl(robloxId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${robloxId}&size=150x150&format=Png&isCircular=false`);
+    if (res.ok) {
+      const data = await res.json() as { data?: Array<{ imageUrl?: string }> };
+      const url = data.data?.[0]?.imageUrl;
+      if (url) {
+        return url;
+      }
+    }
+  } catch (error) {
+    console.error(`Failed to fetch Roblox avatar for ${robloxId}:`, error);
+  }
+  return null;
+}
+
 // Spin up a lightweight stats HTTP server for web dashboard integration
 const serverPort = process.env.PORT || 3000;
 http.createServer(async (req, res) => {
@@ -2334,11 +2367,27 @@ http.createServer(async (req, res) => {
         }
       }
 
+      let robloxUsername: string | null = null;
+      let robloxDisplayName: string | null = null;
+      let robloxAvatarUrl: string | null = null;
+
+      if (row.roblox_id) {
+        const robloxUser = await getRobloxUserInfo(row.roblox_id);
+        if (robloxUser) {
+          robloxUsername = robloxUser.username;
+          robloxDisplayName = robloxUser.displayName;
+        }
+        robloxAvatarUrl = await getRobloxAvatarUrl(row.roblox_id);
+      }
+
       res.writeHead(200);
       res.end(JSON.stringify({
         hasKey: true,
         key: row.key,
         robloxId: row.roblox_id,
+        robloxUsername,
+        robloxDisplayName,
+        robloxAvatarUrl,
         hwid: row.hwid,
         lastResetAt: row.last_reset_at,
         cooldownRemainingMinutes,
