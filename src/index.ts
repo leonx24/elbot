@@ -2008,6 +2008,13 @@ Panduan penyelesaian masalah umum:
    - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
    - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
 
+TINDAKAN KELUARAN KHUSUS (ACTION TAGS):
+Anda dapat mengontrol tindakan bot secara langsung dengan menyertakan tag khusus ini tepat di akhir balasan Anda jika user memintanya (bot akan memprosesnya dan menggantinya dengan hasil nyata):
+1. Jika pengguna meminta dikirimi script loader, key lisensi mereka, atau menyuruh "ambilin script", sertakan tag: [ACTION: SEND_SCRIPT]
+2. Jika pengguna menanyakan statistik server bot, kapasitas, memori, atau performa bot, sertakan tag: [ACTION: GET_STATS]
+3. Jika pengguna meminta untuk mereset HWID atau Roblox ID mereka, sertakan tag: [ACTION: RESET_HWID]
+4. Jika pengguna menanyakan detail status key lisensi aktif mereka saat ini, sertakan tag: [ACTION: CHECK_MY_KEY]
+
 Format balasan:
 - Jawab secara singkat, padat, ramah, dan solutif.
 - Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
@@ -2032,14 +2039,134 @@ Format balasan:
       if (response.ok) {
         const data = await response.json() as any;
         const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
-        const trimmedReply = replyText.trim();
-        if (trimmedReply.length > 2000) {
-          const chunks = trimmedReply.match(/[\s\S]{1,1950}/g) || [trimmedReply];
+        let finalReply = replyText.trim();
+
+        // 1. Action: SEND_SCRIPT
+        if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {
+          const blacklistCheck = isBlacklisted({ discordId: message.author.id });
+          if (blacklistCheck.blacklisted) {
+            finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+          } else {
+            const hasRole = config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+            if (!hasRole) {
+              finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+            } else {
+              try {
+                const userKey = getOrCreateUserKey(message.author.id);
+                const dmContent = 
+                  `**LeonX Hub Loader**\n` +
+                  `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
+                  `\`\`\`lua\n` +
+                  `_G.Key = "${userKey}"\n` +
+                  `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                  `\`\`\`;`;
+                await message.author.send(dmContent);
+                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+              } catch (dmErr) {
+                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+              }
+            }
+          }
+        }
+
+        // 2. Action: GET_STATS
+        if (finalReply.includes("[ACTION: GET_STATS]")) {
+          try {
+            const guildCount = client.guilds.cache.size;
+            const activeKeys = db.prepare("SELECT COUNT(*) as count FROM user_keys").get() as { count: number } | undefined;
+            const totalKeys = activeKeys?.count || 0;
+            const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
+            
+            let uptimeString = "0s";
+            if (client.uptime) {
+              const secs = Math.floor(client.uptime / 1000);
+              const mins = Math.floor(secs / 60);
+              const hours = Math.floor(mins / 60);
+              const days = Math.floor(hours / 24);
+              uptimeString = days > 0 
+                ? `${days}hari ${hours % 24}jam`
+                : hours > 0 
+                ? `${hours}jam ${mins % 60}menit`
+                : `${mins}menit ${secs % 60}detik`;
+            }
+
+            const statsBlock = 
+              `\n\n📊 **Statistik Live Server LeonX Bot:**\n` +
+              `• Jumlah Guild Server: \`${guildCount}\`\n` +
+              `• Pengguna Lisensi (Keys): \`${totalKeys}\`\n` +
+              `• Uptime Sistem: \`${uptimeString}\`\n` +
+              `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
+              
+            finalReply = finalReply.replace("[ACTION: GET_STATS]", statsBlock);
+          } catch (statsErr) {
+            finalReply = finalReply.replace("[ACTION: GET_STATS]", `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+          }
+        }
+
+        // 3. Action: RESET_HWID
+        if (finalReply.includes("[ACTION: RESET_HWID]")) {
+          const blacklistCheck = isBlacklisted({ discordId: message.author.id });
+          if (blacklistCheck.blacklisted) {
+            finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+          } else {
+            const hasRole = config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+            if (!hasRole) {
+              finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+            } else {
+              const resetResult = resetUserKeyBinding(message.author.id);
+              if (resetResult.success) {
+                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+              } else {
+                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+              }
+            }
+          }
+        }
+
+        // 4. Action: CHECK_MY_KEY
+        if (finalReply.includes("[ACTION: CHECK_MY_KEY]")) {
+          try {
+            const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(message.author.id) as {
+              key: string;
+              roblox_id: string | null;
+              hwid: string | null;
+              last_reset_at: string | null;
+            } | undefined;
+
+            if (!row) {
+              finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
+            } else {
+              let cooldownRemainingMinutes = 0;
+              if (row.last_reset_at) {
+                const lastReset = new Date(row.last_reset_at).getTime();
+                const now = Date.now();
+                const diffMinutes = (now - lastReset) / (1000 * 60);
+                if (diffMinutes < 10) {
+                  cooldownRemainingMinutes = Math.ceil(10 - diffMinutes);
+                }
+              }
+
+              const infoBlock = 
+                `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
+                `• **Key**: \`${row.key.replace(/LeonX-.*-.*/, "LEONX-••••-••••")}\` (Disensor demi keamanan)\n` +
+                `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
+                
+              finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+            }
+          } catch (keyErr) {
+            finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
+          }
+        }
+
+        if (finalReply.length > 2000) {
+          const chunks = finalReply.match(/[\s\S]{1,1950}/g) || [finalReply];
           for (const chunk of chunks) {
             await message.reply(chunk);
           }
         } else {
-          await message.reply(trimmedReply);
+          await message.reply(finalReply);
         }
       } else {
         const errData = await response.text();
