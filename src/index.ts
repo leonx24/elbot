@@ -380,6 +380,49 @@ client.once(Events.ClientReady, async (readyClient) => {
       console.error("Gagal melakukan pengecekan update game berkala:", error);
     });
   }, 5 * 60 * 1000);
+
+  // Automatic key distribution check for verified role members
+  if (config.VERIFIED_ROLE_ID) {
+    (async () => {
+      try {
+        const guild = await readyClient.guilds.fetch(config.GUILD_ID);
+        const members = await guild.members.fetch();
+        const verifiedMembers = members.filter(m => !m.user.bot && m.roles.cache.has(config.VERIFIED_ROLE_ID!));
+        
+        console.log(`[STARTUP] Checking key delivery for ${verifiedMembers.size} verified members...`);
+        
+        for (const [memberId, member] of verifiedMembers) {
+          const settingKey = `key_dm_sent:${memberId}`;
+          const alreadySent = db.prepare("SELECT 1 FROM bot_settings WHERE key = ?").get(settingKey);
+          
+          if (!alreadySent) {
+            try {
+              const userKey = getOrCreateUserKey(memberId);
+              const dmContent = 
+                `**LeonX Hub Loader**\n` +
+                `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script khusus dan key lisensi Anda:\n` +
+                `\`\`\`lua\n` +
+                `_G.Key = "${userKey}"\n` +
+                `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                `\`\`\`\n` +
+                `Jangan bagikan key ini kepada siapapun!`;
+                
+              await member.send(dmContent);
+              console.log(`[STARTUP] Successfully DMed key to ${member.user.tag}`);
+              
+              db.prepare("INSERT INTO bot_settings (key, value) VALUES (?, 'true')").run(settingKey);
+            } catch (dmErr) {
+              console.error(`[STARTUP] Failed to DM key to ${member.user.tag}:`, dmErr);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        console.log(`[STARTUP] Key delivery check completed.`);
+      } catch (err) {
+        console.error("[STARTUP] Error checking key delivery:", err);
+      }
+    })();
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -647,12 +690,24 @@ Format balasan:
 
                   const infoBlock = 
                     `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
-                    `• **Key**: \`${row.key.replace(/LeonX-.*-.*/, "LEONX-••••-••••")}\` (Disensor demi keamanan)\n` +
+                    `• **Key**: \`LEONX-••••-••••-••••\` (Disensor demi keamanan, detail lengkap telah dikirimkan ke DM Anda!)\n` +
                     `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
                     `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
                     `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
                     
                   finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+
+                  try {
+                    const dmContent = 
+                      `🔑 **Informasi Lisensi Key Anda (Detail Privasi):**\n` +
+                      `• **Key**: \`${row.key}\` (Jangan bagikan key ini kepada siapapun!)\n` +
+                      `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                      `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                      `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
+                    await interaction.user.send(dmContent);
+                  } catch (dmErr) {
+                    console.log(`Failed to DM key info to ${interaction.user.tag}:`, dmErr);
+                  }
                 }
               } catch (keyErr) {
                 finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
@@ -2272,6 +2327,10 @@ client.on(Events.MessageCreate, async (message) => {
   const isAiChannel = config.AI_CHANNEL_ID && message.channel.id === config.AI_CHANNEL_ID;
 
   if (isAiChannel && config.GEMINI_API_KEY) {
+    if (onCooldown(message.author.id, "ai_chat", 5000)) {
+      await message.react("⏳").catch(() => null);
+      return;
+    }
     // Show typing status
     await message.channel.sendTyping().catch(() => null);
 
@@ -2442,12 +2501,24 @@ Format balasan:
 
               const infoBlock = 
                 `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
-                `• **Key**: \`${row.key.replace(/LeonX-.*-.*/, "LEONX-••••-••••")}\` (Disensor demi keamanan)\n` +
+                `• **Key**: \`LEONX-••••-••••-••••\` (Disensor demi keamanan, detail lengkap telah dikirimkan ke DM Anda!)\n` +
                 `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
                 `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
                 `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
                 
               finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+
+              try {
+                const dmContent = 
+                  `🔑 **Informasi Lisensi Key Anda (Detail Privasi):**\n` +
+                  `• **Key**: \`${row.key}\` (Jangan bagikan key ini kepada siapapun!)\n` +
+                  `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                  `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                  `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
+                await message.author.send(dmContent);
+              } catch (dmErr) {
+                console.log(`Failed to DM key info to ${message.author.tag}:`, dmErr);
+              }
             }
           } catch (keyErr) {
             finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
