@@ -2248,7 +2248,11 @@ Tugas Anda:
 }
 
 client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || !message.guild) return;
+  if (message.author.bot) return;
+  const channelName = "name" in message.channel ? message.channel.name : "DM/Private";
+  console.log(`[DEBUG] Message received from ${message.author.tag} in channel #${channelName} (${message.channel.id}): "${message.content}"`);
+
+  if (!message.guild) return;
 
   const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member) return;
