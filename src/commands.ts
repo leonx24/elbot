@@ -85,7 +85,8 @@ export const commands = [
         .addChoices(
           { name: "Cara mendapatkan script", value: "script" },
           { name: "Script tidak berjalan", value: "error" },
-          { name: "Cara membuat ticket", value: "ticket" }
+          { name: "Cara membuat ticket", value: "ticket" },
+          { name: "Website & Bot Console", value: "website" }
         )
     ),
   new SlashCommandBuilder()
@@ -215,7 +216,10 @@ export const commands = [
     ),
   new SlashCommandBuilder()
     .setName("resethwid")
-    .setDescription("Reset data HWID dan Roblox ID yang tertaut di key Anda (Batas 1x / 24 jam)"),
+    .setDescription("Reset data HWID dan Roblox ID yang tertaut di key Anda (Batas 1x / 10 menit)"),
+  new SlashCommandBuilder()
+    .setName("website")
+    .setDescription("Dapatkan link website LeonThings"),
   new SlashCommandBuilder()
     .setName("generatekey")
     .setDescription("Hasilkan key baru untuk pengguna Discord (Owner/Admin Only)")
@@ -242,6 +246,14 @@ export const commands = [
       o.setName("channel")
         .setDescription("Channel yang ingin dibuka kunci (opsional, default channel saat ini)")
         .addChannelTypes(ChannelType.GuildText)
+    ),
+  new SlashCommandBuilder()
+    .setName("ai")
+    .setDescription("Tanya sesuatu kepada LeonX AI Assistant")
+    .addStringOption((o) =>
+      o.setName("tanya")
+        .setDescription("Pertanyaan yang ingin diajukan ke AI")
+        .setRequired(true)
     )
 ].map((command) => command.toJSON());
 

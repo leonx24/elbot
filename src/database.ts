@@ -27,7 +27,8 @@ db.exec(`
     closed_at TEXT,
     close_reason TEXT,
     rating INTEGER,
-    rating_feedback TEXT
+    rating_feedback TEXT,
+    ai_responded INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS bug_reports (
@@ -83,6 +84,16 @@ db.exec(`
     last_reset_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS script_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT,
+    roblox_username TEXT,
+    roblox_id TEXT,
+    place_id TEXT,
+    executor TEXT,
+    executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
@@ -92,7 +103,8 @@ const ticketMigrations: Array<[string, string]> = [
   ["claimed_by", "ALTER TABLE tickets ADD COLUMN claimed_by TEXT"],
   ["close_reason", "ALTER TABLE tickets ADD COLUMN close_reason TEXT"],
   ["rating", "ALTER TABLE tickets ADD COLUMN rating INTEGER"],
-  ["rating_feedback", "ALTER TABLE tickets ADD COLUMN rating_feedback TEXT"]
+  ["rating_feedback", "ALTER TABLE tickets ADD COLUMN rating_feedback TEXT"],
+  ["ai_responded", "ALTER TABLE tickets ADD COLUMN ai_responded INTEGER DEFAULT 0"]
 ];
 
 for (const [column, sql] of ticketMigrations) {
@@ -279,15 +291,15 @@ export function resetUserKeyBinding(discordId: string): { success: boolean; mess
     return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
   }
 
-  // Check 24 hour cooldown
+  // Check 10 minute cooldown
   if (row.last_reset_at) {
     const lastReset = new Date(row.last_reset_at).getTime();
     const now = Date.now();
-    const diffHours = (now - lastReset) / (1000 * 60 * 60);
+    const diffMinutes = (now - lastReset) / (1000 * 60);
 
-    if (diffHours < 24) {
-      const remainingHours = Math.ceil(24 - diffHours);
-      return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 24 jam. Silakan coba lagi dalam ${remainingHours} jam.` };
+    if (diffMinutes < 10) {
+      const remainingMinutes = Math.ceil(10 - diffMinutes);
+      return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 10 menit. Silakan coba lagi dalam ${remainingMinutes} menit.` };
     }
   }
 

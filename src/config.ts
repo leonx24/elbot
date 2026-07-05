@@ -15,7 +15,9 @@ const schema = z.object({
   CHANGELOG_CHANNEL_ID: z.string().regex(/^\d+$/, "CHANGELOG_CHANNEL_ID harus berupa channel ID"),
   LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   STATUS_VOICE_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
-  TICKET_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
+  TICKET_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  GEMINI_API_KEY: z.string().optional().or(z.literal("")),
+  AI_CHANNEL_ID: z.string().optional().or(z.literal(""))
 });
 
 export const config = schema.parse(process.env);

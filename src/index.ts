@@ -9,6 +9,7 @@ import {
   Events,
   GatewayIntentBits,
   GuildMember,
+  Message,
   ModalBuilder,
   PermissionFlagsBits,
   TextChannel,
@@ -45,7 +46,8 @@ const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "s
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
-  ticket: "Gunakan `/ticket`, kemudian tekan tombol **Buka Ticket**."
+  ticket: "Gunakan `/ticket`, kemudian tekan tombol **Buka Ticket**.",
+  website: "Silakan kunjungi website kami di https://leonthings.my.id. Untuk mengelola key dan reset HWID, silakan buka halaman console bot di https://leonthings.my.id/bot."
 };
 
 const changelogTypes = {
@@ -120,6 +122,7 @@ type TicketRecord = {
   category: string;
   status: string;
   claimed_by: string | null;
+  ai_responded: number;
 };
 
 function getOrRecoverTicket(channel: TextChannel): TicketRecord | undefined {
@@ -377,6 +380,49 @@ client.once(Events.ClientReady, async (readyClient) => {
       console.error("Gagal melakukan pengecekan update game berkala:", error);
     });
   }, 5 * 60 * 1000);
+
+  // Automatic key distribution check for verified role members
+  if (config.VERIFIED_ROLE_ID) {
+    (async () => {
+      try {
+        const guild = await readyClient.guilds.fetch(config.GUILD_ID);
+        const members = await guild.members.fetch();
+        const verifiedMembers = members.filter(m => !m.user.bot && m.roles.cache.has(config.VERIFIED_ROLE_ID!));
+        
+        console.log(`[STARTUP] Checking key delivery for ${verifiedMembers.size} verified members...`);
+        
+        for (const [memberId, member] of verifiedMembers) {
+          const settingKey = `key_dm_sent:${memberId}`;
+          const alreadySent = db.prepare("SELECT 1 FROM bot_settings WHERE key = ?").get(settingKey);
+          
+          if (!alreadySent) {
+            try {
+              const userKey = getOrCreateUserKey(memberId);
+              const dmContent = 
+                `**LeonX Hub Loader**\n` +
+                `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script khusus dan key lisensi Anda:\n` +
+                `\`\`\`lua\n` +
+                `_G.Key = "${userKey}"\n` +
+                `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                `\`\`\`\n` +
+                `Jangan bagikan key ini kepada siapapun!`;
+                
+              await member.send(dmContent);
+              console.log(`[STARTUP] Successfully DMed key to ${member.user.tag}`);
+              
+              db.prepare("INSERT INTO bot_settings (key, value) VALUES (?, 'true')").run(settingKey);
+            } catch (dmErr) {
+              console.error(`[STARTUP] Failed to DM key to ${member.user.tag}:`, dmErr);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        console.log(`[STARTUP] Key delivery check completed.`);
+      } catch (err) {
+        console.error("[STARTUP] Error checking key delivery:", err);
+      }
+    })();
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -465,6 +511,230 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const result = resetUserKeyBinding(interaction.user.id);
         await interaction.editReply(result.message);
       }
+
+      if (interaction.commandName === "ai") {
+        if (!config.GEMINI_API_KEY) {
+          await interaction.reply({
+            content: "Fitur AI belum dikonfigurasi oleh owner bot (GEMINI_API_KEY kosong).",
+            ephemeral: true
+          });
+          return;
+        }
+
+        const query = interaction.options.getString("tanya", true);
+        await interaction.deferReply();
+
+        try {
+          const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+Website Resmi: https://leonthings.my.id
+Halaman Dashboard/Bot Console: https://leonthings.my.id/bot
+Perintah Discord yang tersedia:
+- /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
+- /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
+- /resethwid : Mereset kaitan perangkat/Roblox ID (cooldown reset adalah 10 menit sekali). Bisa juga dilakukan mandiri di website console.
+- /website : Mendapatkan link website utama dan halaman bot console.
+- /status : Cek status operational script LeonX Hub.
+- /faq : Tanya jawab seputar permasalahan umum.
+- /bug-report : Melaporkan bug/error langsung ke staff developer.
+- /ticket : Membuat tiket keluhan bantuan jika ada masalah yang tidak terselesaikan.
+
+Panduan penyelesaian masalah umum:
+1. Script tidak berjalan atau gagal eksekusi:
+   - Pastikan meletakkan \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum baris loadstring.
+   - Pastikan executor Roblox yang digunakan mendukung loadstring dan versi paling ter-update.
+2. Key terdaftar di perangkat lain / HWID Error:
+   - Gunakan command /resethwid di Discord atau buka website LeonThings bagian Bot Console -> My Key, lalu klik tombol "Reset HWID & Roblox ID". Ingat batas reset adalah 1x per 10 menit.
+3. Mendapatkan Role Member:
+   - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
+   - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
+
+TINDAKAN KELUARAN KHUSUS (ACTION TAGS):
+Anda dapat mengontrol tindakan bot secara langsung dengan menyertakan tag khusus ini tepat di akhir balasan Anda jika user memintanya (bot akan memprosesnya dan menggantinya dengan hasil nyata):
+1. Jika pengguna meminta dikirimi script loader, key lisensi mereka, atau menyuruh "ambilin script", sertakan tag: [ACTION: SEND_SCRIPT]
+2. Jika pengguna menanyakan statistik server bot, kapasitas, memori, atau performa bot, sertakan tag: [ACTION: GET_STATS]
+3. Jika pengguna meminta untuk mereset HWID atau Roblox ID mereka, sertakan tag: [ACTION: RESET_HWID]
+4. Jika pengguna menanyakan detail status key lisensi aktif mereka saat ini, sertakan tag: [ACTION: CHECK_MY_KEY]
+
+Format balasan:
+- Jawab secara singkat, padat, ramah, dan solutif.
+- Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
+- Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
+- Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${query}"` }]
+                }
+              ]
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json() as any;
+            const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+            let finalReply = replyText.trim();
+
+            const member = interaction.member instanceof GuildMember ? interaction.member : null;
+
+            // 1. Action: SEND_SCRIPT
+            if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {
+              const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+              if (blacklistCheck.blacklisted) {
+                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+              } else {
+                const hasRole = member && config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+                if (!hasRole) {
+                  finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+                } else {
+                  try {
+                    const userKey = getOrCreateUserKey(interaction.user.id);
+                    const dmContent = 
+                      `**LeonX Hub Loader**\n` +
+                      `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
+                      `\`\`\`lua\n` +
+                      `_G.Key = "${userKey}"\n` +
+                      `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                      `\`\`\`;`;
+                    await interaction.user.send(dmContent);
+                    finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+                  } catch (dmErr) {
+                    finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+                  }
+                }
+              }
+            }
+
+            // 2. Action: GET_STATS
+            if (finalReply.includes("[ACTION: GET_STATS]")) {
+              try {
+                const guildCount = client.guilds.cache.size;
+                const activeKeys = db.prepare("SELECT COUNT(*) as count FROM user_keys").get() as { count: number } | undefined;
+                const totalKeys = activeKeys?.count || 0;
+                const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
+                
+                let uptimeString = "0s";
+                if (client.uptime) {
+                  const secs = Math.floor(client.uptime / 1000);
+                  const mins = Math.floor(secs / 60);
+                  const hours = Math.floor(mins / 60);
+                  const days = Math.floor(hours / 24);
+                  uptimeString = days > 0 
+                    ? `${days}hari ${hours % 24}jam`
+                    : hours > 0 
+                    ? `${hours}jam ${mins % 60}menit`
+                    : `${mins}menit ${secs % 60}detik`;
+                }
+
+                const statsBlock = 
+                  `\n\n📊 **Statistik Live Server LeonX Bot:**\n` +
+                  `• Jumlah Guild Server: \`${guildCount}\`\n` +
+                  `• Pengguna Lisensi (Keys): \`${totalKeys}\`\n` +
+                  `• Uptime Sistem: \`${uptimeString}\`\n` +
+                  `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
+                  
+                finalReply = finalReply.replace("[ACTION: GET_STATS]", statsBlock);
+              } catch (statsErr) {
+                finalReply = finalReply.replace("[ACTION: GET_STATS]", `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+              }
+            }
+
+            // 3. Action: RESET_HWID
+            if (finalReply.includes("[ACTION: RESET_HWID]")) {
+              const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+              if (blacklistCheck.blacklisted) {
+                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+              } else {
+                const hasRole = member && config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+                if (!hasRole) {
+                  finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+                } else {
+                  const resetResult = resetUserKeyBinding(interaction.user.id);
+                  if (resetResult.success) {
+                    finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+                  } else {
+                    finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+                  }
+                }
+              }
+            }
+
+            // 4. Action: CHECK_MY_KEY
+            if (finalReply.includes("[ACTION: CHECK_MY_KEY]")) {
+              try {
+                const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(interaction.user.id) as {
+                  key: string;
+                  roblox_id: string | null;
+                  hwid: string | null;
+                  last_reset_at: string | null;
+                } | undefined;
+
+                if (!row) {
+                  finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
+                } else {
+                  let cooldownRemainingMinutes = 0;
+                  if (row.last_reset_at) {
+                    const lastReset = new Date(row.last_reset_at).getTime();
+                    const now = Date.now();
+                    const diffMinutes = (now - lastReset) / (1000 * 60);
+                    if (diffMinutes < 10) {
+                      cooldownRemainingMinutes = Math.ceil(10 - diffMinutes);
+                    }
+                  }
+
+                  const infoBlock = 
+                    `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
+                    `• **Key**: \`LEONX-••••-••••-••••\` (Disensor demi keamanan, detail lengkap telah dikirimkan ke DM Anda!)\n` +
+                    `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                    `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                    `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
+                    
+                  finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+
+                  try {
+                    const dmContent = 
+                      `🔑 **Informasi Lisensi Key Anda (Detail Privasi):**\n` +
+                      `• **Key**: \`${row.key}\` (Jangan bagikan key ini kepada siapapun!)\n` +
+                      `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                      `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                      `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
+                    await interaction.user.send(dmContent);
+                  } catch (dmErr) {
+                    console.log(`Failed to DM key info to ${interaction.user.tag}:`, dmErr);
+                  }
+                }
+              } catch (keyErr) {
+                finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
+              }
+            }
+
+            if (finalReply.length > 2000) {
+              const chunks = finalReply.match(/[\s\S]{1,1950}/g) || [finalReply];
+              for (let i = 0; i < chunks.length; i++) {
+                if (i === 0) {
+                  await interaction.editReply(chunks[i]);
+                } else {
+                  await interaction.followUp(chunks[i]);
+                }
+              }
+            } else {
+              await interaction.editReply(finalReply);
+            }
+          } else {
+            await interaction.editReply("Gagal menghubungi AI. Silakan coba lagi nanti.");
+          }
+        } catch (err) {
+          console.error("AI Command error:", err);
+          await interaction.editReply("Terjadi error internal saat menghubungi AI.");
+        }
+      }
+
 
       if (interaction.commandName === "generatekey") {
         const user = interaction.options.getUser("user", true);
@@ -574,6 +844,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "faq") {
         const topic = interaction.options.getString("topik", true);
         await interaction.reply({ content: faq[topic] ?? "Topik tidak ditemukan.", ephemeral: true });
+      }
+
+      if (interaction.commandName === "website") {
+        await interaction.reply({
+          content: `🌐 **Website Utama:** https://leonthings.my.id\n🤖 **Bot Console Page:** https://leonthings.my.id/bot`,
+          ephemeral: true
+        });
       }
 
       if (interaction.commandName === "ticket") {
@@ -1933,15 +2210,340 @@ const FAQ_RULES = [
       "reset device",
       "hwid reset"
     ],
-    response: `Anda dapat mereset data HWID atau Roblox ID yang tertaut pada key Anda menggunakan slash command \`/resethwid\` (Batas 1x / 24 jam). Setelah di-reset, jalankan kembali script di Roblox untuk menautkan perangkat/akun baru.`
+    response: `Anda dapat mereset data HWID atau Roblox ID yang tertaut pada key Anda menggunakan slash command \`/resethwid\` (Batas 1x / 10 menit). Setelah di-reset, jalankan kembali script di Roblox untuk menautkan perangkat/akun baru.`
+  },
+  {
+    keywords: [
+      "link website",
+      "link web",
+      "website leonthings",
+      "web leonthings",
+      "url website",
+      "url web",
+      "website bot",
+      "web bot",
+      "link bot",
+      "halaman bot",
+      "halaman web"
+    ],
+    response: `Silakan kunjungi website resmi kami di:\n` +
+              `🌐 Website Utama: https://leonthings.my.id\n` +
+              `🤖 Bot Console / Kelola Key & Reset HWID: https://leonthings.my.id/bot`
   }
 ];
 
+async function handleTicketAiResponse(message: Message, ticket: TicketRecord) {
+  if (!config.GEMINI_API_KEY) return;
+
+  if ("sendTyping" in message.channel) {
+    await (message.channel as TextChannel).sendTyping().catch(() => null);
+  }
+
+  try {
+    const userMessage = message.content.trim();
+    if (!userMessage) return;
+
+    const catKey = ticket.category as TicketCategory;
+    const categoryInfo = TICKET_CATEGORIES[catKey] || TICKET_CATEGORIES.general;
+    const categoryLabel = categoryInfo.label;
+
+    const systemPrompt = `Anda adalah LeonX AI Ticket Assistant, agen support otomatis cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+Pengguna baru saja membuka tiket bantuan dengan kategori: "${categoryLabel}".
+Berikut adalah deskripsi masalah/pertanyaan awal dari user:
+"${userMessage}"
+
+Tugas Anda:
+1. Berikan analisis awal dan saran troubleshooting yang praktis, jelas, dan ramah sesuai kategori tiket.
+2. Jika mereka memiliki kendala teknis (script error/tidak jalan), ingatkan mereka untuk:
+   - Menaruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama script sebelum baris loadstring.
+   - Menggunakan executor Roblox yang ter-update dan kompatibel.
+3. Jika masalah berkaitan dengan HWID Error / Key Terikat Perangkat Lain, jelaskan cara mereset HWID mereka menggunakan perintah /resethwid di Discord atau melalui panel Bot Console di website resmi kami (https://leonthings.my.id/bot).
+4. Beri tahu mereka dengan ramah bahwa tim staff support manusia tetap akan datang untuk membantu secara langsung jika solusi otomatis ini tidak menyelesaikan masalah mereka.
+5. Jawab secara singkat, padat, profesional, dan gunakan format markdown Discord (seperti bullet points, bold text, dll) agar mudah dibaca.
+6. Berbahasa Indonesia secara sopan dan membantu.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: systemPrompt }]
+          }
+        ]
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json() as any;
+      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.";
+      const finalReply = replyText.trim();
+
+      const embed = new EmbedBuilder()
+        .setColor("Blue")
+        .setTitle("🤖 AI Support Assistant (Solusi Awal)")
+        .setDescription(finalReply)
+        .setFooter({ text: "Tim support manusia akan segera membantu jika masalah belum teratasi." })
+        .setTimestamp();
+
+      await message.reply({ embeds: [embed] });
+
+      // Update database agar tidak merespons lagi di tiket ini
+      db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
+    } else {
+      const errData = await response.text();
+      console.error("Gemini API Error in Ticket Assistant:", errData);
+    }
+  } catch (err) {
+    console.error("Error in handleTicketAiResponse:", err);
+  }
+}
+
 client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || !message.guild) return;
+  if (message.author.bot) return;
+  const channelName = "name" in message.channel ? message.channel.name : "DM/Private";
+  console.log(`[DEBUG] Message received from ${message.author.tag} in channel #${channelName} (${message.channel.id}): "${message.content}"`);
+
+  if (!message.guild) return;
 
   const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member) return;
+
+  // Check if message is in a ticket channel
+  if (message.channel.type === ChannelType.GuildText) {
+    const ticketData = getOrRecoverTicket(message.channel as TextChannel);
+    if (ticketData && ticketData.status === "open" && !ticketData.claimed_by && !ticketData.ai_responded) {
+      if (message.author.id === ticketData.user_id) {
+        await handleTicketAiResponse(message, ticketData);
+        return;
+      }
+    }
+  }
+
+  // AI Chatbot Integration - Only trigger in the specified AI channel without requiring tag/prefix
+  const isAiChannel = config.AI_CHANNEL_ID && message.channel.id === config.AI_CHANNEL_ID;
+
+  if (isAiChannel && config.GEMINI_API_KEY) {
+    if (onCooldown(message.author.id, "ai_chat", 5000)) {
+      await message.react("⏳").catch(() => null);
+      return;
+    }
+    // Show typing status
+    await message.channel.sendTyping().catch(() => null);
+
+    try {
+      const userMessage = message.content.replace(new RegExp(`<@!?${client.user?.id}>`, 'g'), "").trim();
+      if (!userMessage) return; // Ignore empty messages in AI channel
+
+      const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+Website Resmi: https://leonthings.my.id
+Halaman Dashboard/Bot Console: https://leonthings.my.id/bot
+Perintah Discord yang tersedia:
+- /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
+- /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
+- /resethwid : Mereset kaitan perangkat/Roblox ID (cooldown reset adalah 10 menit sekali). Bisa juga dilakukan mandiri di website console.
+- /website : Mendapatkan link website utama dan halaman bot console.
+- /status : Cek status operational script LeonX Hub.
+- /faq : Tanya jawab seputar permasalahan umum.
+- /bug-report : Melaporkan bug/error langsung ke staff developer.
+- /ticket : Membuat tiket keluhan bantuan jika ada masalah yang tidak terselesaikan.
+
+Panduan penyelesaian masalah umum:
+1. Script tidak berjalan atau gagal eksekusi:
+   - Pastikan meletakkan \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum baris loadstring.
+   - Pastikan executor Roblox yang digunakan mendukung loadstring dan versi paling ter-update.
+2. Key terdaftar di perangkat lain / HWID Error:
+   - Gunakan command /resethwid di Discord atau buka website LeonThings bagian Bot Console -> My Key, lalu klik tombol "Reset HWID & Roblox ID". Ingat batas reset adalah 1x per 10 menit.
+3. Mendapatkan Role Member:
+   - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
+   - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
+
+TINDAKAN KELUARAN KHUSUS (ACTION TAGS):
+Anda dapat mengontrol tindakan bot secara langsung dengan menyertakan tag khusus ini tepat di akhir balasan Anda jika user memintanya (bot akan memprosesnya dan menggantinya dengan hasil nyata):
+1. Jika pengguna meminta dikirimi script loader, key lisensi mereka, atau menyuruh "ambilin script", sertakan tag: [ACTION: SEND_SCRIPT]
+2. Jika pengguna menanyakan statistik server bot, kapasitas, memori, atau performa bot, sertakan tag: [ACTION: GET_STATS]
+3. Jika pengguna meminta untuk mereset HWID atau Roblox ID mereka, sertakan tag: [ACTION: RESET_HWID]
+4. Jika pengguna menanyakan detail status key lisensi aktif mereka saat ini, sertakan tag: [ACTION: CHECK_MY_KEY]
+
+Format balasan:
+- Jawab secara singkat, padat, ramah, dan solutif.
+- Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
+- Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
+- Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${userMessage}"` }]
+            }
+          ]
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json() as any;
+        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+        let finalReply = replyText.trim();
+
+        // 1. Action: SEND_SCRIPT
+        if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {
+          const blacklistCheck = isBlacklisted({ discordId: message.author.id });
+          if (blacklistCheck.blacklisted) {
+            finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+          } else {
+            const hasRole = config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+            if (!hasRole) {
+              finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+            } else {
+              try {
+                const userKey = getOrCreateUserKey(message.author.id);
+                const dmContent = 
+                  `**LeonX Hub Loader**\n` +
+                  `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
+                  `\`\`\`lua\n` +
+                  `_G.Key = "${userKey}"\n` +
+                  `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                  `\`\`\`;`;
+                await message.author.send(dmContent);
+                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+              } catch (dmErr) {
+                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+              }
+            }
+          }
+        }
+
+        // 2. Action: GET_STATS
+        if (finalReply.includes("[ACTION: GET_STATS]")) {
+          try {
+            const guildCount = client.guilds.cache.size;
+            const activeKeys = db.prepare("SELECT COUNT(*) as count FROM user_keys").get() as { count: number } | undefined;
+            const totalKeys = activeKeys?.count || 0;
+            const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
+            
+            let uptimeString = "0s";
+            if (client.uptime) {
+              const secs = Math.floor(client.uptime / 1000);
+              const mins = Math.floor(secs / 60);
+              const hours = Math.floor(mins / 60);
+              const days = Math.floor(hours / 24);
+              uptimeString = days > 0 
+                ? `${days}hari ${hours % 24}jam`
+                : hours > 0 
+                ? `${hours}jam ${mins % 60}menit`
+                : `${mins}menit ${secs % 60}detik`;
+            }
+
+            const statsBlock = 
+              `\n\n📊 **Statistik Live Server LeonX Bot:**\n` +
+              `• Jumlah Guild Server: \`${guildCount}\`\n` +
+              `• Pengguna Lisensi (Keys): \`${totalKeys}\`\n` +
+              `• Uptime Sistem: \`${uptimeString}\`\n` +
+              `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
+              
+            finalReply = finalReply.replace("[ACTION: GET_STATS]", statsBlock);
+          } catch (statsErr) {
+            finalReply = finalReply.replace("[ACTION: GET_STATS]", `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+          }
+        }
+
+        // 3. Action: RESET_HWID
+        if (finalReply.includes("[ACTION: RESET_HWID]")) {
+          const blacklistCheck = isBlacklisted({ discordId: message.author.id });
+          if (blacklistCheck.blacklisted) {
+            finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+          } else {
+            const hasRole = config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+            if (!hasRole) {
+              finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+            } else {
+              const resetResult = resetUserKeyBinding(message.author.id);
+              if (resetResult.success) {
+                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+              } else {
+                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+              }
+            }
+          }
+        }
+
+        // 4. Action: CHECK_MY_KEY
+        if (finalReply.includes("[ACTION: CHECK_MY_KEY]")) {
+          try {
+            const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(message.author.id) as {
+              key: string;
+              roblox_id: string | null;
+              hwid: string | null;
+              last_reset_at: string | null;
+            } | undefined;
+
+            if (!row) {
+              finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
+            } else {
+              let cooldownRemainingMinutes = 0;
+              if (row.last_reset_at) {
+                const lastReset = new Date(row.last_reset_at).getTime();
+                const now = Date.now();
+                const diffMinutes = (now - lastReset) / (1000 * 60);
+                if (diffMinutes < 10) {
+                  cooldownRemainingMinutes = Math.ceil(10 - diffMinutes);
+                }
+              }
+
+              const infoBlock = 
+                `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
+                `• **Key**: \`LEONX-••••-••••-••••\` (Disensor demi keamanan, detail lengkap telah dikirimkan ke DM Anda!)\n` +
+                `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
+                
+              finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+
+              try {
+                const dmContent = 
+                  `🔑 **Informasi Lisensi Key Anda (Detail Privasi):**\n` +
+                  `• **Key**: \`${row.key}\` (Jangan bagikan key ini kepada siapapun!)\n` +
+                  `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                  `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                  `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
+                await message.author.send(dmContent);
+              } catch (dmErr) {
+                console.log(`Failed to DM key info to ${message.author.tag}:`, dmErr);
+              }
+            }
+          } catch (keyErr) {
+            finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
+          }
+        }
+
+        if (finalReply.length > 2000) {
+          const chunks = finalReply.match(/[\s\S]{1,1950}/g) || [finalReply];
+          for (const chunk of chunks) {
+            await message.reply(chunk);
+          }
+        } else {
+          await message.reply(finalReply);
+        }
+      } else {
+        const errData = await response.text();
+        console.error("Gemini API Error details:", errData);
+        await message.reply("Maaf, terjadi kesalahan koneksi saat menghubungi modul AI saya. Silakan coba sesaat lagi.");
+      }
+    } catch (err) {
+      console.error("AI Chatbot error:", err);
+      await message.reply("Maaf, terjadi error internal dalam sistem chatbot AI. Hubungi staf jika masalah berlanjut.");
+    }
+    return;
+  }
 
   // Lewati pengecekan jika pengirim adalah owner atau staf dengan permission ManageMessages
   if (
@@ -2099,6 +2701,39 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 });
+
+// Helper functions for Roblox API integration
+async function getRobloxUserInfo(robloxId: string): Promise<{ username: string; displayName: string } | null> {
+  try {
+    const res = await fetch(`https://users.roblox.com/v1/users/${robloxId}`);
+    if (res.ok) {
+      const data = await res.json() as { name: string; displayName: string };
+      return {
+        username: data.name,
+        displayName: data.displayName
+      };
+    }
+  } catch (error) {
+    console.error(`Failed to fetch Roblox user info for ${robloxId}:`, error);
+  }
+  return null;
+}
+
+async function getRobloxAvatarUrl(robloxId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${robloxId}&size=150x150&format=Png&isCircular=false`);
+    if (res.ok) {
+      const data = await res.json() as { data?: Array<{ imageUrl?: string }> };
+      const url = data.data?.[0]?.imageUrl;
+      if (url) {
+        return url;
+      }
+    }
+  } catch (error) {
+    console.error(`Failed to fetch Roblox avatar for ${robloxId}:`, error);
+  }
+  return null;
+}
 
 // Spin up a lightweight stats HTTP server for web dashboard integration
 const serverPort = process.env.PORT || 3000;
@@ -2262,6 +2897,113 @@ http.createServer(async (req, res) => {
     } catch (error: any) {
       res.writeHead(500);
       res.end(JSON.stringify({ valid: false, error: error.message }));
+    }
+  }
+  else if (pathname === "/api/my-key" && req.method === "GET") {
+    const token = urlObj.searchParams.get("token") || req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ hasKey: false, error: "Access token is required." }));
+      return;
+    }
+
+    try {
+      const discordRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ hasKey: false, error: "Unauthorized access token." }));
+        return;
+      }
+
+      const user = await discordRes.json() as { id: string; username: string };
+      const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(user.id) as {
+        key: string;
+        roblox_id: string | null;
+        hwid: string | null;
+        last_reset_at: string | null;
+      } | undefined;
+
+      if (!row) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ hasKey: false, message: "Anda belum memiliki key terdaftar. Silakan gunakan `/script` terlebih dahulu di Discord." }));
+        return;
+      }
+
+      let cooldownRemainingMinutes = 0;
+      let cooldownRemainingHours = 0;
+      if (row.last_reset_at) {
+        const lastReset = new Date(row.last_reset_at).getTime();
+        const now = Date.now();
+        const diffMinutes = (now - lastReset) / (1000 * 60);
+        if (diffMinutes < 10) {
+          cooldownRemainingMinutes = Math.ceil(10 - diffMinutes);
+          cooldownRemainingHours = Math.ceil(cooldownRemainingMinutes / 60);
+        }
+      }
+
+      let robloxUsername: string | null = null;
+      let robloxDisplayName: string | null = null;
+      let robloxAvatarUrl: string | null = null;
+
+      if (row.roblox_id) {
+        const robloxUser = await getRobloxUserInfo(row.roblox_id);
+        if (robloxUser) {
+          robloxUsername = robloxUser.username;
+          robloxDisplayName = robloxUser.displayName;
+        }
+        robloxAvatarUrl = await getRobloxAvatarUrl(row.roblox_id);
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        hasKey: true,
+        key: row.key,
+        robloxId: row.roblox_id,
+        robloxUsername,
+        robloxDisplayName,
+        robloxAvatarUrl,
+        hwid: row.hwid,
+        lastResetAt: row.last_reset_at,
+        cooldownRemainingMinutes,
+        cooldownRemainingHours
+      }));
+    } catch (error: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ hasKey: false, error: error.message }));
+    }
+  }
+  else if (pathname === "/api/reset-my-hwid" && req.method === "POST") {
+    const token = urlObj.searchParams.get("token") || req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ success: false, error: "Access token is required." }));
+      return;
+    }
+
+    try {
+      const discordRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ success: false, error: "Unauthorized access token." }));
+        return;
+      }
+
+      const user = await discordRes.json() as { id: string };
+      const result = resetUserKeyBinding(user.id);
+      if (result.success) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, message: result.message }));
+      } else {
+        res.writeHead(400);
+        res.end(JSON.stringify({ success: false, error: result.message }));
+      }
+    } catch (error: any) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: error.message }));
     }
   }
   else if (pathname === "/api/stats" && req.method === "GET") {
