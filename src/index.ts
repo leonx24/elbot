@@ -2418,5 +2418,28 @@ client.on(Events.GuildMemberAdd, async (member) => {
   }
 });
 
+client.on(Events.GuildMemberRemove, async (member) => {
+  const welcomeChannelId = "1515741307534966784";
+  try {
+    const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
+    if (channel?.isSendable()) {
+      const embed = new EmbedBuilder()
+        .setColor(0xef4444) // Sleek Red
+        .setTitle("👋 Sampai Jumpa!")
+        .setDescription(
+          `Yah, **${member.user.tag}** telah meninggalkan **${member.guild.name}**.\n\n` +
+          `Terima kasih sudah bergabung bersama kami. Sampai jumpa lagi dan sukses selalu! ✨`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: `Member #${member.guild.memberCount}`, iconURL: member.guild.iconURL() || undefined })
+        .setTimestamp();
+
+      await channel.send({ content: `Sampai jumpa **${member.user.tag}**!`, embeds: [embed] });
+    }
+  } catch (error) {
+    console.error("Gagal mengirim pesan selamat tinggal:", error);
+  }
+});
+
 await client.login(config.DISCORD_TOKEN);
 
