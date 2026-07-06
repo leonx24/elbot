@@ -10,6 +10,7 @@ import {
   GatewayIntentBits,
   GuildMember,
   Message,
+  MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
   TextChannel,
@@ -49,6 +50,52 @@ const faq: Record<string, string> = {
   ticket: "Gunakan `/ticket`, kemudian tekan tombol **Buka Ticket**.",
   website: "Silakan kunjungi website kami di https://leonthings.my.id. Untuk mengelola key dan reset HWID, silakan buka halaman console bot di https://leonthings.my.id/bot."
 };
+
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
+const GEMINI_MAX_RETRIES = 3;
+const GEMINI_TIMEOUT_MS = 60_000;
+
+async function callGeminiAPI(contents: Array<{ role: string; parts: Array<{ text: string }> }>): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${GEMINI_API_URL}?key=${config.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents }),
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS)
+      });
+
+      if (response.ok) {
+        const data = await response.json() as any;
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        return { ok: true, text };
+      }
+
+      // Retry on 503 (overloaded) or 429 (rate limit)
+      if ((response.status === 503 || response.status === 429) && attempt < GEMINI_MAX_RETRIES) {
+        const backoffMs = attempt * 2000; // 2s, 4s
+        console.warn(`[Gemini] ${response.status} on attempt ${attempt}/${GEMINI_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+        await new Promise(r => setTimeout(r, backoffMs));
+        continue;
+      }
+
+      const errText = await response.text().catch(() => "(unreadable)");
+      console.error(`[Gemini] API error ${response.status}:`, errText);
+      return { ok: false, error: `API error ${response.status}` };
+    } catch (err: any) {
+      const isTimeout = err?.name === "TimeoutError" || err?.code === "UND_ERR_HEADERS_TIMEOUT" || err?.cause?.code === "UND_ERR_HEADERS_TIMEOUT";
+      if (isTimeout && attempt < GEMINI_MAX_RETRIES) {
+        const backoffMs = attempt * 2000;
+        console.warn(`[Gemini] Timeout on attempt ${attempt}/${GEMINI_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+        await new Promise(r => setTimeout(r, backoffMs));
+        continue;
+      }
+      console.error(`[Gemini] Fetch failed (attempt ${attempt}):`, err);
+      return { ok: false, error: isTimeout ? "timeout" : "fetch_failed" };
+    }
+  }
+  return { ok: false, error: "max_retries_exceeded" };
+}
 
 const changelogTypes = {
   major: { label: "MAJOR UPDATE", emoji: "🚀", color: 0x7c3aed },
@@ -432,13 +479,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
           interaction.user.id !== config.OWNER_ID) {
         await interaction.reply({
           content: "Command ini khusus owner bot.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
 
       if (onCooldown(interaction.user.id, interaction.commandName)) {
-        await interaction.reply({ content: "Tunggu beberapa detik sebelum memakai command lagi.", ephemeral: true });
+        await interaction.reply({ content: "Tunggu beberapa detik sebelum memakai command lagi.", flags: MessageFlags.Ephemeral });
         return;
       }
       trackCommand(interaction.commandName);
@@ -446,7 +493,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "verify") {
         await interaction.reply({
           content: `Silakan verifikasi di <#${config.VERIFY_CHANNEL_ID}>.`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -455,7 +502,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (blacklistCheck.blacklisted) {
           await interaction.reply({
             content: `❌ Akses ditolak: Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -465,16 +512,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
             !interaction.member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
           await interaction.reply({
             content: `Kamu harus verifikasi dahulu di <#${config.VERIFY_CHANNEL_ID}>.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
         if (config.PREMIUM_ROLE_ID &&
             !interaction.member.roles.cache.has(config.PREMIUM_ROLE_ID)) {
-          await interaction.reply({ content: "Kamu belum memiliki role yang diperlukan.", ephemeral: true });
+          await interaction.reply({ content: "Kamu belum memiliki role yang diperlukan.", flags: MessageFlags.Ephemeral });
           return;
         }
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userKey = getOrCreateUserKey(interaction.user.id);
         const dmContent = 
           `**LeonX Hub Loader**\n` +
@@ -492,7 +539,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (blacklistCheck.blacklisted) {
           await interaction.reply({
             content: `❌ Akses ditolak: Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -502,12 +549,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
             !interaction.member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
           await interaction.reply({
             content: `Kamu harus verifikasi dahulu di <#${config.VERIFY_CHANNEL_ID}>.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const result = resetUserKeyBinding(interaction.user.id);
         await interaction.editReply(result.message);
       }
@@ -516,7 +563,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!config.GEMINI_API_KEY) {
           await interaction.reply({
             content: "Fitur AI belum dikonfigurasi oleh owner bot (GEMINI_API_KEY kosong).",
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -561,24 +608,12 @@ Format balasan:
 - Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
 - Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
 
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${query}"` }]
-                }
-              ]
-            })
-          });
+          const geminiResult = await callGeminiAPI([
+            { role: "user", parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${query}"` }] }
+          ]);
 
-          if (response.ok) {
-            const data = await response.json() as any;
-            const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+          if (geminiResult.ok) {
+            const replyText = geminiResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
             let finalReply = replyText.trim();
 
             const member = interaction.member instanceof GuildMember ? interaction.member : null;
@@ -718,16 +753,19 @@ Format balasan:
               const chunks = finalReply.match(/[\s\S]{1,1950}/g) || [finalReply];
               for (let i = 0; i < chunks.length; i++) {
                 if (i === 0) {
-                  await interaction.editReply(chunks[i]);
+                  await interaction.editReply(chunks[i]!);
                 } else {
-                  await interaction.followUp(chunks[i]);
+                  await interaction.followUp(chunks[i]!);
                 }
               }
             } else {
               await interaction.editReply(finalReply);
             }
           } else {
-            await interaction.editReply("Gagal menghubungi AI. Silakan coba lagi nanti.");
+            const errMsg = geminiResult.error === "timeout"
+              ? "AI sedang lambat merespons (timeout). Silakan coba lagi nanti."
+              : "Gagal menghubungi AI. Silakan coba lagi nanti.";
+            await interaction.editReply(errMsg);
           }
         } catch (err) {
           console.error("AI Command error:", err);
@@ -742,7 +780,7 @@ Format balasan:
 
         await interaction.reply({
           content: `🔑 **Key Baru Berhasil Dihasilkan!**\nPengguna: <@${user.id}>\nKey: \`${newKey}\`\n\n*Catatan: Key lama (jika ada) telah dinonaktifkan, dan semua data binding (Roblox ID & HWID) untuk pengguna ini telah di-reset.*`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
 
         // Kirim DM ke pengguna
@@ -805,7 +843,7 @@ Format balasan:
         // Kirim respon dulu agar Discord tidak timeout (batas 3 detik)
         await interaction.reply({
           content: `✅ Status script berhasil diperbarui menjadi **${status}** dengan catatan: *${reason}*`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
 
         // Jalankan pembaruan channel voice di background
@@ -819,7 +857,7 @@ Format balasan:
         if (channel.type !== ChannelType.GuildVoice) {
           await interaction.reply({
             content: "Channel yang Anda pilih bukan Voice Channel!",
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -832,7 +870,7 @@ Format balasan:
         // Kirim respon dulu agar Discord tidak timeout
         await interaction.reply({
           content: `✅ Channel status bot berhasil diatur ke <#${channel.id}>.`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
 
         // Jalankan pembaruan channel voice di background
@@ -843,13 +881,13 @@ Format balasan:
 
       if (interaction.commandName === "faq") {
         const topic = interaction.options.getString("topik", true);
-        await interaction.reply({ content: faq[topic] ?? "Topik tidak ditemukan.", ephemeral: true });
+        await interaction.reply({ content: faq[topic] ?? "Topik tidak ditemukan.", flags: MessageFlags.Ephemeral });
       }
 
       if (interaction.commandName === "website") {
         await interaction.reply({
           content: `🌐 **Website Utama:** https://leonthings.my.id\n🤖 **Bot Console Page:** https://leonthings.my.id/bot`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -860,7 +898,7 @@ Format balasan:
           // Fallback jika somehow dipanggil tanpa subcommand
           await interaction.reply({
             content: "Gunakan subcommand: `/ticket panel`, `/ticket close`, `/ticket add`, `/ticket remove`, atau `/ticket stats`",
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -869,21 +907,21 @@ Format balasan:
           if (interaction.user.id !== config.OWNER_ID) {
             await interaction.reply({
               content: "Hanya owner yang dapat membuat panel ticket.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
           if (!interaction.channel?.isSendable()) {
             await interaction.reply({
               content: "Tidak bisa mengirim pesan di channel ini.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
           await interaction.channel.send(createTicketPanel());
           await interaction.reply({
             content: "Panel ticket berhasil dibuat!",
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
         }
 
@@ -891,7 +929,7 @@ Format balasan:
           if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) {
             await interaction.reply({
               content: "Command ini hanya bisa digunakan di channel ticket.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -902,7 +940,7 @@ Format balasan:
           if (!ticketData) {
             await interaction.reply({
               content: "Ini bukan channel ticket.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -951,7 +989,7 @@ Format balasan:
           if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) {
             await interaction.reply({
               content: "Command ini hanya bisa digunakan di channel ticket.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -973,7 +1011,7 @@ Format balasan:
           if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) {
             await interaction.reply({
               content: "Command ini hanya bisa digunakan di channel ticket.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -1009,7 +1047,7 @@ Format balasan:
 
           await interaction.reply({
             embeds: [statsEmbed],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
         }
       }
@@ -1036,7 +1074,7 @@ Format balasan:
           if (interaction.user.id !== config.OWNER_ID) {
             await interaction.reply({
               content: "Hanya owner yang dapat menerbitkan changelog.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -1146,14 +1184,14 @@ Format balasan:
             .run(changelogTitle, formattedContent, interaction.user.id);
           await interaction.reply({
             content: `Changelog berhasil diterbitkan di <#${config.CHANGELOG_CHANNEL_ID}>.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
         } else {
           const row = db.prepare("SELECT title, content, created_at FROM changelogs ORDER BY id DESC LIMIT 1")
             .get() as { title: string; content: string; created_at: string } | undefined;
           await interaction.reply(row
             ? { embeds: [new EmbedBuilder().setTitle(row.title).setDescription(row.content).setFooter({ text: row.created_at })] }
-            : { content: "Belum ada changelog.", ephemeral: true });
+            : { content: "Belum ada changelog.", flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -1162,7 +1200,7 @@ Format balasan:
         const member = await interaction.guild?.members.fetch(user.id).catch(() => null);
         const reason = interaction.options.getString("alasan") ?? "Tidak ada alasan";
         if (!member) {
-          await interaction.reply({ content: "Member tidak ditemukan.", ephemeral: true });
+          await interaction.reply({ content: "Member tidak ditemukan.", flags: MessageFlags.Ephemeral });
           return;
         }
         if (interaction.commandName === "warn") {
@@ -1175,7 +1213,7 @@ Format balasan:
         }
         if (interaction.commandName === "kick") await member.kick(reason);
         if (interaction.commandName === "ban") await member.ban({ reason });
-        await interaction.reply({ content: `Tindakan **${interaction.commandName}** berhasil untuk ${user.tag}.`, ephemeral: true });
+        await interaction.reply({ content: `Tindakan **${interaction.commandName}** berhasil untuk ${user.tag}.`, flags: MessageFlags.Ephemeral });
       }
 
       if (interaction.commandName === "stats") {
@@ -1189,7 +1227,7 @@ Format balasan:
             { name: "Bug report", value: String(reports), inline: true },
             { name: "Command digunakan", value: String(uses), inline: true }
           )],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -1205,7 +1243,7 @@ Format balasan:
           if (!user && !robloxId && !hwid) {
             await interaction.reply({
               content: "❌ Gagal: Anda harus menyertakan minimal salah satu dari parameter `user`, `roblox_id`, atau `hwid`.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -1223,7 +1261,7 @@ Format balasan:
           if (hwid) message += `• HWID: \`${hwid}\`\n`;
           message += `• Alasan: *${reason}*`;
 
-          await interaction.reply({ content: message, ephemeral: true });
+          await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
         }
 
         if (sub === "remove") {
@@ -1234,7 +1272,7 @@ Format balasan:
           if (!user && !robloxId && !hwid) {
             await interaction.reply({
               content: "❌ Gagal: Anda harus menyertakan minimal salah satu dari parameter `user`, `roblox_id`, atau `hwid`.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -1248,12 +1286,12 @@ Format balasan:
           if (removed) {
             await interaction.reply({
               content: "✅ Berhasil menghapus target dari daftar blacklist.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
           } else {
             await interaction.reply({
               content: "❌ Gagal: Target tidak ditemukan dalam daftar blacklist.",
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
           }
         }
@@ -1261,7 +1299,7 @@ Format balasan:
         if (sub === "list") {
           const list = getBlacklistList();
           if (list.length === 0) {
-            await interaction.reply({ content: "ℹ️ Daftar blacklist saat ini kosong.", ephemeral: true });
+            await interaction.reply({ content: "ℹ️ Daftar blacklist saat ini kosong.", flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -1279,7 +1317,7 @@ Format balasan:
             )
             .setTimestamp();
 
-          await interaction.reply({ embeds: [embed], ephemeral: true });
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -1622,7 +1660,7 @@ Format balasan:
         if (interaction.user.id !== config.OWNER_ID) {
           await interaction.reply({
             content: "Hanya owner yang dapat mengirimkan rules.",
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -1633,12 +1671,12 @@ Format balasan:
         if (!channel || !channel.isTextBased() || !channel.isSendable()) {
           await interaction.reply({
             content: "❌ Gagal: Channel rules tidak ditemukan atau bot tidak dapat mengirim pesan di sana.",
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
           const embedWelcome = new EmbedBuilder()
@@ -1698,7 +1736,7 @@ Format balasan:
         if (sub === "add") {
           const placeIdRaw = interaction.options.getString("place_id", true);
           const placeId = extractPlaceId(placeIdRaw);
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
           try {
             // Get Universe ID from Place ID using public API
@@ -1751,7 +1789,7 @@ Format balasan:
         if (sub === "remove") {
           const placeIdRaw = interaction.options.getString("place_id", true);
           const placeId = extractPlaceId(placeIdRaw);
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
           try {
             const result = db.prepare("DELETE FROM monitored_places WHERE place_id = ?").run(placeId);
@@ -1767,7 +1805,7 @@ Format balasan:
         }
 
         if (sub === "list") {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
           try {
             const list = db.prepare("SELECT * FROM monitored_places ORDER BY created_at DESC").all() as Array<{
@@ -1804,7 +1842,7 @@ Format balasan:
         if (sub === "test") {
           const placeIdRaw = interaction.options.getString("place_id", true);
           const placeId = extractPlaceId(placeIdRaw);
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
           try {
             const item = db.prepare("SELECT * FROM monitored_places WHERE place_id = ?").get(placeId) as {
@@ -1838,11 +1876,11 @@ Format balasan:
         const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
         
         if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-          await interaction.reply({ content: "❌ Target harus berupa text channel.", ephemeral: true });
+          await interaction.reply({ content: "❌ Target harus berupa text channel.", flags: MessageFlags.Ephemeral });
           return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
           const everyoneRole = interaction.guild!.roles.everyone;
@@ -1862,11 +1900,11 @@ Format balasan:
         const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
         
         if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-          await interaction.reply({ content: "❌ Target harus berupa text channel.", ephemeral: true });
+          await interaction.reply({ content: "❌ Target harus berupa text channel.", flags: MessageFlags.Ephemeral });
           return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
           const everyoneRole = interaction.guild!.roles.everyone;
@@ -1885,15 +1923,15 @@ Format balasan:
 
     if (interaction.isButton() && interaction.customId === "verify:accept") {
       if (!config.VERIFIED_ROLE_ID || !(interaction.member instanceof GuildMember)) {
-        await interaction.reply({ content: "Role verifikasi belum dikonfigurasi oleh admin.", ephemeral: true });
+        await interaction.reply({ content: "Role verifikasi belum dikonfigurasi oleh admin.", flags: MessageFlags.Ephemeral });
         return;
       }
       if (interaction.member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
-        await interaction.reply({ content: "Kamu sudah terverifikasi.", ephemeral: true });
+        await interaction.reply({ content: "Kamu sudah terverifikasi.", flags: MessageFlags.Ephemeral });
         return;
       }
       await interaction.member.roles.add(config.VERIFIED_ROLE_ID);
-      await interaction.reply({ content: "Verifikasi berhasil. Selamat datang!", ephemeral: true });
+      await interaction.reply({ content: "Verifikasi berhasil. Selamat datang!", flags: MessageFlags.Ephemeral });
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === "ticket:category") {
@@ -1914,12 +1952,12 @@ Format balasan:
       if (existing) {
         await interaction.reply({
           content: `Kamu sudah memiliki ticket aktif di <#${existing.channel_id}>`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const channel = await createTicketChannel(interaction.guild, interaction.user, category);
 
@@ -1939,7 +1977,7 @@ Format balasan:
       if (!ticketData) {
         await interaction.reply({
           content: "Data ticket tidak ditemukan. Pastikan tombol ini berada di channel ticket yang dibuat bot.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -1947,7 +1985,7 @@ Format balasan:
       if (ticketData.claimed_by) {
         await interaction.reply({
           content: `Ticket ini sudah di-claim oleh <@${ticketData.claimed_by}>`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -1970,7 +2008,7 @@ Format balasan:
       if (!ticketData) {
         await interaction.reply({
           content: "Data ticket tidak ditemukan. Pastikan tombol ini berada di channel ticket yang dibuat bot.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -2033,7 +2071,7 @@ Format balasan:
       if (!ticketData) {
         await interaction.reply({
           content: "Ticket data tidak ditemukan.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -2041,7 +2079,7 @@ Format balasan:
       if (interaction.user.id !== ticketData.user_id) {
         await interaction.reply({
           content: "Hanya pembuat ticket yang dapat memberikan rating.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -2049,7 +2087,7 @@ Format balasan:
       if (ticketData.rating !== null) {
         await interaction.reply({
           content: "Kamu sudah memberikan rating untuk ticket ini.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -2067,7 +2105,7 @@ Format balasan:
 
       await interaction.reply({
         embeds: [thanksEmbed],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
 
       // Log rating jika ada LOG_CHANNEL_ID
@@ -2145,12 +2183,12 @@ Format balasan:
         content:
           `Laporan bug #${result.lastInsertRowid} berhasil dibuat.\n` +
           `${reportUrl ? `[Buka laporan dan kirim gambar](${reportUrl})` : ""}`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   } catch (error) {
     console.error(error);
-    const message = { content: "Terjadi kesalahan saat menjalankan fitur ini.", ephemeral: true } as const;
+    const message = { content: "Terjadi kesalahan saat menjalankan fitur ini.", flags: MessageFlags.Ephemeral } as const;
     if (interaction.isRepliable()) {
       if (interaction.replied || interaction.deferred) await interaction.followUp(message).catch(() => undefined);
       else await interaction.reply(message).catch(() => undefined);
@@ -2262,25 +2300,12 @@ Tugas Anda:
 5. Jawab secara singkat, padat, profesional, dan gunakan format markdown Discord (seperti bullet points, bold text, dll) agar mudah dibaca.
 6. Berbahasa Indonesia secara sopan dan membantu.`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: systemPrompt }]
-          }
-        ]
-      })
-    });
+    const geminiResult = await callGeminiAPI([
+      { role: "user", parts: [{ text: systemPrompt }] }
+    ]);
 
-    if (response.ok) {
-      const data = await response.json() as any;
-      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.";
-      const finalReply = replyText.trim();
+    if (geminiResult.ok) {
+      const finalReply = (geminiResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
 
       const embed = new EmbedBuilder()
         .setColor("Blue")
@@ -2294,8 +2319,7 @@ Tugas Anda:
       // Update database agar tidak merespons lagi di tiket ini
       db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
     } else {
-      const errData = await response.text();
-      console.error("Gemini API Error in Ticket Assistant:", errData);
+      console.error("Gemini API Error in Ticket Assistant:", geminiResult.error);
     }
   } catch (err) {
     console.error("Error in handleTicketAiResponse:", err);
@@ -2374,24 +2398,12 @@ Format balasan:
 - Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
 - Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${userMessage}"` }]
-            }
-          ]
-        })
-      });
+      const geminiResult = await callGeminiAPI([
+        { role: "user", parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${userMessage}"` }] }
+      ]);
 
-      if (response.ok) {
-        const data = await response.json() as any;
-        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+      if (geminiResult.ok) {
+        const replyText = geminiResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
         let finalReply = replyText.trim();
 
         // 1. Action: SEND_SCRIPT
@@ -2534,9 +2546,10 @@ Format balasan:
           await message.reply(finalReply);
         }
       } else {
-        const errData = await response.text();
-        console.error("Gemini API Error details:", errData);
-        await message.reply("Maaf, terjadi kesalahan koneksi saat menghubungi modul AI saya. Silakan coba sesaat lagi.");
+        const errMsg = geminiResult.error === "timeout"
+          ? "Maaf, AI sedang lambat merespons (timeout). Silakan coba lagi nanti."
+          : "Maaf, terjadi kesalahan koneksi saat menghubungi modul AI saya. Silakan coba sesaat lagi.";
+        await message.reply(errMsg);
       }
     } catch (err) {
       console.error("AI Chatbot error:", err);
