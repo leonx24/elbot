@@ -53,7 +53,7 @@ const faq: Record<string, string> = {
 
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
 const GEMINI_MAX_RETRIES = 3;
-const GEMINI_TIMEOUT_MS = 60_000;
+const GEMINI_TIMEOUT_MS = 25_000;
 
 async function callGeminiAPI(contents: Array<{ role: string; parts: Array<{ text: string }> }>): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
@@ -73,7 +73,10 @@ async function callGeminiAPI(contents: Array<{ role: string; parts: Array<{ text
 
       // Retry on 503 (overloaded) or 429 (rate limit)
       if ((response.status === 503 || response.status === 429) && attempt < GEMINI_MAX_RETRIES) {
-        const backoffMs = attempt * 2000; // 2s, 4s
+        const backoffMs = Math.min(
+          30000,
+          Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+        );
         console.warn(`[Gemini] ${response.status} on attempt ${attempt}/${GEMINI_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
@@ -85,7 +88,10 @@ async function callGeminiAPI(contents: Array<{ role: string; parts: Array<{ text
     } catch (err: any) {
       const isTimeout = err?.name === "TimeoutError" || err?.code === "UND_ERR_HEADERS_TIMEOUT" || err?.cause?.code === "UND_ERR_HEADERS_TIMEOUT";
       if (isTimeout && attempt < GEMINI_MAX_RETRIES) {
-        const backoffMs = attempt * 2000;
+        const backoffMs = Math.min(
+    30000,
+    Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+);
         console.warn(`[Gemini] Timeout on attempt ${attempt}/${GEMINI_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
