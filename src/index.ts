@@ -3156,6 +3156,68 @@ http.createServer(async (req, res) => {
 
 client.on(Events.GuildMemberAdd, async (member) => {
   const welcomeChannelId = "1515741307534966784";
+
+  // ── Auto-ban akun yang umurnya kurang dari 1 bulan ──
+  try {
+    const accountAgeMs = Date.now() - member.user.createdTimestamp;
+    const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
+
+    if (accountAgeMs < ONE_MONTH_MS) {
+      const accountAgeDays = Math.floor(accountAgeMs / (24 * 60 * 60 * 1000));
+      const createdUnix = Math.floor(member.user.createdTimestamp / 1000);
+
+      console.log(`[Anti-Raid] Akun terlalu baru terdeteksi: ${member.user.tag} (${accountAgeDays} hari). Memproses auto-ban...`);
+
+      // Coba DM user sebelum ban
+      try {
+        await member.send(
+          `⛔ **Auto-Ban — ${member.guild.name}**\n\n` +
+          `Akun Discord Anda terlalu baru (dibuat ${accountAgeDays} hari yang lalu). ` +
+          `Demi keamanan server, akun yang berumur kurang dari **30 hari** akan otomatis di-ban.\n\n` +
+          `Silakan coba bergabung kembali setelah akun Anda berumur minimal 1 bulan.`
+        );
+      } catch {
+        // DM gagal (privasi tertutup), lanjutkan ban
+      }
+
+      // Ban member
+      await member.ban({ reason: `[Auto-Ban] Akun terlalu baru (${accountAgeDays} hari). Minimal 30 hari.` });
+
+      // Kirim log ke channel
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xef4444) // Red
+        .setTitle("⛔ Auto-Ban: Akun Terlalu Baru")
+        .setDescription(
+          `**User:** ${member.user.tag} (\`${member.user.id}\`)\n` +
+          `**Umur Akun:** ${accountAgeDays} hari\n` +
+          `**Akun Dibuat:** <t:${createdUnix}:F> (<t:${createdUnix}:R>)\n\n` +
+          `Akun ini otomatis di-ban karena berumur kurang dari 30 hari.`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: "LeonX Hub • Anti-Raid Protection" })
+        .setTimestamp();
+
+      // Kirim ke log channel (jika ada)
+      if (config.LOG_CHANNEL_ID) {
+        const logChannel = await member.guild.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
+        if (logChannel?.isSendable()) {
+          await logChannel.send({ embeds: [logEmbed] });
+        }
+      }
+
+      // Kirim juga ke welcome channel sebagai notifikasi
+      const welcomeChannel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
+      if (welcomeChannel?.isSendable()) {
+        await welcomeChannel.send({ embeds: [logEmbed] });
+      }
+
+      return; // Jangan kirim welcome message
+    }
+  } catch (banError) {
+    console.error("[Anti-Raid] Gagal memproses auto-ban akun baru:", banError);
+  }
+
+  // ── Welcome message (hanya jika akun lolos pengecekan umur) ──
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
