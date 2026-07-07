@@ -43,7 +43,7 @@ const client = new Client({
 
 const cooldowns = new Map<string, number>();
 const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
-const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey"]);
+const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
@@ -563,6 +563,201 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const result = resetUserKeyBinding(interaction.user.id);
         await interaction.editReply(result.message);
+      }
+
+      if (interaction.commandName === "keyinfo") {
+        const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
+        if (blacklistCheck.blacklisted) {
+          await interaction.reply({
+            content: `❌ Akses ditolak: Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`,
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        const keyData = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(interaction.user.id) as {
+          key: string;
+          roblox_id: string | null;
+          hwid: string | null;
+          last_reset_at: string | null;
+          created_at: string;
+        } | undefined;
+
+        if (!keyData) {
+          await interaction.reply({
+            content: "❌ Anda belum memiliki key yang terdaftar.\nSilakan gunakan perintah `/script` terlebih dahulu untuk membuat key baru.",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const execCountRow = db.prepare("SELECT COUNT(*) as count FROM script_executions WHERE discord_id = ?").get(interaction.user.id) as { count: number };
+        const totalExec = execCountRow ? execCountRow.count : 0;
+
+        const lastExecutions = db.prepare("SELECT * FROM script_executions WHERE discord_id = ? ORDER BY executed_at DESC LIMIT 5").all(interaction.user.id) as Array<{
+          roblox_username: string;
+          roblox_id: string;
+          place_id: string;
+          executor: string;
+          executed_at: string;
+        }>;
+
+        let cooldownText = "🟢 Tersedia (Bisa reset sekarang)";
+        if (keyData.last_reset_at) {
+          const lastReset = new Date(keyData.last_reset_at + " UTC").getTime();
+          const now = Date.now();
+          const diffMinutes = (now - lastReset) / (1000 * 60);
+          if (diffMinutes < 10) {
+            const remainingSeconds = Math.ceil(600 - (now - lastReset) / 1000);
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            cooldownText = `⏳ Cooldown (${minutes}m ${seconds}s tersisa)`;
+          }
+        }
+
+        let historyText = "Belum ada riwayat eksekusi.";
+        if (lastExecutions.length > 0) {
+          historyText = lastExecutions.map(ex => {
+            const utcTime = ex.executed_at.includes("Z") || ex.executed_at.includes("UTC") ? ex.executed_at : ex.executed_at + " UTC";
+            const date = new Date(utcTime).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" });
+            return `• **${date}**\n  └─ Game: [${ex.place_id}](https://www.roblox.com/games/${ex.place_id}) | Executor: \`${ex.executor}\` | Roblox: [${ex.roblox_username || "Unknown"}](https://www.roblox.com/users/${ex.roblox_id}/profile)`;
+          }).join("\n");
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor("Purple")
+          .setTitle("🔑 Informasi Key & Lisensi Anda")
+          .setDescription("Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.")
+          .addFields(
+            { name: "🔑 Key Lisensi", value: `\`||${keyData.key}||\` *(Klik untuk menyalin)*`, inline: false },
+            { name: "👤 Akun Roblox", value: keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut", inline: true },
+            { name: "💻 Perangkat (HWID)", value: keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut", inline: true },
+            { name: "🔄 Reset HWID Cooldown", value: cooldownText, inline: true },
+            { name: "📊 Total Eksekusi", value: `\`${totalExec}\` kali`, inline: true },
+            { name: "📅 Dibuat Pada", value: new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" }), inline: true },
+            { name: "📜 Riwayat 5 Eksekusi Terakhir", value: historyText, inline: false }
+          )
+          .setFooter({ text: "LeonX Hub • Lisensi System" })
+          .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+      }
+
+      if (interaction.commandName === "lookup") {
+        const inputKey = interaction.options.getString("key");
+        const inputUser = interaction.options.getUser("user");
+        const inputRobloxId = interaction.options.getString("roblox_id");
+        const inputHwid = interaction.options.getString("hwid");
+
+        if (!inputKey && !inputUser && !inputRobloxId && !inputHwid) {
+          await interaction.reply({
+            content: "❌ Anda harus menentukan minimal satu opsi pencarian (key, user, roblox_id, atau hwid).",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        let keyRows: any[] = [];
+        let searchCriteria = "";
+
+        if (inputKey) {
+          searchCriteria = `Key: \`${inputKey}\``;
+          const row = db.prepare("SELECT * FROM user_keys WHERE key = ?").get(inputKey);
+          if (row) keyRows.push(row);
+        } else if (inputUser) {
+          searchCriteria = `Discord User: <@${inputUser.id}> (\`${inputUser.id}\`)`;
+          const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(inputUser.id);
+          if (row) keyRows.push(row);
+        } else if (inputRobloxId) {
+          searchCriteria = `Roblox ID: \`${inputRobloxId}\``;
+          keyRows = db.prepare("SELECT * FROM user_keys WHERE roblox_id = ?").all(inputRobloxId);
+        } else if (inputHwid) {
+          searchCriteria = `HWID: \`${inputHwid}\``;
+          keyRows = db.prepare("SELECT * FROM user_keys WHERE hwid = ?").all(inputHwid);
+        }
+
+        // Check blacklist status
+        let blacklistStatus = "🟢 Clean / Tidak Ter-blacklist";
+        const blacklistCheck = isBlacklisted({
+          discordId: inputUser?.id || undefined,
+          robloxId: inputRobloxId || undefined,
+          hwid: inputHwid || undefined
+        });
+
+        if (blacklistCheck.blacklisted) {
+          blacklistStatus = `🔴 **BLACKLISTED**\n└─ Alasan: *${blacklistCheck.reason}*`;
+        }
+
+        // Retrieve executions
+        let targetDiscordIds = keyRows.map(r => r.discord_id);
+        if (inputUser && !targetDiscordIds.includes(inputUser.id)) {
+          targetDiscordIds.push(inputUser.id);
+        }
+
+        let executions: any[] = [];
+        if (targetDiscordIds.length > 0) {
+          const placeholders = targetDiscordIds.map(() => "?").join(",");
+          executions = db.prepare(`
+            SELECT * FROM script_executions 
+            WHERE discord_id IN (${placeholders}) 
+               OR (roblox_id = ? AND roblox_id IS NOT NULL)
+            ORDER BY executed_at DESC LIMIT 5
+          `).all(...targetDiscordIds, inputRobloxId || null);
+        } else if (inputRobloxId) {
+          executions = db.prepare(`
+            SELECT * FROM script_executions 
+            WHERE roblox_id = ? 
+            ORDER BY executed_at DESC LIMIT 5
+          `).all(inputRobloxId);
+        }
+
+        let executionsText = "Tidak ada riwayat eksekusi.";
+        if (executions.length > 0) {
+          executionsText = executions.map(ex => {
+            const utcTime = ex.executed_at.includes("Z") || ex.executed_at.includes("UTC") ? ex.executed_at : ex.executed_at + " UTC";
+            const date = new Date(utcTime).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" });
+            return `• **${date}**\n  └─ Game: [${ex.place_id}](https://www.roblox.com/games/${ex.place_id})\n  └─ Exec: \`${ex.executor}\` | Roblox: [${ex.roblox_username || "Unknown"}](https://www.roblox.com/users/${ex.roblox_id}/profile) (\`${ex.roblox_id}\`)`;
+          }).join("\n");
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor("DarkRed")
+          .setTitle("🔍 Hasil Pencarian / Lookup Data")
+          .setDescription(`Pencarian berdasarkan kriteria: ${searchCriteria}`)
+          .addFields(
+            { name: "🛡️ Status Blacklist", value: blacklistStatus, inline: false }
+          );
+
+        if (keyRows.length === 0) {
+          embed.addFields({ name: "🔑 Data Lisensi / Key", value: "❌ Tidak ditemukan data key/lisensi yang terdaftar untuk kriteria pencarian ini.", inline: false });
+        } else {
+          keyRows.forEach((row, idx) => {
+            let resetTimeText = "Belum pernah di-reset";
+            if (row.last_reset_at) {
+              resetTimeText = new Date(row.last_reset_at + " UTC").toLocaleString("id-ID");
+            }
+
+            embed.addFields({
+              name: `🔑 Key Lisensi #${idx + 1}`,
+              value: `**Key**: \`${row.key}\`\n` +
+                     `**Discord User**: <@${row.discord_id}> (\`${row.discord_id}\`)\n` +
+                     `**Roblox**: ${row.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${row.roblox_id}/profile) (\`${row.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
+                     `**HWID**: ${row.hwid ? `\`${row.hwid}\`` : "🔴 Belum tertaut"}\n` +
+                     `**Terakhir Reset HWID**: \`${resetTimeText}\`\n` +
+                     `**Dibuat Pada**: \`${new Date(row.created_at + " UTC").toLocaleString("id-ID")}\``,
+              inline: false
+            });
+          });
+        }
+
+        embed.addFields({ name: "📊 Riwayat 5 Eksekusi Terakhir", value: executionsText, inline: false });
+        embed.setFooter({ text: "LeonX Hub • Admin Tools" }).setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
       }
 
       if (interaction.commandName === "ai") {

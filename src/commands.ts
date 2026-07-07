@@ -254,7 +254,18 @@ export const commands = [
       o.setName("tanya")
         .setDescription("Pertanyaan yang ingin diajukan ke AI")
         .setRequired(true)
-    )
+    ),
+  new SlashCommandBuilder()
+    .setName("keyinfo")
+    .setDescription("Lihat informasi key, status perangkat, dan riwayat eksekusi Anda secara privat"),
+  new SlashCommandBuilder()
+    .setName("lookup")
+    .setDescription("Cari informasi lisensi/key berdasarkan Discord, Roblox ID, HWID, atau key (Owner Only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption((o) => o.setName("key").setDescription("Key lisensi yang dicari (opsional)"))
+    .addUserOption((o) => o.setName("user").setDescription("User Discord yang dicari (opsional)"))
+    .addStringOption((o) => o.setName("roblox_id").setDescription("Roblox User ID yang dicari (opsional)"))
+    .addStringOption((o) => o.setName("hwid").setDescription("Hardware ID (HWID) yang dicari (opsional)"))
 ].map((command) => command.toJSON());
 
 export type CommandData = {
