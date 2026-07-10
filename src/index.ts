@@ -3276,12 +3276,21 @@ http.createServer(async (req, res) => {
   } 
   else if (pathname === "/api/changelogs" && req.method === "GET") {
     try {
+      const params = new URL(req.url || "", `http://${req.headers.host}`).searchParams;
+      const page = Math.max(1, parseInt(params.get("page") || "1", 10));
+      const limit = Math.min(20, Math.max(1, parseInt(params.get("limit") || "3", 10)));
+      const offset = (page - 1) * limit;
+
+      const totalRow = db.prepare("SELECT COUNT(*) as count FROM changelogs").get() as { count: number };
+      const totalCount = totalRow?.count || 0;
+      const totalPages = Math.ceil(totalCount / limit);
+
       const rows = db.prepare(
-        "SELECT id, title, content, author_id, created_at FROM changelogs ORDER BY id DESC LIMIT 20"
-      ).all() as { id: number; title: string; content: string; author_id: string; created_at: string }[];
+        "SELECT id, title, content, author_id, created_at FROM changelogs ORDER BY id DESC LIMIT ? OFFSET ?"
+      ).all(limit, offset) as { id: number; title: string; content: string; author_id: string; created_at: string }[];
 
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({ success: true, changelogs: rows }));
+      res.end(JSON.stringify({ success: true, changelogs: rows, page, totalPages, totalCount }));
     } catch (error: any) {
       res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify({ success: false, error: error.message }));
