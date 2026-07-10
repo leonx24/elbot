@@ -3274,6 +3274,19 @@ http.createServer(async (req, res) => {
       warnings: recentWarnings
     }));
   } 
+  else if (pathname === "/api/changelogs" && req.method === "GET") {
+    try {
+      const rows = db.prepare(
+        "SELECT id, title, content, author_id, created_at FROM changelogs ORDER BY id DESC LIMIT 20"
+      ).all() as { id: number; title: string; content: string; author_id: string; created_at: string }[];
+
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ success: true, changelogs: rows }));
+    } catch (error: any) {
+      res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+  }
   else if (pathname === "/api/blacklist" && req.method === "POST") {
     let body = "";
     req.on("data", chunk => { body += chunk; });
