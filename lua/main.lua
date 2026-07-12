@@ -12,12 +12,43 @@ _G._LeonX_AllowTeleport = function(allow)
     _G._LeonX_AllowTeleportActive = allow and true or false
 end
 
+-- Destroy old GUI instances to prevent duplicates and stuck screens when re-executing
+pcall(function()
+    if _G.LeonX_Cleanup then
+        _G.LeonX_Cleanup()
+    end
+end)
+
+pcall(function()
+    local players = game:GetService("Players")
+    local lp = players and players.LocalPlayer
+    local playerGui = lp and lp:FindFirstChild("PlayerGui")
+    
+    local function cleanupGui(guiParent)
+        if not guiParent then return end
+        for _, name in ipairs({"LeonXSplash", "LeonXNoir", "LeonXNotif"}) do
+            local old = guiParent:FindFirstChild(name)
+            if old then
+                pcall(function() old:Destroy() end)
+            end
+        end
+    end
+    
+    cleanupGui(playerGui)
+    
+    local coreGui = game:GetService("CoreGui")
+    if coreGui then
+        cleanupGui(coreGui)
+    end
+end)
 
 local BASE = "https://raw.githubusercontent.com/leonx24/Leon-x/main/"
 
+local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getfenv and getfenv(0).loadstring)
+
 local CURRENT_VERSION = "1.3"
 pcall(function()
-    CURRENT_VERSION = game:HttpGet(BASE.."version.txt?t="..os.time()):match("^%s*(.-)%s*$")
+    CURRENT_VERSION = game:HttpGet(BASE.."version.txt?t="..tostring(os.time()), true):match("^%s*(.-)%s*$")
 end)
 
 local Players      = game:GetService("Players")
@@ -242,26 +273,36 @@ task.delay(60, function()
     pcall(function() if SplashGui and SplashGui.Parent then SplashGui:Destroy() end end)
 end)
 
-local cacheBust = "?t="..os.time()
 local loadErrors = {}
+local MAX_RETRIES = 4
 local function load(p)
-    local ok, result = pcall(function()
-        local src = game:HttpGet(BASE..p..cacheBust)
-        if not src or #src < 10 then error("empty response ("..#tostring(src).." bytes)") end
-        local fn, err = loadstring(src)
-        if not fn then error("loadstring failed: "..tostring(err)) end
-        return fn()
-    end)
-    if not ok then
-        warn("[LeonX] FAIL: " .. tostring(p) .. " — " .. tostring(result))
-        loadErrors[#loadErrors + 1] = p .. ": " .. tostring(result)
-        return nil
+    for attempt = 1, MAX_RETRIES do
+        local ok, result = pcall(function()
+            local src = game:HttpGet(BASE..p.."?t="..tostring(os.time()), true)
+            if not src or #src < 10 then error("empty response ("..#tostring(src).." bytes)") end
+            if src:find("Too Many Requests") or src:find("^%s*<!") or src:find("^%s*<html") then
+                error("rate-limited (429 or HTML error page)")
+            end
+            local fn, err = raw_loadstring(src)
+            if not fn then error("loadstring failed: "..tostring(err)) end
+            return fn()
+        end)
+        if ok then
+            return result
+        end
+        if attempt < MAX_RETRIES then
+            local delay = attempt * 3
+            warn("[LeonX] RETRY " .. attempt .. "/" .. MAX_RETRIES .. ": " .. tostring(p) .. " — " .. tostring(result) .. " (waiting " .. delay .. "s)")
+            task.wait(delay)
+        else
+            warn("[LeonX] FAIL: " .. tostring(p) .. " — " .. tostring(result))
+            loadErrors[#loadErrors + 1] = p .. ": " .. tostring(result)
+            return nil
+        end
     end
-    -- Load successful
-    return result
 end
 
-local Library = load("ui/library.lua")
+local Library = load("ui/library_v4.lua")
 if not Library then warn("[LeonX] CRITICAL: UI library failed"); return end
 setSplashProgress(0.05)
 
@@ -300,9 +341,11 @@ local NoFallDmg   = load("modules/player/nofalldamage.lua"); setSplashProgress(0
 local InstantKill = load("modules/player/instantkill.lua");  setSplashProgress(0.88)
 local KillAura    = load("modules/combat/killaura.lua");     setSplashProgress(0.90)
 local AutoClicker = load("modules/auto/autoclicker.lua");    setSplashProgress(0.91)
+local QuickSwitch = load("modules/combat/quickswitch.lua");  setSplashProgress(0.92)
 local MacroRec    = load("modules/movements/macrorecorder.lua"); setSplashProgress(0.93)
 local AntiVoid    = load("modules/player/antivoid.lua");     setSplashProgress(0.94)
 local GamepassSpoof = load("modules/player/gamepassspoofer.lua"); setSplashProgress(0.95)
+local AvatarSpoof = load("modules/player/avatarspoofer.lua");      setSplashProgress(0.96)
 
 
 -- Dummy stub for any module that failed to load
@@ -326,6 +369,7 @@ local DUMMY = {
 local function safe(m) return m or setmetatable({}, {__index = function() return DUMMY end}) end
 
 ConfigMgr      = safe(ConfigMgr)
+AntiDetect     = safe(AntiDetect)
 Fly            = safe(Fly)
 Speed          = safe(Speed)
 InfJump        = safe(InfJump)
@@ -353,9 +397,11 @@ NoFallDmg      = safe(NoFallDmg)
 InstantKill    = safe(InstantKill)
 KillAura       = safe(KillAura)
 AutoClicker    = safe(AutoClicker)
+QuickSwitch    = safe(QuickSwitch)
 MacroRec       = safe(MacroRec)
 AntiVoid       = safe(AntiVoid)
 GamepassSpoof  = safe(GamepassSpoof)
+AvatarSpoof    = safe(AvatarSpoof)
 
 -- ── Game-specific modules ────────────────────────────────────────────────────
 local GAME_MODULES = {}
@@ -383,6 +429,23 @@ if not ActiveGameModule then
 end
 
 if Waypoint then Waypoint:Init() end
+
+_G.LeonX_Cleanup = function()
+    pcall(function()
+        if ActiveGameModule and ActiveGameModule.Disable then
+            ActiveGameModule:Disable()
+        end
+    end)
+    pcall(function() if Fly and Fly.Disable then Fly:Disable() end end)
+    pcall(function() if Speed and Speed.Disable then Speed:Disable() end end)
+    pcall(function() if FreeCam and FreeCam.Disable then FreeCam:Disable() end end)
+    pcall(function() if ESP and ESP.Disable then ESP:Disable() end end)
+    pcall(function() if Tracer and Tracer.Disable then Tracer:Disable() end end)
+    pcall(function() if FullBright and FullBright.Disable then FullBright:Disable() end end)
+    pcall(function() if RemoveFog and RemoveFog.Disable then RemoveFog:Disable() end end)
+    pcall(function() if AntiAFK and AntiAFK.Disable then AntiAFK:Disable() end end)
+    pcall(function() if AutoClicker and AutoClicker.Disable then AutoClicker:Disable() end end)
+end
 
 -- ── Determine window title based on game mode ─────────────────────────────────
 local windowTitle = "Leon X v"..CURRENT_VERSION
@@ -429,13 +492,20 @@ if ConfigMgr then
     end
 end
 
+-- ══ STANDARD TABS (Always Created) ═══════════════════════════════════
+local MovTab = Window:Tab({ Title = "Movement", Icon = "🏃" })
+local CombatTab = Window:Tab({ Title = "Combat", Icon = "⚔️" })
+local PlayerTab = Window:Tab({ Title = "Player", Icon = "🛡️" })
+local TeleTab = Window:Tab({ Title = "Teleport", Icon = "📍" })
+local VisTab = Window:Tab({ Title = "Visual", Icon = "👁️" })
+local AutoTab = Window:Tab({ Title = "Auto", Icon = "⚡" })
+local MacroTab = Window:Tab({ Title = "Macro", Icon = "🎬" })
+local SetTab = Window:Tab({ Title = "Settings", Icon = "⚙️" })
+
 if ActiveGameModule then
-    -- ══ GAME MODE: game tab + player sidebar ══════════════════════════════
-    local GameTab = Window:Tab({ Title = ActiveGameModule.Name, Icon = "🎮" })
-    local PlayerTab = Window:Tab({ Title = "Player", Icon = "👤" })
     if PerfStats then PerfStats:Enable() end
     ActiveGameModule:Init()
-    ActiveGameModule:WireUI(GameTab, {
+    ActiveGameModule:WireUI(Window, {
         Fly          = Fly,
         Speed        = Speed,
         Window       = Window,
@@ -450,16 +520,8 @@ if ActiveGameModule then
         N            = N,
     })
     N("Game Detected", ActiveGameModule.Name)
-else
-    -- ══ UNIVERSAL MODE: all standard tabs ═══════════════════════════════════
-    local MovTab = Window:Tab({ Title = "Movement", Icon = "🏃" })
-    local CombatTab = Window:Tab({ Title = "Combat", Icon = "⚔️" })
-    local PlayerTab = Window:Tab({ Title = "Player", Icon = "🛡️" })
-    local TeleTab = Window:Tab({ Title = "Teleport", Icon = "📍" })
-    local VisTab = Window:Tab({ Title = "Visual", Icon = "👁️" })
-    local AutoTab = Window:Tab({ Title = "Auto", Icon = "⚡" })
-    local MacroTab = Window:Tab({ Title = "Macro", Icon = "🎬" })
-    local SetTab = Window:Tab({ Title = "Settings", Icon = "⚙️" })
+end
+
 if AntiAFK then AntiAFK:Enable() end
 if PerfStats then PerfStats:Enable() end
 
@@ -496,7 +558,7 @@ MovTab:Section({ Title = "Flight" })
 -- Creating UI components
 
 -- Fly toggle
-local flyToggle = MovTab:Toggle({
+flyToggle = MovTab:Toggle({
     Title    = "Fly",
     Value    = false,
     Tooltip  = "Free flight with adjustable speed",
@@ -506,7 +568,7 @@ local flyToggle = MovTab:Toggle({
     end
 })
 ConfigMgr:Register("Fly", flyToggle)
-local flySpeedSlider = MovTab:Slider({
+flySpeedSlider = MovTab:Slider({
     Title    = "Fly Speed",
     Value    = { Min = 10, Max = 300, Default = 60 },
     Step     = 1,
@@ -514,7 +576,7 @@ local flySpeedSlider = MovTab:Slider({
     Callback = function(v) if v >= 10 then Fly:SetSpeed(v) end end
 })
 ConfigMgr:Register("FlySpeed", flySpeedSlider)
-local flyKey = Enum.KeyCode.F
+flyKey = Enum.KeyCode.F
 MovTab:Keybind({
     Title    = "Fly Keybind",
     Value    = "F",
@@ -533,15 +595,15 @@ end)
 
 MovTab:Section({ Title = "Speed" })
 
-local speedToggle = MovTab:Toggle({
+speedToggle = MovTab:Toggle({
     Title    = "Speed Hack",
     Value    = false,
     Tooltip  = "Customizable walk speed and jump power",
     Callback = function(v)
         if v then
-            local cur = walkSpeedSlider.Value or 16
-            Speed:SetWalkSpeed(cur)
-            local jp = jumpPowerSlider.Value or 50
+            local ws = (walkSpeedSlider and walkSpeedSlider.Value) or 16
+            local jp = (jumpPowerSlider  and jumpPowerSlider.Value)  or 50
+            Speed:SetWalkSpeed(ws)
             Speed:SetJumpPower(jp)
             Speed:Enable()
         else
@@ -551,7 +613,7 @@ local speedToggle = MovTab:Toggle({
     end
 })
 ConfigMgr:Register("SpeedHack", speedToggle)
-local walkSpeedSlider = MovTab:Slider({
+walkSpeedSlider = MovTab:Slider({
     Title    = "Walk Speed",
     Value    = { Min = 16, Max = 250, Default = 16 },
     Step     = 1,
@@ -559,7 +621,7 @@ local walkSpeedSlider = MovTab:Slider({
     Callback = function(v) Speed:SetWalkSpeed(v) end
 })
 ConfigMgr:Register("WalkSpeed", walkSpeedSlider)
-local jumpPowerSlider = MovTab:Slider({
+jumpPowerSlider = MovTab:Slider({
     Title    = "Jump Power",
     Value    = { Min = 50, Max = 500, Default = 50 },
     Step     = 1,
@@ -570,7 +632,7 @@ ConfigMgr:Register("JumpPower", jumpPowerSlider)
 
 MovTab:Section({ Title = "Physics" })
 
-local infJumpToggle = MovTab:Toggle({
+infJumpToggle = MovTab:Toggle({
     Title    = "Infinite Jump",
     Value    = false,
     Tooltip  = "Jump mid-air indefinitely",
@@ -580,7 +642,7 @@ local infJumpToggle = MovTab:Toggle({
     end
 })
 ConfigMgr:Register("InfiniteJump", infJumpToggle)
-local noclipToggle = MovTab:Toggle({
+noclipToggle = MovTab:Toggle({
     Title    = "Noclip",
     Value    = false,
     Tooltip  = "Walk through walls and objects",
@@ -599,7 +661,7 @@ MovTab:Keybind({
         N("Noclip Keybind", k)
     end
 })
-local antiRagdollToggle = MovTab:Toggle({
+antiRagdollToggle = MovTab:Toggle({
     Title    = "Anti Ragdoll",
     Value    = false,
     Tooltip  = "Prevent ragdoll physics",
@@ -609,7 +671,7 @@ local antiRagdollToggle = MovTab:Toggle({
     end
 })
 ConfigMgr:Register("AntiRagdoll", antiRagdollToggle)
-local invisToggle = MovTab:Toggle({
+invisToggle = MovTab:Toggle({
     Title    = "Invisible (local)",
     Value    = false,
     Tooltip  = "Become invisible to other players",
@@ -622,8 +684,8 @@ ConfigMgr:Register("Invisible", invisToggle)
 
 MovTab:Section({ Title = "Camera" })
 
-local fcKey    = Enum.KeyCode.V
-local fcToggle = MovTab:Toggle({
+fcKey = Enum.KeyCode.V
+fcToggle = MovTab:Toggle({
     Title    = "Free Cam",
     Value    = false,
     Tooltip  = "Detach camera for cinematic views",
@@ -633,7 +695,7 @@ local fcToggle = MovTab:Toggle({
     end
 })
 ConfigMgr:Register("FreeCam", fcToggle)
-local fcSpeedSlider = MovTab:Slider({
+fcSpeedSlider = MovTab:Slider({
     Title    = "Free Cam Speed",
     Value    = { Min = 5, Max = 300, Default = 40 },
     Step     = 1,
@@ -659,7 +721,7 @@ end)
 
 MovTab:Section({ Title = "Special" })
 
-local clickTPToggle = MovTab:Toggle({
+clickTPToggle = MovTab:Toggle({
     Title    = "Click Teleport",
     Value    = false,
     Tooltip  = "Click anywhere to teleport to that location",
@@ -670,7 +732,7 @@ local clickTPToggle = MovTab:Toggle({
 })
 ConfigMgr:Register("ClickTeleport", clickTPToggle)
 
-local wowToggle = MovTab:Toggle({
+wowToggle = MovTab:Toggle({
     Title    = "Walk on Water",
     Value    = false,
     Tooltip  = "Walk on water surfaces",
@@ -686,7 +748,7 @@ ConfigMgr:Register("WalkOnWater", wowToggle)
 -- ══════════════════════════════════════════════════════════════════════════════
 
 -- Macro name input
-local macroNameInput = MacroTab:Input({
+macroNameInput = MacroTab:Input({
     Title = "Macro Name",
     Placeholder = "e.g. route_to_peak",
     Value = "",
@@ -759,7 +821,7 @@ MacroTab:Button({
     end
 })
 
-local speedSlider = MacroTab:Slider({
+speedSlider = MacroTab:Slider({
     Title = "Playback Speed",
     Value = { Min = 1, Max = 10, Default = 1 },
     Step = 1,
@@ -768,7 +830,7 @@ local speedSlider = MacroTab:Slider({
 })
 ConfigMgr:Register("MacroSpeed", speedSlider)
 
-local loopToggle = MacroTab:Toggle({
+loopToggle = MacroTab:Toggle({
     Title = "Loop Playback",
     Value = false,
     Tooltip = "Replay macro continuously after finishing",
@@ -776,7 +838,7 @@ local loopToggle = MacroTab:Toggle({
 })
 ConfigMgr:Register("MacroLoop", loopToggle)
 
-local antiFallToggle = MacroTab:Toggle({
+antiFallToggle = MacroTab:Toggle({
     Title = "Anti-Fall (auto-recover)",
     Value = true,
     Tooltip = "Auto-correct position if character falls during playback",
@@ -784,7 +846,7 @@ local antiFallToggle = MacroTab:Toggle({
 })
 ConfigMgr:Register("MacroAntiFall", antiFallToggle)
 
-local recordInputsToggle = MacroTab:Toggle({
+recordInputsToggle = MacroTab:Toggle({
     Title = "Record Inputs (jump, WASD, click)",
     Value = true,
     Tooltip = "Capture keyboard/mouse inputs during recording",
@@ -874,7 +936,7 @@ MacroTab:Button({
     end
 })
 
-local importInput = MacroTab:Input({
+importInput = MacroTab:Input({
     Title = "Paste JSON to Import",
     Placeholder = "Paste exported macro here...",
     Value = "",
@@ -918,8 +980,8 @@ MacroTab:Paragraph({
 })
 
 -- Queue dropdown to show current queue
-local queueDisplayDropdown = nil
-local selectedQueueItem = nil
+queueDisplayDropdown = nil
+selectedQueueItem = nil
 
 local function refreshQueueDisplay()
     local queue = MacroRec:GetQueue()
@@ -986,7 +1048,7 @@ queueDisplayDropdown = MacroTab:Dropdown({
     Callback = function(v) selectedQueueItem = v end
 })
 
-local queueLoopToggle = MacroTab:Toggle({
+queueLoopToggle = MacroTab:Toggle({
     Title = "Loop Queue",
     Tooltip = "Replay the entire queue continuously",
     Value = true,
@@ -1031,7 +1093,7 @@ MacroTab:Paragraph({
     Content = "PlaceId: " .. tostring(game.PlaceId)
 })
 
-local perMapToggle = MacroTab:Toggle({
+perMapToggle = MacroTab:Toggle({
     Title = "Per-Map Macros",
     Tooltip = "Save macros per game instead of globally",
     Value = true,
@@ -1061,7 +1123,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 VisTab:Section({ Title = "Rendering" })
 
-local perfStatsToggle = VisTab:Toggle({
+perfStatsToggle = VisTab:Toggle({
     Title    = "Perf Stats (HUD)",
     Tooltip = "Show real-time FPS and performance overlay",
     Value    = true,
@@ -1071,7 +1133,7 @@ local perfStatsToggle = VisTab:Toggle({
     end
 })
 ConfigMgr:Register("PerfStats", perfStatsToggle)
-local espToggle = VisTab:Toggle({
+espToggle = VisTab:Toggle({
     Title    = "ESP",
     Tooltip = "See players through walls",
     Value    = false,
@@ -1081,7 +1143,7 @@ local espToggle = VisTab:Toggle({
     end
 })
 ConfigMgr:Register("ESP", espToggle)
-local fullBrightToggle = VisTab:Toggle({
+fullBrightToggle = VisTab:Toggle({
     Title    = "FullBright",
     Tooltip = "Remove all darkness and shadows",
     Value    = false,
@@ -1091,7 +1153,7 @@ local fullBrightToggle = VisTab:Toggle({
     end
 })
 ConfigMgr:Register("FullBright", fullBrightToggle)
-local removeFogToggle = VisTab:Toggle({
+removeFogToggle = VisTab:Toggle({
     Title    = "Remove Fog",
     Tooltip = "Clear fog for better visibility",
     Value    = false,
@@ -1110,7 +1172,7 @@ local EC = {
     Yellow = Color3.fromRGB(255,220,50),  Cyan   = Color3.fromRGB(60,220,255),
     Pink   = Color3.fromRGB(255,100,200)
 }
-local espColorDrop = VisTab:Dropdown({
+espColorDrop = VisTab:Dropdown({
     Title    = "ESP Color",
     Tooltip = "Color of the ESP overlay",
     Values   = {"White","Red","Green","Blue","Yellow","Cyan","Pink"},
@@ -1118,7 +1180,7 @@ local espColorDrop = VisTab:Dropdown({
     Callback = function(v) ESP:SetColor(EC[v] or Color3.new(1,1,1)) end
 })
 ConfigMgr:Register("ESPColor", espColorDrop)
-local espOpacitySlider = VisTab:Slider({
+espOpacitySlider = VisTab:Slider({
     Title    = "ESP Fill Opacity",
     Tooltip = "ESP box fill transparency (0-100)",
     Value    = { Min = 0, Max = 100, Default = 15 },
@@ -1126,7 +1188,7 @@ local espOpacitySlider = VisTab:Slider({
     Callback = function(v) ESP:SetOpacity(v) end
 })
 ConfigMgr:Register("ESPOpacity", espOpacitySlider)
-local espModeDrop = VisTab:Dropdown({
+espModeDrop = VisTab:Dropdown({
     Title    = "ESP Show Mode",
     Tooltip = "Show body, name, or both",
     Values   = {"Both","Body","Name"},
@@ -1137,7 +1199,7 @@ ConfigMgr:Register("ESPMode", espModeDrop)
 
 VisTab:Section({ Title = "Tracer" })
 
-local tracerToggle = VisTab:Toggle({
+tracerToggle = VisTab:Toggle({
     Title    = "Player Tracer",
     Tooltip = "Draw lines from screen to players",
     Value    = false,
@@ -1152,7 +1214,7 @@ local TC = {
     Green  = Color3.fromRGB(60,220,80),   Blue   = Color3.fromRGB(60,130,255),
     Yellow = Color3.fromRGB(255,220,50),  Cyan   = Color3.fromRGB(60,220,255),
 }
-local tracerColorDrop = VisTab:Dropdown({
+tracerColorDrop = VisTab:Dropdown({
     Title    = "Tracer Color",
     Tooltip = "Color of tracer lines",
     Values   = {"White","Red","Green","Blue","Yellow","Cyan"},
@@ -1160,7 +1222,7 @@ local tracerColorDrop = VisTab:Dropdown({
     Callback = function(v) Tracer:SetColor(TC[v] or Color3.new(1,1,1)) end
 })
 ConfigMgr:Register("TracerColor", tracerColorDrop)
-local tracerOpacitySlider = VisTab:Slider({
+tracerOpacitySlider = VisTab:Slider({
     Title    = "Tracer Opacity",
     Tooltip = "Tracer line transparency (0-100)",
     Value    = { Min = 0, Max = 100, Default = 100 },
@@ -1168,7 +1230,7 @@ local tracerOpacitySlider = VisTab:Slider({
     Callback = function(v) Tracer:SetOpacity(v) end
 })
 ConfigMgr:Register("TracerOpacity", tracerOpacitySlider)
-local tracerThickSlider = VisTab:Slider({
+tracerThickSlider = VisTab:Slider({
     Title    = "Tracer Thickness",
     Tooltip = "Tracer line width (1-8)",
     Value    = { Min = 1, Max = 8, Default = 2 },
@@ -1182,7 +1244,7 @@ ConfigMgr:Register("TracerThickness", tracerThickSlider)
 -- ══════════════════════════════════════════════════════════════════════════════
 CombatTab:Section({ Title = "Kill Aura" })
 
-local killAuraToggle = CombatTab:Toggle({
+killAuraToggle = CombatTab:Toggle({
     Title    = "Kill Aura",
     Tooltip = "Auto-attack nearby enemies",
     Value    = false,
@@ -1193,7 +1255,7 @@ local killAuraToggle = CombatTab:Toggle({
 })
 ConfigMgr:Register("KillAura", killAuraToggle)
 
-local killAuraRadiusSlider = CombatTab:Slider({
+killAuraRadiusSlider = CombatTab:Slider({
     Title    = "Radius",
     Tooltip = "Kill aura detection range (5-50)",
     Value    = { Min = 5, Max = 50, Default = 15 },
@@ -1202,7 +1264,7 @@ local killAuraRadiusSlider = CombatTab:Slider({
 })
 ConfigMgr:Register("KillAuraRadius", killAuraRadiusSlider)
 
-local killAuraIntervalSlider = CombatTab:Slider({
+killAuraIntervalSlider = CombatTab:Slider({
     Title    = "Attack Interval (ms)",
     Tooltip = "Time between attacks in milliseconds",
     Value    = { Min = 50, Max = 1000, Default = 100 },
@@ -1211,7 +1273,7 @@ local killAuraIntervalSlider = CombatTab:Slider({
 })
 ConfigMgr:Register("KillAuraInterval", killAuraIntervalSlider)
 
-local killAuraPlayersToggle = CombatTab:Toggle({
+killAuraPlayersToggle = CombatTab:Toggle({
     Title    = "Target Players",
     Tooltip = "Include players in kill aura targets",
     Value    = true,
@@ -1219,7 +1281,7 @@ local killAuraPlayersToggle = CombatTab:Toggle({
 })
 ConfigMgr:Register("KillAuraPlayers", killAuraPlayersToggle)
 
-local killAuraNPCsToggle = CombatTab:Toggle({
+killAuraNPCsToggle = CombatTab:Toggle({
     Title    = "Target NPCs",
     Tooltip = "Include NPCs in kill aura targets",
     Value    = true,
@@ -1227,7 +1289,7 @@ local killAuraNPCsToggle = CombatTab:Toggle({
 })
 ConfigMgr:Register("KillAuraNPCs", killAuraNPCsToggle)
 
-local killAuraTeamToggle = CombatTab:Toggle({
+killAuraTeamToggle = CombatTab:Toggle({
     Title    = "Team Check",
     Tooltip = "Skip teammates when attacking",
     Value    = true,
@@ -1237,7 +1299,7 @@ ConfigMgr:Register("KillAuraTeamCheck", killAuraTeamToggle)
 
 CombatTab:Section({ Title = "Hitbox Expander" })
 
-local hitboxToggle = CombatTab:Toggle({
+hitboxToggle = CombatTab:Toggle({
     Title    = "Hitbox Expander",
     Tooltip = "Visualize and expand hitboxes",
     Value    = false,
@@ -1247,7 +1309,7 @@ local hitboxToggle = CombatTab:Toggle({
     end
 })
 ConfigMgr:Register("HitboxExpander", hitboxToggle)
-local hitboxSizeSlider = CombatTab:Slider({
+hitboxSizeSlider = CombatTab:Slider({
     Title    = "Size",
     Tooltip = "Hitbox expansion size (5-30)",
     Value    = { Min = 5, Max = 30, Default = 10 },
@@ -1255,7 +1317,7 @@ local hitboxSizeSlider = CombatTab:Slider({
     Callback = function(v) HitboxExp:SetSize(v) end
 })
 ConfigMgr:Register("HitboxSize", hitboxSizeSlider)
-local hitboxAlphaSlider = CombatTab:Slider({
+hitboxAlphaSlider = CombatTab:Slider({
     Title    = "Transparency",
     Tooltip = "Hitbox visual transparency (0-100)",
     Value    = { Min = 0, Max = 100, Default = 80 },
@@ -1269,7 +1331,7 @@ local HC = {
     Cyan   = Color3.fromRGB(60,220,255), Pink   = Color3.fromRGB(255,100,200),
     White  = Color3.fromRGB(255,255,255), Orange = Color3.fromRGB(255,150,30),
 }
-local hitboxColorDrop = CombatTab:Dropdown({
+hitboxColorDrop = CombatTab:Dropdown({
     Title    = "Color",
     Tooltip = "Hitbox overlay color",
     Values   = {"Red","Green","Blue","Yellow","Cyan","Pink","White","Orange"},
@@ -1277,7 +1339,7 @@ local hitboxColorDrop = CombatTab:Dropdown({
     Callback = function(v) HitboxExp:SetColor(HC[v] or Color3.fromRGB(255,60,60)) end
 })
 ConfigMgr:Register("HitboxColor", hitboxColorDrop)
-local teamCheckToggle = CombatTab:Toggle({
+teamCheckToggle = CombatTab:Toggle({
     Title    = "Team Check",
     Tooltip = "Skip teammates for hitbox expansion",
     Value    = true,
@@ -1298,9 +1360,67 @@ CombatTab:Keybind({
     end
 })
 
+CombatTab:Section({ Title = "Quick Switch" })
+
+quickSwitchToggle = CombatTab:Toggle({
+    Title    = "Quick Switch",
+    Tooltip  = "Auto switch to knife and back on shoot ('qq')",
+    Value    = false,
+    Callback = function(v)
+        if v then QuickSwitch:Enable() else QuickSwitch:Disable() end
+        N("Quick Switch", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("QuickSwitch", quickSwitchToggle)
+
+qsShotDelaySlider = CombatTab:Slider({
+    Title    = "Shot Delay (ms)",
+    Tooltip  = "Delay after shooting before switching weapon (ms)",
+    Value    = { Min = 0, Max = 1000, Default = 50 },
+    Step     = 5,
+    Callback = function(v) QuickSwitch:SetDelayAfterShot(v) end
+})
+ConfigMgr:Register("QuickSwitchShotDelay", qsShotDelaySlider)
+
+qsSwitchDelaySlider = CombatTab:Slider({
+    Title    = "Switch Delay (ms)",
+    Tooltip  = "Delay between switches (knife and weapon) (ms)",
+    Value    = { Min = 0, Max = 1000, Default = 50 },
+    Step     = 5,
+    Callback = function(v) QuickSwitch:SetDelayBetweenSwitches(v) end
+})
+ConfigMgr:Register("QuickSwitchSwitchDelay", qsSwitchDelaySlider)
+
+qsModeDrop = CombatTab:Dropdown({
+    Title    = "Switch Type",
+    Tooltip  = "Weapon switch key combination",
+    Values   = {"Q-Q", "3-1", "Custom"},
+    Value    = "Q-Q",
+    Callback = function(v) QuickSwitch:SetSwitchType(v) end
+})
+ConfigMgr:Register("QuickSwitchType", qsModeDrop)
+
+qsFirstKeyInput = CombatTab:Input({
+    Title       = "Custom First Key",
+    Tooltip     = "First key to press (e.g. Three or Q)",
+    Placeholder = "Three",
+    Value       = "Q",
+    Callback    = function(v) QuickSwitch:SetFirstKey(v) end
+})
+ConfigMgr:Register("QuickSwitchFirstKey", qsFirstKeyInput)
+
+qsSecondKeyInput = CombatTab:Input({
+    Title       = "Custom Second Key",
+    Tooltip     = "Second key to press (e.g. One or Q)",
+    Placeholder = "One",
+    Value       = "Q",
+    Callback    = function(v) QuickSwitch:SetSecondKey(v) end
+})
+ConfigMgr:Register("QuickSwitchSecondKey", qsSecondKeyInput)
+
 CombatTab:Section({ Title = "Instant Kill" })
 
-local ikToggle = CombatTab:Toggle({
+ikToggle = CombatTab:Toggle({
     Title    = "Instant Kill NPC",
     Tooltip = "One-hit eliminate NPCs",
     Value    = false,
@@ -1322,7 +1442,7 @@ ikModeDrop = CombatTab:Dropdown({
     end
 })
 ConfigMgr:Register("KillMode", ikModeDrop)
-local ikTargetIn = CombatTab:Input({
+ikTargetIn = CombatTab:Input({
     Title       = "Target NPC Name",
     Tooltip = "NPC name to target in Specific mode",
     Placeholder = "e.g. Zombie",
@@ -1343,7 +1463,7 @@ CombatTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 PlayerTab:Section({ Title = "Utility" })
 
-local antiAFKToggle = PlayerTab:Toggle({
+antiAFKToggle = PlayerTab:Toggle({
     Title    = "Anti AFK",
     Tooltip  = "Prevent idle kick (always on when enabled)",
     Value    = false,
@@ -1354,7 +1474,7 @@ local antiAFKToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("AntiAFK", antiAFKToggle)
 
-local infStaminaToggle = PlayerTab:Toggle({
+infStaminaToggle = PlayerTab:Toggle({
     Title    = "Infinite Stamina",
     Tooltip  = "Never get tired while running",
     Value    = false,
@@ -1365,7 +1485,7 @@ local infStaminaToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("InfStamina", infStaminaToggle)
 
-local godModeToggle = PlayerTab:Toggle({
+godModeToggle = PlayerTab:Toggle({
     Title    = "God Mode",
     Tooltip  = "Become immune to damage (game-dependent)",
     Value    = false,
@@ -1378,7 +1498,7 @@ ConfigMgr:Register("GodMode", godModeToggle)
 
 PlayerTab:Section({ Title = "Protection" })
 
-local antiDetectToggle = PlayerTab:Toggle({
+antiDetectToggle = PlayerTab:Toggle({
     Title    = "Anti Detect (Adonis/AC)",
     Tooltip  = "Bypass Adonis anti-cheat detection",
     Value    = false,
@@ -1391,7 +1511,7 @@ local antiDetectToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("AntiDetect", antiDetectToggle)
 
-local noFallToggle = PlayerTab:Toggle({
+noFallToggle = PlayerTab:Toggle({
     Title    = "No Fall Damage",
     Tooltip  = "Immune to fall damage",
     Value    = false,
@@ -1402,7 +1522,7 @@ local noFallToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("NoFallDamage", noFallToggle)
 
-local antiFlingToggle = PlayerTab:Toggle({
+antiFlingToggle = PlayerTab:Toggle({
     Title    = "Anti Fling",
     Tooltip  = "Protection against being flung by other players",
     Value    = false,
@@ -1413,7 +1533,7 @@ local antiFlingToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("AntiFling", antiFlingToggle)
 
-local flingThreshSlider = PlayerTab:Slider({
+flingThreshSlider = PlayerTab:Slider({
     Title    = "Fling Threshold",
     Tooltip  = "Velocity spike threshold to trigger anti-fling",
     Value    = { Min = 50, Max = 500, Default = 150 },
@@ -1422,7 +1542,7 @@ local flingThreshSlider = PlayerTab:Slider({
 })
 ConfigMgr:Register("FlingThreshold", flingThreshSlider)
 
-local massManipToggle = PlayerTab:Toggle({
+massManipToggle = PlayerTab:Toggle({
     Title    = "Mass Manipulation",
     Tooltip  = "Increase character mass to resist flings",
     Value    = true,
@@ -1433,7 +1553,7 @@ local massManipToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("MassManipulation", massManipToggle)
 
-local antiVoidToggle = PlayerTab:Toggle({
+antiVoidToggle = PlayerTab:Toggle({
     Title    = "Anti Void",
     Tooltip  = "Teleport back when falling into the void",
     Value    = false,
@@ -1444,7 +1564,7 @@ local antiVoidToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("AntiVoid", antiVoidToggle)
 
-local voidThreshSlider = PlayerTab:Slider({
+voidThreshSlider = PlayerTab:Slider({
     Title    = "Void Threshold (Y)",
     Tooltip  = "Y position that triggers anti-void teleport",
     Value    = { Min = -200, Max = 0, Default = -50 },
@@ -1455,16 +1575,221 @@ ConfigMgr:Register("VoidThreshold", voidThreshSlider)
 
 PlayerTab:Section({ Title = "Exploit" })
 
-local gpSpoofToggle = PlayerTab:Toggle({
-    Title    = "Gamepass Spoof",
-    Tooltip = "Spoof gamepass ownership",
+local gpSpoofToggle
+pcall(function()
+    gpSpoofToggle = PlayerTab:Toggle({
+        Title    = "Gamepass Spoof",
+        Tooltip  = "Spoof gamepass ownership and hook UserOwnsGamePassAsync",
+        Value    = false,
+        Callback = function(v)
+            if v then GamepassSpoof:Enable() else GamepassSpoof:Disable() end
+            N("Gamepass Spoof", v and "Spoofing ownership" or "Disabled")
+        end
+    })
+    ConfigMgr:Register("GamepassSpoof", gpSpoofToggle)
+end)
+
+local gpInstantToggle
+pcall(function()
+    gpInstantToggle = PlayerTab:Toggle({
+        Title    = "Instant Purchase",
+        Tooltip  = "Automatically auto-complete purchase prompts instantly",
+        Value    = false,
+        Callback = function(v)
+            GamepassSpoof.InstantPurchase = v
+            N("Instant Purchase", v and "Auto-confirm ON" or "Auto-confirm OFF")
+        end
+    })
+    ConfigMgr:Register("GamepassInstant", gpInstantToggle)
+end)
+
+local gpInjectToggle
+pcall(function()
+    gpInjectToggle = PlayerTab:Toggle({
+        Title    = "Inject Prompt Buttons",
+        Tooltip  = "Inject Free/Copy/Auto buttons into Roblox purchase prompts",
+        Value    = false,
+        Callback = function(v)
+            GamepassSpoof.InjectButtons = v
+            N("Prompt Buttons", v and "Injections active" or "Injections inactive")
+        end
+    })
+    ConfigMgr:Register("GamepassInjectButtons", gpInjectToggle)
+end)
+
+pcall(function()
+    PlayerTab:Button({
+        Title    = "⚡ Auto Mass Purchase",
+        Tooltip  = "Simulate purchase success for all game gamepasses and products",
+        Callback = function()
+            if not GamepassSpoof.Enabled then
+                N("Mass Purchase", "Enable Gamepass Spoof first!")
+                return
+            end
+            GamepassSpoof:PerformAutoMassPurchase(N)
+        end
+    })
+end)
+
+PlayerTab:Section({ Title = "Avatar Customizer" })
+
+avatarCustomizerToggle = PlayerTab:Toggle({
+    Title    = "Avatar Customizer",
+    Tooltip  = "Enable local and replicated avatar modifications (Headless, Korblox)",
     Value    = false,
     Callback = function(v)
-        if v then GamepassSpoof:Enable() else GamepassSpoof:Disable() end
-        N("Gamepass Spoof", v and "Spoofing ownership" or "Disabled")
+        if v then AvatarSpoof:Enable() else AvatarSpoof:Disable() end
+        N("Avatar Customizer", v and "Customizer Enabled" or "Customizer Disabled")
     end
 })
-ConfigMgr:Register("GamepassSpoof", gpSpoofToggle)
+ConfigMgr:Register("AvatarCustomizer", avatarCustomizerToggle)
+
+headlessToggle = PlayerTab:Toggle({
+    Title    = "Headless Head",
+    Tooltip  = "Make your head and face invisible (local/replicated if supported)",
+    Value    = false,
+    Callback = function(v)
+        AvatarSpoof:SetHeadless(v)
+        N("Headless Head", v and "Headless ON" or "Headless OFF")
+    end
+})
+ConfigMgr:Register("AvatarHeadless", headlessToggle)
+
+korbloxToggle = PlayerTab:Toggle({
+    Title    = "Korblox Leg",
+    Tooltip  = "Replace your right leg with Korblox leg (local/replicated if supported)",
+    Value    = false,
+    Callback = function(v)
+        AvatarSpoof:SetKorbloxLeg(v)
+        N("Korblox Leg", v and "Korblox leg ON" or "Korblox leg OFF")
+    end
+})
+ConfigMgr:Register("AvatarKorblox", korbloxToggle)
+
+accessoryIdInput = PlayerTab:Input({
+    Title       = "Catalog ID",
+    Placeholder = "Enter Catalog Asset ID (e.g. 10159600649)",
+    Value       = "",
+    Tooltip     = "Type a Roblox catalog accessory ID to add",
+    Callback    = function(text)
+        AvatarSpoof.CustomAccessoryId = text
+    end
+})
+
+-- Build initial dropdown list from saved accessories
+local savedAccList = AvatarSpoof:GetSavedAccessoryList()
+if #savedAccList == 0 then savedAccList = {"(no accessories saved)"} end
+local selectedSavedAcc = savedAccList[1]
+
+savedAccDropdown = PlayerTab:Dropdown({
+    Title    = "Saved Accessories",
+    Values   = savedAccList,
+    Value    = savedAccList[1],
+    Tooltip  = "Select a saved accessory to wear or remove",
+    Callback = function(v)
+        selectedSavedAcc = v
+    end
+})
+
+-- Helper to refresh the dropdown after adding/removing
+local function refreshAccDropdown()
+    local list = AvatarSpoof:GetSavedAccessoryList()
+    if #list == 0 then list = {"(no accessories saved)"} end
+    savedAccDropdown:Refresh(list)
+    selectedSavedAcc = list[1]
+    savedAccDropdown:Select(list[1])
+end
+
+PlayerTab:Button({
+    Title    = "➕ Add Accessory",
+    Tooltip  = "Save the catalog ID and auto-equip it",
+    Callback = function()
+        if not AvatarSpoof.Enabled then
+            N("Avatar Customizer", "Enable Avatar Customizer first!")
+            return
+        end
+        local id = AvatarSpoof.CustomAccessoryId
+        if not id or id == "" then
+            N("Avatar Customizer", "Please enter a Catalog ID first!")
+            return
+        end
+        if not tonumber(id) then
+            N("Avatar Customizer", "Invalid ID — must be a number!")
+            return
+        end
+        local added = AvatarSpoof:AddSavedAccessory(id)
+        if added then
+            N("Avatar Customizer", "Added & equipped: " .. id)
+            refreshAccDropdown()
+        else
+            N("Avatar Customizer", "ID already saved: " .. id)
+        end
+    end
+})
+
+PlayerTab:Button({
+    Title    = "👕 Wear Selected",
+    Tooltip  = "Equip the accessory selected in the dropdown",
+    Callback = function()
+        if not AvatarSpoof.Enabled then
+            N("Avatar Customizer", "Enable Avatar Customizer first!")
+            return
+        end
+        if not selectedSavedAcc or selectedSavedAcc == "(no accessories saved)" then
+            N("Avatar Customizer", "No accessory selected!")
+            return
+        end
+        AvatarSpoof:WearAccessory(selectedSavedAcc)
+        N("Avatar Customizer", "Equipped: " .. selectedSavedAcc)
+    end
+})
+
+PlayerTab:Button({
+    Title    = "👔 Wear All Saved",
+    Tooltip  = "Equip all saved accessories at once",
+    Callback = function()
+        if not AvatarSpoof.Enabled then
+            N("Avatar Customizer", "Enable Avatar Customizer first!")
+            return
+        end
+        local list = AvatarSpoof:GetSavedAccessoryList()
+        if #list == 0 then
+            N("Avatar Customizer", "No saved accessories!")
+            return
+        end
+        AvatarSpoof:WearAllSaved()
+        N("Avatar Customizer", "Equipped all " .. #list .. " accessories")
+    end
+})
+
+PlayerTab:Button({
+    Title    = "🗑️ Remove Selected",
+    Tooltip  = "Unequip and delete the selected accessory from saved list",
+    Callback = function()
+        if not selectedSavedAcc or selectedSavedAcc == "(no accessories saved)" then
+            N("Avatar Customizer", "No accessory selected!")
+            return
+        end
+        local removed = AvatarSpoof:RemoveSavedAccessory(selectedSavedAcc)
+        if removed then
+            N("Avatar Customizer", "Removed: " .. selectedSavedAcc)
+            refreshAccDropdown()
+        else
+            N("Avatar Customizer", "Failed to remove!")
+        end
+    end
+})
+
+PlayerTab:Button({
+    Title    = "🧹 Remove All",
+    Tooltip  = "Unequip and clear all saved accessories",
+    Callback = function()
+        AvatarSpoof:ClearAllSaved()
+        N("Avatar Customizer", "All accessories removed & cleared")
+        refreshAccDropdown()
+    end
+})
+
 
 PlayerTab:Section({ Title = "Info" })
 PlayerTab:Paragraph({ Title = "Username", Content = lp.Name })
@@ -1503,8 +1828,8 @@ TeleTab:Button({
 
 TeleTab:Section({ Title = "To Player" })
 
-local selectedPlayer = nil
-local tpDrop = TeleTab:Dropdown({
+selectedPlayer = nil
+tpDrop = TeleTab:Dropdown({
     Title    = "Select Player",
     Tooltip = "Choose a player to teleport to",
     Values   = Teleport:GetPlayerList(),
@@ -1536,7 +1861,7 @@ TeleTab:Button({
 
 TeleTab:Section({ Title = "Waypoints" })
 
-local wpNameIn = TeleTab:Input({
+wpNameIn = TeleTab:Input({
     Title       = "Waypoint Name",
     Tooltip = "Name for your waypoint",
     Placeholder = "e.g. spawn",
@@ -1544,7 +1869,7 @@ local wpNameIn = TeleTab:Input({
     Callback    = function() end
 })
 
-local selectedWaypoint = nil
+selectedWaypoint = nil
 local wpDrop
 
 TeleTab:Button({
@@ -1631,8 +1956,8 @@ TeleTab:Paragraph({
     Content = "Teleport through waypoints in order — stops at last"
 })
 
-local wpQueueDropdown = nil
-local selectedWpQueueItem = nil
+wpQueueDropdown = nil
+selectedWpQueueItem = nil
 
 local function refreshWpQueue()
     local queue = Waypoint:GetQueue()
@@ -1698,7 +2023,7 @@ wpQueueDropdown = TeleTab:Dropdown({
     Callback = function(v) selectedWpQueueItem = v end
 })
 
-local queueDelaySlider = TeleTab:Slider({
+queueDelaySlider = TeleTab:Slider({
     Title = "Delay Between TPs (sec)",
     Tooltip = "Wait time between queue teleports (1-10s)",
     Value = { Min = 1, Max = 10, Default = 2 },
@@ -1767,7 +2092,7 @@ TeleTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 AutoTab:Section({ Title = "Auto Clicker" })
 
-local autoClickerToggle = AutoTab:Toggle({
+autoClickerToggle = AutoTab:Toggle({
     Title    = "Auto Clicker",
     Value    = false,
     Tooltip  = "Automatically click at configurable speed",
@@ -1778,7 +2103,7 @@ local autoClickerToggle = AutoTab:Toggle({
 })
 ConfigMgr:Register("AutoClicker", autoClickerToggle)
 
-local cpsSlider = AutoTab:Slider({
+cpsSlider = AutoTab:Slider({
     Title    = "Clicks Per Second (CPS)",
     Value    = { Min = 1, Max = 100, Default = 10 },
     Step     = 1,
@@ -1787,7 +2112,7 @@ local cpsSlider = AutoTab:Slider({
 })
 ConfigMgr:Register("AutoClickerCPS", cpsSlider)
 
-local clickTypeDrop = AutoTab:Dropdown({
+clickTypeDrop = AutoTab:Dropdown({
     Title    = "Click Type",
     Values   = {"mouse", "tool"},
     Value    = "mouse",
@@ -1799,7 +2124,7 @@ local clickTypeDrop = AutoTab:Dropdown({
 })
 ConfigMgr:Register("AutoClickerType", clickTypeDrop)
 
-local holdDownToggle = AutoTab:Toggle({
+holdDownToggle = AutoTab:Toggle({
     Title    = "Hold Mouse Down",
     Value    = false,
     Tooltip  = "Hold mouse button instead of clicking",
@@ -1810,7 +2135,7 @@ local holdDownToggle = AutoTab:Toggle({
 })
 ConfigMgr:Register("AutoClickerHold", holdDownToggle)
 
-local randomDelayToggle = AutoTab:Toggle({
+randomDelayToggle = AutoTab:Toggle({
     Title    = "Random Delay",
     Value    = true,
     Tooltip  = "Randomize click timing to avoid detection",
@@ -1845,7 +2170,7 @@ SetTab:Keybind({
         N("Toggle Key", k)
     end
 })
-local themeDrop = SetTab:Dropdown({
+themeDrop = SetTab:Dropdown({
     Title    = "Theme",
     Values   = {"Default","Gold","Emerald","Rose","Violet","Amber","Neon"},
     Value    = "Default",
@@ -1859,7 +2184,7 @@ ConfigMgr:Register("Theme", themeDrop)
 
 SetTab:Section({ Title = "Config" })
 
-local cfgNameIn = SetTab:Input({
+cfgNameIn = SetTab:Input({
     Title       = "Config Name",
     Placeholder = "e.g. pvp",
     Value       = "default",
@@ -1876,8 +2201,8 @@ local function getCfgList()
     return #l > 0 and l or {"(none)"}
 end
 
-local selectedConfig = nil
-local cfgDrop = SetTab:Dropdown({
+selectedConfig = nil
+cfgDrop = SetTab:Dropdown({
     Title    = "Select Config",
     Values   = getCfgList(),
     Value    = 1,
@@ -1981,10 +2306,10 @@ end)
 
 -- Hitbox Expander keybind (H)
 UIS.InputBegan:Connect(function(i, gp)
-    if gp or i.KeyCode ~= hitboxKey then return end
+    if i.KeyCode ~= hitboxKey then return end
+    if UIS:GetFocusedTextBox() then return end
     local s = not HitboxExp.Enabled
     hitboxToggle:Set(s)
-    if s then HitboxExp:Enable() else HitboxExp:Disable() end
 end)
 
 -- Waypoint Queue keybind (X) — start if idle, stop if running
@@ -2032,6 +2357,7 @@ UIS.InputBegan:Connect(function(i, gp)
     pcall(function() if KillAura.Enabled then killAuraToggle:Set(false); KillAura:Disable() end end)
     pcall(function() if HitboxExp.Enabled then hitboxToggle:Set(false); HitboxExp:Disable() end end)
     pcall(function() if InstantKill.Enabled then ikToggle:Set(false); InstantKill:Disable() end end)
+    pcall(function() if QuickSwitch.Enabled then quickSwitchToggle:Set(false); QuickSwitch:Disable() end end)
 
     -- Disable player modules
     pcall(function() if InfStamina.Enabled then infStaminaToggle:Set(false); InfStamina:Disable() end end)
@@ -2040,6 +2366,7 @@ UIS.InputBegan:Connect(function(i, gp)
     pcall(function() if AntiFling.Enabled then antiFlingToggle:Set(false); AntiFling:Disable() end end)
     pcall(function() if AntiVoid.Enabled then antiVoidToggle:Set(false); AntiVoid:Disable() end end)
     pcall(function() if GamepassSpoof.Enabled then gpSpoofToggle:Set(false); GamepassSpoof:Disable() end end)
+    pcall(function() if AvatarSpoof.Enabled then avatarCustomizerToggle:Set(false); AvatarSpoof:Disable() end end)
 
     -- Disable auto modules
     pcall(function() if AutoClicker.Enabled then autoClickerToggle:Set(false); AutoClicker:Disable() end end)
@@ -2079,7 +2406,6 @@ SetTab:Paragraph({
     Title = "Panic Key Info",
     Content = "Press to disable ALL features and hide the UI"
 })
-end -- end universal mode
 
 setSplashProgress(0.96)
 
@@ -2096,7 +2422,6 @@ task.delay(1.5, function()
 
     -- Anti-AFK is already auto-enabled above (universal)
 
-    if not ActiveGameModule then
     -- ── Post-load sync: activate modules based on loaded toggle states ────────
     -- ConfigManager:Load() does NOT fire callbacks, so we manually sync here
     -- in a deterministic order to avoid race conditions.
@@ -2194,9 +2519,16 @@ task.delay(1.5, function()
         if noFallToggle.Value == true then NoFallDmg:Enable() end
         if antiFlingToggle.Value == true then AntiFling:Enable() end
         if antiVoidToggle.Value == true then AntiVoid:Enable() end
-        if gpSpoofToggle.Value == true then GamepassSpoof:Enable() end
+        if gpSpoofToggle and gpSpoofToggle.Value == true then GamepassSpoof:Enable() end
+        if avatarCustomizerToggle.Value == true then AvatarSpoof:Enable() end
         if hitboxToggle.Value == true then HitboxExp:Enable() end
         if ikToggle.Value == true then InstantKill:Enable() end
+        if quickSwitchToggle.Value == true then QuickSwitch:Enable() end
+        pcall(function() QuickSwitch:SetDelayAfterShot(qsShotDelaySlider.Value or 50) end)
+        pcall(function() QuickSwitch:SetDelayBetweenSwitches(qsSwitchDelaySlider.Value or 50) end)
+        pcall(function() QuickSwitch:SetSwitchType(qsModeDrop.Value or "Q-Q") end)
+        pcall(function() QuickSwitch:SetFirstKey(qsFirstKeyInput.Value or "Q") end)
+        pcall(function() QuickSwitch:SetSecondKey(qsSecondKeyInput.Value or "Q") end)
 
         -- 7b. Auto features
         if autoClickerToggle.Value == true then AutoClicker:Enable() end
@@ -2230,11 +2562,9 @@ task.delay(1.5, function()
             end
         end)
     end)
-    end -- end if not ActiveGameModule
 end)
 
 -- ── Character respawn handler ─────────────────────────────────────────────────
-if not ActiveGameModule then
 lp.CharacterAdded:Connect(function(char)
     task.wait(1)
     pcall(function()
@@ -2281,7 +2611,6 @@ if nilCount > 0 then
     -- Nil count debug removed
 end
 -- End debug info
-end
 
 -- Smooth splash exit
 local splashDestroyed = false
