@@ -409,13 +409,27 @@ local gagModule = load("modules/games/growagarden2.lua")
 if gagModule and gagModule.PlaceIds then
     GAME_MODULES[#GAME_MODULES + 1] = gagModule
 end
+local famModule = load("modules/games/fishandmonsters.lua")
+if famModule and famModule.PlaceIds then
+    GAME_MODULES[#GAME_MODULES + 1] = famModule
+end
 -- add more game modules here
 
 local ActiveGameModule = nil
 for _, gm in ipairs(GAME_MODULES) do
+    -- Check PlaceIds first
     if gm and gm.PlaceIds then
         for _, pid in ipairs(gm.PlaceIds) do
             if tostring(pid) == tostring(game.PlaceId) then
+                ActiveGameModule = gm
+                break
+            end
+        end
+    end
+    -- Check GameIds (Universe ID) if PlaceId didn't match
+    if not ActiveGameModule and gm and gm.GameIds then
+        for _, gid in ipairs(gm.GameIds) do
+            if tostring(gid) == tostring(game.GameId) then
                 ActiveGameModule = gm
                 break
             end
@@ -492,7 +506,66 @@ if ConfigMgr then
     end
 end
 
--- ══ STANDARD TABS (Always Created) ═══════════════════════════════════
+-- ══ GAME MODULE vs UNIVERSAL MODE ═════════════════════════════════════
+if ActiveGameModule then
+    -- Game-specific mode: only show game tabs, skip universal tabs
+    if PerfStats then PerfStats:Enable() end
+    if AntiAFK then AntiAFK:Enable() end
+    pcall(function() ActiveGameModule:Init() end)
+    pcall(function() ActiveGameModule:Enable() end)
+    local wireSuccess, wireErr = pcall(function()
+        ActiveGameModule:WireUI(Window, {
+            Fly          = Fly,
+            Speed        = Speed,
+            Window       = Window,
+            AntiAFK      = AntiAFK,
+            InfiniteJump = InfJump,
+            AntiFling    = AntiFling,
+            Rejoin       = Rejoin,
+            ServerHop    = ServerHop,
+            ConfigMgr    = ConfigMgr,
+            PerfStats    = PerfStats,
+            FullBright   = FullBright,
+            RemoveFog    = RemoveFog,
+            Noclip       = Noclip,
+            N            = N,
+        })
+    end)
+    if not wireSuccess then
+        warn("[Leon X Debug] WireUI Error: " .. tostring(wireErr))
+        pcall(function()
+            local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or lp:WaitForChild("PlayerGui"))
+            sg.Name = "LeonXWireError"
+            local txt = Instance.new("TextLabel", sg)
+            txt.Size = UDim2.new(1, 0, 0, 80)
+            txt.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+            txt.TextColor3 = Color3.fromRGB(255, 255, 255)
+            txt.Text = "WireUI Error: " .. tostring(wireErr)
+            txt.TextSize = 14
+            txt.TextWrapped = true
+            txt.Font = Enum.Font.SourceSansBold
+        end)
+    end
+    N("Game Detected", ActiveGameModule.Name)
+
+    setSplashProgress(1.0)
+
+    -- AutoLoad config for game module
+    task.delay(1.5, function()
+        ConfigMgr:AutoLoad()
+    end)
+
+    -- Character respawn handler
+    lp.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        pcall(function()
+            if Fly and Fly.Enabled then Fly:Disable(); Fly:Enable() end
+        end)
+    end)
+
+else
+-- Universal mode: create all standard tabs
+
 local MovTab = Window:Tab({ Title = "Movement", Icon = "🏃" })
 local CombatTab = Window:Tab({ Title = "Combat", Icon = "⚔️" })
 local PlayerTab = Window:Tab({ Title = "Player", Icon = "🛡️" })
@@ -501,26 +574,6 @@ local VisTab = Window:Tab({ Title = "Visual", Icon = "👁️" })
 local AutoTab = Window:Tab({ Title = "Auto", Icon = "⚡" })
 local MacroTab = Window:Tab({ Title = "Macro", Icon = "🎬" })
 local SetTab = Window:Tab({ Title = "Settings", Icon = "⚙️" })
-
-if ActiveGameModule then
-    if PerfStats then PerfStats:Enable() end
-    ActiveGameModule:Init()
-    ActiveGameModule:WireUI(Window, {
-        Fly          = Fly,
-        Speed        = Speed,
-        Window       = Window,
-        PlayerTab    = PlayerTab,
-        AntiAFK      = AntiAFK,
-        InfiniteJump = InfJump,
-        AntiFling    = AntiFling,
-        Rejoin       = Rejoin,
-        ServerHop    = ServerHop,
-        ConfigMgr    = ConfigMgr,
-        PerfStats    = PerfStats,
-        N            = N,
-    })
-    N("Game Detected", ActiveGameModule.Name)
-end
 
 if AntiAFK then AntiAFK:Enable() end
 if PerfStats then PerfStats:Enable() end
@@ -2587,6 +2640,8 @@ task.spawn(function()
         end
     end)
 end)
+
+end -- END: Universal mode (else branch of ActiveGameModule check)
 
 -- Debug: component count per tab
 -- Debug info removed

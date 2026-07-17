@@ -1,5 +1,6 @@
 local userKey = _G.Key
 
+
 if not userKey or userKey == "" then
     game:GetService("Players").LocalPlayer:Kick("Key tidak ditemukan! Silakan dapatkan key via /script di Discord.")
     return
