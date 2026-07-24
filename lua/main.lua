@@ -346,6 +346,10 @@ local MacroRec    = load("modules/movements/macrorecorder.lua"); setSplashProgre
 local AntiVoid    = load("modules/player/antivoid.lua");     setSplashProgress(0.94)
 local GamepassSpoof = load("modules/player/gamepassspoofer.lua"); setSplashProgress(0.95)
 local AvatarSpoof = load("modules/player/avatarspoofer.lua");      setSplashProgress(0.96)
+local MobileOverlay = load("modules/core/mobileoverlay.lua");     setSplashProgress(0.97)
+local PerfBooster   = load("modules/visuals/perfbooster.lua");     setSplashProgress(0.98)
+local WebhookLogger = load("modules/core/webhooklogger.lua");     setSplashProgress(0.99)
+local ServerUtils   = load("modules/core/serverutils.lua");       setSplashProgress(1.00)
 
 
 -- Dummy stub for any module that failed to load
@@ -402,6 +406,11 @@ MacroRec       = safe(MacroRec)
 AntiVoid       = safe(AntiVoid)
 GamepassSpoof  = safe(GamepassSpoof)
 AvatarSpoof    = safe(AvatarSpoof)
+MobileOverlay  = safe(MobileOverlay)
+PerfBooster    = safe(PerfBooster)
+WebhookLogger  = safe(WebhookLogger)
+ServerUtils    = safe(ServerUtils)
+
 
 -- ── Game-specific modules ────────────────────────────────────────────────────
 local GAME_MODULES = {}
@@ -1292,6 +1301,27 @@ tracerThickSlider = VisTab:Slider({
 })
 ConfigMgr:Register("TracerThickness", tracerThickSlider)
 
+VisTab:Section({ Title = "Performance & Anti-Lag" })
+antiLagToggle = VisTab:Toggle({
+    Title    = "Anti-Lag Mode",
+    Tooltip  = "Disable heavy particles, shadows, and terrain details",
+    Value    = false,
+    Callback = function(v)
+        if v then PerfBooster:Enable() else PerfBooster:Disable() end
+        N("Anti-Lag Mode", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("AntiLagMode", antiLagToggle)
+
+fpsCapSlider = VisTab:Slider({
+    Title    = "FPS Cap",
+    Tooltip  = "Set maximum FPS cap (30-240)",
+    Value    = { Min = 30, Max = 240, Default = 60 },
+    Step     = 5,
+    Callback = function(v) PerfBooster:SetFPSCap(v) end
+})
+ConfigMgr:Register("FPSCap", fpsCapSlider)
+
 -- ══════════════════════════════════════════════════════════════════════════════
 -- COMBAT TAB
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -1856,6 +1886,36 @@ PlayerTab:Button({
     end
 })
 
+PlayerTab:Section({ Title = "Server Utilities" })
+PlayerTab:Button({
+    Title    = "🔄 Rejoin Current Server",
+    Tooltip  = "Reconnect to this server instance",
+    Callback = function()
+        N("Server", "Rejoining...")
+        ServerUtils:Rejoin()
+    end
+})
+PlayerTab:Button({
+    Title    = "🔀 Server Hop",
+    Tooltip  = "Join a different server of the same game",
+    Callback = function()
+        N("Server", "Finding new server...")
+        ServerUtils:ServerHop()
+    end
+})
+PlayerTab:Button({
+    Title    = "📋 Copy Server JobID",
+    Tooltip  = "Copy current server JobID to clipboard",
+    Callback = function()
+        local ok, id = ServerUtils:CopyJobID()
+        if ok then
+            N("Server", "Copied JobID to clipboard!")
+        else
+            N("Server", "JobID: " .. tostring(id))
+        end
+    end
+})
+
 -- ══════════════════════════════════════════════════════════════════════════════
 -- TELEPORT TAB
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -2235,6 +2295,30 @@ themeDrop = SetTab:Dropdown({
 })
 ConfigMgr:Register("Theme", themeDrop)
 
+SetTab:Section({ Title = "Discord Webhook Logger" })
+webhookUrlInput = SetTab:Input({
+    Title       = "Webhook URL",
+    Placeholder = "https://discord.com/api/webhooks/...",
+    Value       = "",
+    Tooltip     = "Discord webhook URL for remote event logs",
+    Callback    = function(v) WebhookLogger:SetUrl(v) end
+})
+ConfigMgr:Register("WebhookUrl", webhookUrlInput)
+
+SetTab:Button({
+    Title    = "🔔 Send Test Notification",
+    Tooltip  = "Send test embed message to Discord Webhook",
+    Callback = function()
+        WebhookLogger:SetUrl(webhookUrlInput.Value)
+        local ok, err = WebhookLogger:Send("Leon X Test", "Webhook logger is configured and working properly!", 0x3498db)
+        if ok then
+            N("Webhook Logger", "Test message sent successfully!")
+        else
+            N("Webhook Logger", "Failed: " .. tostring(err))
+        end
+    end
+})
+
 SetTab:Section({ Title = "Config" })
 
 cfgNameIn = SetTab:Input({
@@ -2563,6 +2647,8 @@ task.delay(1.5, function()
         if fullBrightToggle.Value == true then FullBright:Enable() end
         if removeFogToggle.Value == true then RemoveFog:Enable() end
         if tracerToggle.Value == true then Tracer:Enable() end
+        if antiLagToggle and antiLagToggle.Value == true then PerfBooster:Enable() end
+        pcall(function() PerfBooster:SetFPSCap(fpsCapSlider.Value or 60) end)
 
         -- 7. Player features
         if AntiDetect and antiDetectToggle.Value == true then AntiDetect:Enable() end
@@ -2574,6 +2660,7 @@ task.delay(1.5, function()
         if antiVoidToggle.Value == true then AntiVoid:Enable() end
         if gpSpoofToggle and gpSpoofToggle.Value == true then GamepassSpoof:Enable() end
         if avatarCustomizerToggle.Value == true then AvatarSpoof:Enable() end
+        pcall(function() WebhookLogger:SetUrl(webhookUrlInput.Value or "") end)
         if hitboxToggle.Value == true then HitboxExp:Enable() end
         if ikToggle.Value == true then InstantKill:Enable() end
         if quickSwitchToggle.Value == true then QuickSwitch:Enable() end
@@ -2707,5 +2794,13 @@ task.delay(3, function()
         Window:DismissWelcome()
     end
 end)
+
+-- Initialize Mobile Quick-Toggle Overlay for Touch Devices
+pcall(function()
+    if MobileOverlay and MobileOverlay.Init then
+        MobileOverlay:Init(Window)
+    end
+end)
+
 
 
