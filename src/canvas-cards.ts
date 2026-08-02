@@ -578,7 +578,7 @@ export async function renderRobloxProfileCard(data: {
     curY += 72;
   }
 
-  // Stats grid
+  // Stats gridd
   const statsW = CARD_WIDTH - CARD_PADDING * 2;
   drawInnerCard(ctx, CARD_PADDING, curY, statsW, 80);
   const col = statsW / 4;
