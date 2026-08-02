@@ -195,10 +195,7 @@ function buildEnhancedChanges(content: string): string {
     .map(([key, section]) => {
       const itemsList = grouped[key as keyof typeof changeSections];
       const items = itemsList
-        .map((item, index) => {
-          const prefix = index === itemsList.length - 1 ? "└─" : "├─";
-          return `\`${prefix}\` ${item}`;
-        })
+        .map((item) => `• ${item}`)
         .join("\n");
       return `${section.emoji} **${section.title}**\n${items}`;
     });
@@ -1396,18 +1393,68 @@ Format balasan:
 
           const gameName = interaction.options.getString("game") || "Universal";
 
+          // Fetch Roblox Game Thumbnail if game is specified
+          let gameThumbnailUrl: string | null = null;
+          if (gameName !== "Universal") {
+            const placeId = extractPlaceId(gameName);
+            let universeId: number | null = null;
+
+            if (placeId) {
+              const row = db.prepare("SELECT universe_id FROM monitored_places WHERE place_id = ?").get(placeId) as { universe_id: number } | undefined;
+              if (row) {
+                universeId = row.universe_id;
+              } else {
+                try {
+                  const res = await fetch(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`);
+                  if (res.ok) {
+                    const data = await res.json() as { universeId?: number };
+                    if (data.universeId) universeId = data.universeId;
+                  }
+                } catch {}
+              }
+            } else {
+              const row = db.prepare("SELECT universe_id FROM monitored_places WHERE name LIKE ? LIMIT 1").get(`%${gameName}%`) as { universe_id: number } | undefined;
+              if (row) universeId = row.universe_id;
+            }
+
+            if (universeId) {
+              try {
+                const iconRes = await fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=150x150&format=Png&isCircular=false`);
+                if (iconRes.ok) {
+                  const iconData = await iconRes.json() as { data: Array<{ imageUrl: string }> };
+                  if (iconData.data?.[0]?.imageUrl) {
+                    gameThumbnailUrl = iconData.data[0].imageUrl;
+                  }
+                }
+              } catch {}
+            }
+          }
+
+          const authorIcon = guildIcon || botAvatar;
+
           const changelogEmbed = new EmbedBuilder()
             .setColor(0xffffff)
+            .setAuthor({
+              name: `${interaction.guild?.name || "LeonX Hub"} • Official Update`,
+              iconURL: authorIcon
+            })
             .setTitle(`🚀 ${changelogTitle}`)
             .setDescription(
-              `**Target Game:** ${gameName}\n` +
-              `**Jenis Update:** ${type.emoji} ${type.label}\n\n` +
+              `\`Target Game:\` **${gameName}**\n` +
+              `\`Jenis Update:\` **${type.emoji} ${type.label}**\n\n` +
               `> ${summary}\n\n` +
-              `### 📋 Change Details:\n` +
+              `---\n\n` +
+              `### 📋 Change Details\n` +
               formattedContent
             )
             .setFooter({ text: `LeonX Hub ${version} • ${statusFooterText}` })
             .setTimestamp();
+
+          if (gameThumbnailUrl) {
+            changelogEmbed.setThumbnail(gameThumbnailUrl);
+          } else if (guildIcon) {
+            changelogEmbed.setThumbnail(guildIcon);
+          }
 
           const buttonsList: ButtonBuilder[] = [];
 
