@@ -433,7 +433,7 @@ async function checkMonitoredPlaces(): Promise<void> {
         // 2. Kirim pesan V2 Alert ke channel update-logs
         const v2Alert = buildV2Container({
           title: "🚨 Game Update Detected!",
-          description: `Sebuah pembaruan baru terdeteksi pada game yang sedang dipantau!`,
+          description: `@everyone\n\nSebuah pembaruan baru terdeteksi pada game yang sedang dipantau!`,
           sections: [
             {
               title: "🎮 Detail Pembaruan Game",
@@ -451,7 +451,7 @@ async function checkMonitoredPlaces(): Promise<void> {
           footer: "LeonX Hub • Auto-Update Detector"
         });
 
-        await channel.send({ content: "@everyone", ...v2Alert }).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
+        await channel.send(v2Alert).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
 
         // 3. Otomatis set status bot ke 'testing'
         db.prepare(`
@@ -1471,6 +1471,7 @@ Format balasan:
             title: `🚀 ${changelogTitle}`,
             thumbnailUrl: gameThumbnailUrl || guildIcon || botAvatar,
             description:
+              `@everyone  ${type.emoji} **${type.label}**\n\n` +
               `\`Target Game:\` **${gameName}**\n` +
               `\`Jenis Update:\` **${type.emoji} ${type.label}**\n\n` +
               `> ${summary}`,
@@ -1496,17 +1497,11 @@ Format balasan:
             if (channel.type === ChannelType.GuildForum) {
               await channel.threads.create({
                 name: `${version} — ${title}`.slice(0, 100),
-                message: {
-                  content: `@everyone  ${type.emoji} **${type.label}**`,
-                  ...v2Payload
-                },
+                message: v2Payload,
                 reason: `Changelog ${version}`
               });
             } else {
-              await channel.send({
-                content: `@everyone  ${type.emoji} **${type.label}**`,
-                ...v2Payload
-              });
+              await channel.send(v2Payload);
             }
           } catch (sendErr) {
             console.error("Gagal mengirim changelog ke channel:", sendErr);
@@ -2512,12 +2507,7 @@ Format balasan:
       if (channel?.type === ChannelType.GuildForum) {
         const thread = await channel.threads.create({
           name: `#${result.lastInsertRowid} ${title}`.slice(0, 100),
-          message: {
-            content:
-              `Laporan dari <@${interaction.user.id}>\n` +
-              "Silakan kirim screenshot atau video pendukung di bawah post ini.",
-            ...v2Report
-          },
+          message: v2Report,
           reason: `Bug report #${result.lastInsertRowid}`
         });
         reportUrl = thread.url;
