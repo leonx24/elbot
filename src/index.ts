@@ -1772,29 +1772,32 @@ Format balasan:
 
           const creationDate = new Date(details.created);
 
-          const embed = new EmbedBuilder()
-            .setTitle(`👤 Roblox Profile - ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`)
-            .setURL(`https://www.roblox.com/users/${userId}/profile`)
-            .setDescription(
+          const v2Profile = buildV2Container({
+            title: `👤 Roblox Profile - ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`,
+            thumbnailUrl: avatarUrl || undefined,
+            description:
               `@${details.name} • \`ID:\` \`${userId}\` • Status: ${details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**"}\n\n` +
-              (details.description ? `> *${details.description.slice(0, 300)}*\n\n` : "") +
-              "**📊 Statistik Akun**\n" +
-              `• \`Teman:\` **${friendsCount}**\n` +
-              `• \`Pengikut:\` **${followersCount}**\n` +
-              `• \`Mengikuti:\` **${followingCount}**\n` +
-              `• \`RAP Collectibles:\` **${rapText}**\n` +
-              `• \`Tanggal Dibuat:\` **${creationDate.toLocaleDateString("id-ID")}**\n\n` +
-              "**🏷️ Riwayat Nama**\n" +
-              historyText
-            )
-            .setFooter({ text: "LeonX Hub • Roblox Lookup" })
-            .setTimestamp();
+              (details.description ? `> *${details.description.slice(0, 300)}*` : ""),
+            sections: [
+              {
+                title: "📊 Statistik Akun",
+                content:
+                  `• \`Teman:\` **${friendsCount}**\n` +
+                  `• \`Pengikut:\` **${followersCount}**\n` +
+                  `• \`Mengikuti:\` **${followingCount}**\n` +
+                  `• \`RAP Collectibles:\` **${rapText}**\n` +
+                  `• \`Tanggal Dibuat:\` **${creationDate.toLocaleDateString("id-ID")}**`
+              },
+              {
+                title: "🏷️ Riwayat Nama",
+                content: historyText
+              }
+            ],
+            footer: "LeonX Hub • Roblox Lookup"
+          });
 
-          if (avatarUrl) {
-            embed.setThumbnail(avatarUrl);
-          }
-
-          await interaction.editReply({ embeds: [embed] });
+          await interaction.deleteReply();
+          await interaction.followUp(v2Profile);
         } catch (error) {
           console.error("Gagal melakukan lookup Roblox:", error);
           await interaction.editReply("❌ Terjadi kesalahan saat menghubungi server Roblox. Silakan coba beberapa saat lagi.");
@@ -2659,6 +2662,313 @@ client.on(Events.MessageCreate, async (message) => {
 
   const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member) return;
+
+  // ── Prefix Command Handler ($) ──
+  const PREFIX = "$";
+  if (message.content.startsWith(PREFIX)) {
+    const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+    const cmd = args.shift()?.toLowerCase();
+    if (!cmd) return;
+
+    // Track command usage
+    db.prepare(`
+      INSERT INTO command_usage (command, uses) VALUES (?, 1)
+      ON CONFLICT(command) DO UPDATE SET uses = uses + 1
+    `).run(cmd);
+
+    // $help
+    if (cmd === "help") {
+      const v2Help = buildV2Container({
+        title: "📖 Daftar Perintah Bot (Prefix: `$`)",
+        description: "Berikut adalah daftar perintah prefix yang dapat Anda gunakan di server ini:",
+        sections: [
+          {
+            title: "📌 Perintah Umum & Informasi",
+            content:
+              "• `$help` — Menampilkan daftar perintah bot ini\n" +
+              "• `$status` — Melihat status operasional script & bot\n" +
+              "• `$website` — Menampilkan link resmi website & bot console\n" +
+              "• `$faq [topik]` — Melihat informasi FAQ (misal: `$faq script`, `$faq error`)"
+          },
+          {
+            title: "🔑 Perintah Lisensi & Roblox",
+            content:
+              "• `$key` — Melihat detail lisensi key Anda & 5 riwayat eksekusi\n" +
+              "• `$roblox <username>` — Lookup profil Roblox, statistik, RAP, & riwayat nama"
+          },
+          {
+            title: "🛡️ Perintah Moderator / Admin",
+            content:
+              "• `$stats` — Melihat ringkasan statistik komunitas & bot (Admin only)"
+          }
+        ],
+        footer: "LeonX Hub • Command List"
+      });
+      await message.reply(v2Help);
+      return;
+    }
+
+    // $roblox <username>
+    if (cmd === "roblox") {
+      const username = args[0];
+      if (!username) {
+        await message.reply("❌ Gunakan: `$roblox <username>`");
+        return;
+      }
+
+      try {
+        const loadingMsg = await message.reply("🔍 Mencari profil Roblox...");
+
+        const userSearchResponse = await fetch("https://users.roblox.com/v1/usernames/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ usernames: [username], excludeBannedUsers: false })
+        });
+
+        if (!userSearchResponse.ok) throw new Error("API error");
+
+        const searchResult = await userSearchResponse.json() as {
+          data: Array<{ id: number; name: string; displayName: string; hasVerifiedBadge?: boolean }>
+        };
+
+        if (!searchResult.data?.[0]) {
+          await loadingMsg.edit(`❌ Pengguna Roblox \`${username}\` tidak ditemukan.`);
+          return;
+        }
+
+        const userId = searchResult.data[0].id;
+
+        const userDetailsResponse = await fetch(`https://users.roblox.com/v1/users/${userId}`);
+        if (!userDetailsResponse.ok) throw new Error("API error");
+
+        const details = await userDetailsResponse.json() as {
+          description: string; created: string; isBanned: boolean;
+          displayName: string; name: string; hasVerifiedBadge?: boolean;
+        };
+
+        const avatarResponse = await fetch(
+          `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=150x150&format=Png&isCircular=false`
+        );
+
+        let avatarUrl: string | undefined;
+        if (avatarResponse.ok) {
+          const avatarResult = await avatarResponse.json() as { data: Array<{ imageUrl: string }> };
+          avatarUrl = avatarResult.data?.[0]?.imageUrl;
+        }
+
+        const [followersRes, followingRes, friendsRes, collectiblesRes, historyRes] = await Promise.all([
+          fetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`).catch(() => null),
+          fetch(`https://friends.roblox.com/v1/users/${userId}/followings/count`).catch(() => null),
+          fetch(`https://friends.roblox.com/v1/users/${userId}/friends/count`).catch(() => null),
+          fetch(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?limit=100`).catch(() => null),
+          fetch(`https://users.roblox.com/v1/users/${userId}/username-history?limit=10`).catch(() => null)
+        ]);
+
+        let followersCount = "N/A";
+        if (followersRes?.ok) { const d = await followersRes.json() as { count: number }; followersCount = d.count.toLocaleString("id-ID"); }
+        let followingCount = "N/A";
+        if (followingRes?.ok) { const d = await followingRes.json() as { count: number }; followingCount = d.count.toLocaleString("id-ID"); }
+        let friendsCount = "N/A";
+        if (friendsRes?.ok) { const d = await friendsRes.json() as { count: number }; friendsCount = d.count.toLocaleString("id-ID"); }
+
+        let rapText = "None / 🔒 Private";
+        if (collectiblesRes?.ok) {
+          const d = await collectiblesRes.json() as { data: Array<{ recentAveragePrice?: number; value?: number }> };
+          if (d.data?.length) {
+            const totalRap = d.data.reduce((sum, item) => sum + (item.recentAveragePrice || item.value || 0), 0);
+            rapText = totalRap > 0 ? `${totalRap.toLocaleString("id-ID")} Robux` : "None";
+          } else { rapText = "None"; }
+        } else if (collectiblesRes?.status === 403) { rapText = "🔒 Private"; }
+
+        let historyText = "Tidak ada riwayat nama.";
+        if (historyRes?.ok) {
+          const d = await historyRes.json() as { data: Array<{ name: string }> };
+          if (d.data?.length) { historyText = d.data.map(item => `\`${item.name}\``).join(", "); }
+        }
+
+        const creationDate = new Date(details.created);
+
+        const v2Profile = buildV2Container({
+          title: `👤 Roblox Profile - ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`,
+          thumbnailUrl: avatarUrl,
+          description:
+            `@${details.name} • \`ID:\` \`${userId}\` • Status: ${details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**"}\n\n` +
+            (details.description ? `> *${details.description.slice(0, 300)}*` : ""),
+          sections: [
+            {
+              title: "📊 Statistik Akun",
+              content:
+                `• \`Teman:\` **${friendsCount}**\n` +
+                `• \`Pengikut:\` **${followersCount}**\n` +
+                `• \`Mengikuti:\` **${followingCount}**\n` +
+                `• \`RAP Collectibles:\` **${rapText}**\n` +
+                `• \`Tanggal Dibuat:\` **${creationDate.toLocaleDateString("id-ID")}**`
+            },
+            {
+              title: "🏷️ Riwayat Nama",
+              content: historyText
+            }
+          ],
+          footer: "LeonX Hub • Roblox Lookup"
+        });
+
+        await loadingMsg.delete().catch(() => null);
+        await message.reply(v2Profile);
+      } catch {
+        await message.reply("❌ Terjadi kesalahan saat menghubungi server Roblox.");
+      }
+      return;
+    }
+
+    // $status
+    if (cmd === "status") {
+      const dbStatus = db.prepare("SELECT value FROM bot_settings WHERE key = 'script_status'").get() as { value: string } | undefined;
+      const dbReason = db.prepare("SELECT value FROM bot_settings WHERE key = 'script_status_reason'").get() as { value: string } | undefined;
+      const statusVal = dbStatus?.value || "operational";
+      const reasonVal = dbReason?.value || "Semua sistem berjalan dengan normal.";
+      let statusText = "🟢 Operational";
+      if (statusVal === "testing") statusText = "🟡 Testing / Updating";
+      else if (statusVal === "maintenance") statusText = "🔴 Maintenance / Patched";
+
+      const v2Status = buildV2Container({
+        title: "📊 Status Script & Bot System",
+        description: "Berikut adalah status terkini dari seluruh infrastruktur LeonX Hub.",
+        sections: [
+          { title: "🟢 Status Layanan", content: `• \`LeonX Hub Script:\` ${statusText}\n• \`Bot Discord:\` 🟢 **Online**` },
+          { title: "📝 Catatan Sistem", content: `*${reasonVal}*` }
+        ],
+        footer: "LeonX Hub • Status Monitor"
+      });
+      await message.reply(v2Status);
+      return;
+    }
+
+    // $key
+    if (cmd === "key") {
+      const keyData = db.prepare("SELECT * FROM license_keys WHERE discord_id = ?").get(message.author.id) as any;
+      if (!keyData) {
+        await message.reply("❌ Anda belum memiliki key lisensi. Gunakan `/script` untuk mendapatkan key.");
+        return;
+      }
+
+      const totalExec = (db.prepare("SELECT COUNT(*) AS count FROM execution_logs WHERE key = ?").get(keyData.key) as { count: number }).count;
+      let cooldownText = "✅ Ready";
+      if (keyData.last_reset) {
+        const lastReset = new Date(keyData.last_reset + " UTC").getTime();
+        const now = Date.now();
+        const diff = 24 * 60 * 60 * 1000 - (now - lastReset);
+        if (diff > 0) {
+          const hours = Math.floor(diff / 3600000);
+          const mins = Math.floor((diff % 3600000) / 60000);
+          cooldownText = `⏳ ${hours}h ${mins}m`;
+        }
+      }
+
+      const last5 = db.prepare("SELECT * FROM execution_logs WHERE key = ? ORDER BY executed_at DESC LIMIT 5").all(keyData.key) as any[];
+      let historyText = "Belum ada riwayat eksekusi.";
+      if (last5.length > 0) {
+        historyText = last5.map(ex => {
+          const utcTime = ex.executed_at.endsWith(" UTC") ? ex.executed_at : ex.executed_at + " UTC";
+          const date = new Date(utcTime).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" });
+          return `• **${date}**\n  └─ Game: [${ex.place_id}](https://www.roblox.com/games/${ex.place_id}) | Executor: \`${ex.executor}\` | Roblox: [${ex.roblox_username || "Unknown"}](https://www.roblox.com/users/${ex.roblox_id}/profile)`;
+        }).join("\n");
+      }
+
+      const v2Key = buildV2Container({
+        title: "🔑 Informasi Key & Lisensi Anda",
+        description: "Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.",
+        sections: [
+          {
+            title: "🔑 Informasi Lisensi",
+            content:
+              `• \`Key Lisensi:\` \`||${keyData.key}||\` *(Klik untuk menyalin)*\n` +
+              `• \`Akun Roblox:\` ${keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
+              `• \`Perangkat (HWID):\` ${keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut"}\n` +
+              `• \`Cooldown Reset:\` ${cooldownText}\n` +
+              `• \`Total Eksekusi:\` \`${totalExec}\` kali\n` +
+              `• \`Dibuat Pada:\` \`${new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" })}\``
+          },
+          { title: "📜 Riwayat 5 Eksekusi Terakhir", content: historyText }
+        ],
+        footer: "LeonX Hub • License System"
+      });
+      await message.reply(v2Key);
+      return;
+    }
+
+    // $faq <topic>
+    if (cmd === "faq") {
+      const topic = args[0]?.toLowerCase();
+      if (!topic) {
+        const topics = Object.keys(faq).map(t => `\`${t}\``).join(", ");
+        await message.reply(`📋 Topik yang tersedia: ${topics}\nGunakan: \`$faq <topik>\``);
+        return;
+      }
+      const faqAnswer = faq[topic];
+      if (!faqAnswer) {
+        await message.reply("❌ Topik tidak ditemukan.");
+        return;
+      }
+      const v2Faq = buildV2Container({
+        title: `💡 FAQ — ${topic}`,
+        description: `Berikut adalah informasi mengenai topik **${topic}**:\n\n${faqAnswer}`,
+        footer: "LeonX Hub • FAQ System"
+      });
+      await message.reply(v2Faq);
+      return;
+    }
+
+    // $website
+    if (cmd === "website") {
+      const v2Web = buildV2Container({
+        title: "🌐 LeonThings Official Website",
+        description: "Silakan gunakan tautan resmi di bawah ini untuk mengakses layanan kami:",
+        sections: [
+          {
+            title: "🔗 Link Resmi",
+            content:
+              "• **Website Utama:** https://leonthings.my.id\n" +
+              "• **Bot Console & HWID Reset:** https://leonthings.my.id/bot"
+          }
+        ],
+        footer: "LeonX Hub • Official Links"
+      });
+      await message.reply(v2Web);
+      return;
+    }
+
+    // $stats (admin only)
+    if (cmd === "stats") {
+      if (!member.permissions.has(PermissionFlagsBits.ManageGuild) && member.id !== config.OWNER_ID) {
+        await message.reply("❌ Anda tidak memiliki izin untuk melihat statistik admin.");
+        return;
+      }
+      const openTickets = (db.prepare("SELECT COUNT(*) AS count FROM tickets WHERE status = 'open'").get() as { count: number }).count;
+      const reports = (db.prepare("SELECT COUNT(*) AS count FROM bug_reports").get() as { count: number }).count;
+      const uses = (db.prepare("SELECT COALESCE(SUM(uses), 0) AS count FROM command_usage").get() as { count: number }).count;
+
+      const v2Stats = buildV2Container({
+        title: "📊 Statistik Admin Server",
+        description: "Ringkasan statistik aktivitas bot dan server:",
+        sections: [
+          {
+            title: "👥 Statistik Komunitas & Bot",
+            content:
+              `• \`Total Member:\` **${message.guild.memberCount}** member\n` +
+              `• \`Ticket Aktif:\` **${openTickets}** ticket\n` +
+              `• \`Laporan Bug:\` **${reports}** laporan\n` +
+              `• \`Command Dipakai:\` **${uses}** eksekusi`
+          }
+        ],
+        footer: "LeonX Hub • Admin Dashboard"
+      });
+      await message.reply(v2Stats);
+      return;
+    }
+
+    // Unknown prefix command — ignore silently
+    return;
+  }
 
   // Check if message is in a ticket channel
   if (message.channel.type === ChannelType.GuildText) {
