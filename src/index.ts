@@ -430,24 +430,28 @@ async function checkMonitoredPlaces(): Promise<void> {
         const updatedDate = new Date(apiUpdated);
         const unixTimestamp = Math.floor(updatedDate.getTime() / 1000);
 
-        // 2. Kirim pesan Embed Alert ke channel update-logs
-        const embed = new EmbedBuilder()
-          .setTitle("🚨 Game Update Detected!")
-          .setDescription(
-            `Sebuah pembaruan baru terdeteksi pada game yang sedang dipantau!\n\n` +
-            "---\n\n" +
-            "### 🎮 Detail Pembaruan Game\n" +
-            `• \`Nama Game:\` **${gameData.name}**\n` +
-            `• \`Place ID:\` \`${item.place_id}\`\n` +
-            `• \`Universe ID:\` \`${item.universe_id}\`\n` +
-            `• \`Waktu Pembaruan:\` <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n\n` +
-            "---\n\n" +
-            "> ⚠️ **Status Bot Otomatis Diubah:** Status bot kini dialihkan ke **Testing/Updating**."
-          )
-          .setFooter({ text: "LeonX Hub • Auto-Update Detector" })
-          .setTimestamp();
+        // 2. Kirim pesan V2 Alert ke channel update-logs
+        const v2Alert = buildV2Container({
+          title: "🚨 Game Update Detected!",
+          description: `Sebuah pembaruan baru terdeteksi pada game yang sedang dipantau!`,
+          sections: [
+            {
+              title: "🎮 Detail Pembaruan Game",
+              content:
+                `• \`Nama Game:\` **${gameData.name}**\n` +
+                `• \`Place ID:\` \`${item.place_id}\`\n` +
+                `• \`Universe ID:\` \`${item.universe_id}\`\n` +
+                `• \`Waktu Pembaruan:\` <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)`
+            },
+            {
+              title: "⚠️ Perubahan Status",
+              content: "Status bot kini dialihkan ke **Testing/Updating**."
+            }
+          ],
+          footer: "LeonX Hub • Auto-Update Detector"
+        });
 
-        await channel.send({ content: "@everyone", embeds: [embed] }).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
+        await channel.send({ content: "@everyone", ...v2Alert }).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
 
         // 3. Otomatis set status bot ke 'testing'
         db.prepare(`
@@ -681,18 +685,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const embed = new EmbedBuilder()
           .setTitle("🔑 Informasi Key & Lisensi Anda")
           .setDescription(
-            "# 🔑 Detail Lisensi & Akses Anda\n" +
             "Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.\n\n" +
-            "───────────────────────────────\n\n" +
-            "## 🔑 Informasis Lisensi\n" +
+            "**🔑 Informasi Lisensi**\n" +
             `• \`Key Lisensi:\` \`||${keyData.key}||\` *(Klik untuk menyalin)*\n` +
             `• \`Akun Roblox:\` ${keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
             `• \`Perangkat (HWID):\` ${keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut"}\n` +
             `• \`Cooldown Reset:\` ${cooldownText}\n` +
             `• \`Total Eksekusi:\` \`${totalExec}\` kali\n` +
             `• \`Dibuat Pada:\` \`${new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" })}\`\n\n` +
-            "───────────────────────────────\n\n" +
-            "## 📜 Riwayat 5 Eksekusi Terakhir\n" +
+            "**📜 Riwayat 5 Eksekusi Terakhir**\n" +
             historyText
           )
           .setFooter({ text: "LeonX Hub • License System" })
@@ -795,16 +796,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const embed = new EmbedBuilder()
           .setTitle("🔍 Hasil Lookup Data Lisensi")
           .setDescription(
-            "# 🔍 Hasil Lookup Data Lisensi\n" +
             `Kriteria pencarian: ${searchCriteria}\n\n` +
-            "───────────────────────────────\n\n" +
-            "## 🛡️ Status Blacklist\n" +
+            "**🛡️ Status Blacklist**\n" +
             `${blacklistStatus}\n\n` +
-            "───────────────────────────────\n\n" +
-            "## 🔑 Data Lisensi / Key\n" +
+            "**🔑 Data Lisensi / Key**\n" +
             `${keysFormatted}\n\n` +
-            "───────────────────────────────\n\n" +
-            "## 📊 Riwayat 5 Eksekusi Terakhir\n" +
+            "**📊 Riwayat 5 Eksekusi Terakhir**\n" +
             `${executionsText}`
           )
           .setFooter({ text: "LeonX Hub • Admin Tools" })
@@ -1067,23 +1064,26 @@ Format balasan:
           statusText = "🔴 Maintenance / Patched";
         }
 
-        const embed = new EmbedBuilder()
-          .setTitle("📊 Status Script & Bot System")
-          .setDescription(
-            "# 📊 Status System & Infrastruktur\n" +
-            "Berikut adalah status terkini dari seluruh infrastruktur LeonX Hub.\n\n" +
-            "───────────────────────────────\n\n" +
-            "## 🟢 Status Layanan\n" +
-            `• \`LeonX Hub Script:\` ${statusText}\n` +
-            `• \`Bot Discord:\` 🟢 **Online**\n\n` +
-            "───────────────────────────────\n\n" +
-            `## 📝 Catatan Sistem\n` +
-            `*${reasonVal}*`
-          )
-          .setFooter({ text: "LeonX Hub • Status Monitor" })
-          .setTimestamp();
+        const v2Status = buildV2Container({
+          title: "📊 Status Script & Bot System",
+          description:
+            "Berikut adalah status terkini dari seluruh infrastruktur LeonX Hub.",
+          sections: [
+            {
+              title: "🟢 Status Layanan",
+              content:
+                `• \`LeonX Hub Script:\` ${statusText}\n` +
+                `• \`Bot Discord:\` 🟢 **Online**`
+            },
+            {
+              title: "📝 Catatan Sistem",
+              content: `*${reasonVal}*`
+            }
+          ],
+          footer: "LeonX Hub • Status Monitor"
+        });
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply(v2Status);
       }
 
       if (interaction.commandName === "setstatus") {
@@ -1148,9 +1148,7 @@ Format balasan:
           const embed = new EmbedBuilder()
             .setTitle(`💡 FAQ - ${topic}`)
             .setDescription(
-              `# 💡 FAQ — ${topic}\n` +
               `Berikut adalah informasi mengenai topik **${topic}**:\n\n` +
-              "───────────────────────────────\n\n" +
               faqAnswer
             )
             .setFooter({ text: "LeonX Hub • FAQ System" })
@@ -1163,10 +1161,8 @@ Format balasan:
         const embed = new EmbedBuilder()
           .setTitle("🌐 LeonThings Official Website")
           .setDescription(
-            "# 🌐 Official Website & Links\n" +
             "Silakan gunakan tautan resmi di bawah ini untuk mengakses layanan kami:\n\n" +
-            "───────────────────────────────\n\n" +
-            "## 🔗 Link Resmi\n" +
+            "**🔗 Link Resmi**\n" +
             "• `/website` - **Website Utama:** https://leonthings.my.id\n" +
             "• `/console` - **Bot Console & HWID Reset:** https://leonthings.my.id/bot"
           )
@@ -1317,16 +1313,13 @@ Format balasan:
           const statsEmbed = new EmbedBuilder()
             .setTitle("📊 Statistik Support Ticket System")
             .setDescription(
-              "# 📊 Statistik Support Ticket System\n" +
               "Ringkasan statistik penggunaan ticket support:\n\n" +
-              "───────────────────────────────\n\n" +
-              "## 📊 Ringkasan Ticket\n" +
+              "**📊 Ringkasan Ticket**\n" +
               `• \`Total Ticket:\` **${stats.total}**\n` +
               `• \`Ticket Open:\` **${stats.open}**\n` +
               `• \`Ticket Closed:\` **${stats.closed}**\n` +
               `• \`Rata-rata Rating:\` **${stats.avgRating ? `${Number(stats.avgRating).toFixed(1)} / 5.0` : "Belum ada rating"}**\n\n` +
-              "───────────────────────────────\n\n" +
-              "## 📂 Tiket Per Kategori\n" +
+              "**📂 Tiket Per Kategori**\n" +
               (categoryFormatted || "Belum ada data")
             )
             .setFooter({ text: "LeonX Hub • Support System" })
@@ -1546,10 +1539,8 @@ Format balasan:
         const embed = new EmbedBuilder()
           .setTitle("📊 Statistik Admin Server")
           .setDescription(
-            "# 📊 Dashboard & Statistik Server\n" +
             "Ringkasan statistik aktivitas bot dan server:\n\n" +
-            "───────────────────────────────\n\n" +
-            "## 👥 Statistik Komunitas & Bot\n" +
+            "**👥 Statistik Komunitas & Bot**\n" +
             `• \`Total Member:\` **${interaction.guild?.memberCount ?? 0}** member\n` +
             `• \`Ticket Aktif:\` **${openTickets}** ticket\n` +
             `• \`Laporan Bug:\` **${reports}** laporan\n` +
@@ -1636,10 +1627,8 @@ Format balasan:
           const embed = new EmbedBuilder()
             .setTitle("🚫 Daftar Blacklist LeonX Hub")
             .setDescription(
-              "# 🚫 Daftar Target Blacklist\n" +
               `Total target ter-blacklist: **${list.length}**\n\n` +
-              "───────────────────────────────\n\n" +
-              "## 🛡️ List Target Blacklist\n\n" +
+              "**🛡️ List Target Blacklist**\n\n" +
               list.map((item, idx) => {
                 let detail = "";
                 if (item.discord_id) detail += `Discord: <@${item.discord_id}> (\`${item.discord_id}\`) `;
@@ -1787,18 +1776,15 @@ Format balasan:
             .setTitle(`👤 Roblox Profile - ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`)
             .setURL(`https://www.roblox.com/users/${userId}/profile`)
             .setDescription(
-              `# 👤 ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}\n` +
               `@${details.name} • \`ID:\` \`${userId}\` • Status: ${details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**"}\n\n` +
               (details.description ? `> *${details.description.slice(0, 300)}*\n\n` : "") +
-              "───────────────────────────────\n\n" +
-              "## 📊 Statistik Akun\n" +
+              "**📊 Statistik Akun**\n" +
               `• \`Teman:\` **${friendsCount}**\n` +
               `• \`Pengikut:\` **${followersCount}**\n` +
               `• \`Mengikuti:\` **${followingCount}**\n` +
               `• \`RAP Collectibles:\` **${rapText}**\n` +
               `• \`Tanggal Dibuat:\` **${creationDate.toLocaleDateString("id-ID")}**\n\n` +
-              "───────────────────────────────\n\n" +
-              "## 🏷️ Riwayat Nama\n" +
+              "**🏷️ Riwayat Nama**\n" +
               historyText
             )
             .setFooter({ text: "LeonX Hub • Roblox Lookup" })
@@ -1900,16 +1886,13 @@ Format balasan:
             .setTitle(`🎮 Game Monitor - ${gameName}`)
             .setURL(`https://www.roblox.com/games/${placeId}`)
             .setDescription(
-              `# 🎮 ${gameName}\n` +
               `Developer / Creator: **${creatorName}**\n` +
               `Place ID: \`${placeId}\` | Universe ID: \`${universeId}\`\n\n` +
-              "───────────────────────────────\n\n" +
-              "## 🟢 Pemain & Performa\n" +
+              "**🟢 Pemain & Performa**\n" +
               `• \`Playing:\` **${playing.toLocaleString("id-ID")}** pemain\n` +
               `• \`Total Visits:\` **${visits.toLocaleString("id-ID")}**\n` +
               `• \`Favorites:\` **${favoritedCount.toLocaleString("id-ID")}**\n\n` +
-              "───────────────────────────────\n\n" +
-              "## 👍 Rating & Suara\n" +
+              "**👍 Rating & Suara**\n" +
               `• \`Likes:\` **${likes.toLocaleString("id-ID")}**\n` +
               `• \`Dislikes:\` **${dislikes.toLocaleString("id-ID")}**\n` +
               `• \`Like Ratio:\` **${likeRatio}**`
@@ -1977,10 +1960,8 @@ Format balasan:
           const embed = new EmbedBuilder()
             .setTitle(`📈 Server Aktif — Place ID ${placeId}`)
             .setDescription(
-              `# 📈 Server Aktif — Place ID ${placeId}\n` +
               "Salin link di bawah ini, lalu buka di browser/Windows Run (Win + R) untuk langsung bergabung ke server:\n\n" +
-              "───────────────────────────────\n\n" +
-              "## 🖥️ List Server Aktif\n\n" +
+              "**🖥️ List Server Aktif**\n\n" +
               serversList.map(srv =>
                 `• \`Server #${srv.num}:\` (${srv.playing}/${srv.max} Players | FPS: ${srv.fps} | Ping: ${srv.ping})\n` +
                 `\`\`\`text\n${srv.joinUrl}\n\`\`\``
@@ -2019,38 +2000,40 @@ Format balasan:
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-          const embedRules = new EmbedBuilder()
-            .setTitle("📖 LeonX Hub - Server Rules & Guidelines")
-            .setDescription(
-              "# 📖 LeonX Hub - Server Rules & Guidelines\n" +
+          const v2Rules = buildV2Container({
+            title: "📖 LeonX Hub - Server Rules & Guidelines",
+            description:
               "> ✨ **Selamat datang di server resmi LeonX Hub.** Server ini adalah wadah diskusi, pembaruan script, laporan bug, serta layanan bantuan bagi seluruh pengguna LeonX Hub.\n" +
-              "> Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama.\n\n" +
-              "───────────────────────────────\n\n" +
-              "## 📜 ATURAN UTAMA SERVER\n" +
-              "Dengan bergabung di server ini, Anda dianggap telah membaca dan menyetujui seluruh ketentuan di bawah ini:\n\n" +
-              "🚫 **1. Larangan Keras Crack, Leak, & Bypass**\n" +
-              "Dilarang keras mencoba melakukan cracking/dekripsi loader, membagikan/leaking script LeonX ke luar server, atau menggunakan bypass ilegal. Pelanggaran berat ini akan berakibat pada **Blacklist HWID + Roblox ID + Discord ID secara permanen** dari seluruh layanan kami.\n\n" +
-              "🤝 **2. Saling Menghormati & Jaga Etika**\n" +
-              "Gunakan bahasa yang sopan. Dilarang melakukan cyberbullying, harassment, memicu drama/debat kusir, toxic berlebih, SARA, atau mengirim konten NSFW/pornografi.\n\n" +
-              "🛡️ **3. Saluran Chat Sesuai Fungsi**\n" +
-              "Gunakan channel sesuai dengan tujuannya. Jangan melakukan spam chat, spam tag staf/developer tanpa alasan mendesak, atau membagikan iklan/link promosi server lain (Anti-Link aktif).\n\n" +
-              "🎫 **4. Penggunaan Sistem Ticket & Bug Report**\n" +
-              "Buka ticket support hanya untuk masalah teknis/transaksi yang mendesak. Kirim laporan bug nyata via `/bug-report`. Menyalahgunakan sistem tiket/laporan bug untuk spam atau bercanda akan dikenakan sanksi.\n\n" +
-              "🔒 **5. Keamanan Akun & Transaksi Resmi**\n" +
-              "Staf LeonX Hub **TIDAK PERNAH** meminta password akun Roblox atau token Discord Anda. Segala bentuk transaksi resmi hanya dilakukan melalui bot resmi atau langsung dengan Admin.\n\n" +
-              "───────────────────────────────\n\n" +
-              "## ⚖️ SISTEM SANKSI & KONSEKUENSI\n" +
-              "Moderator berhak mengambil keputusan mutlak berdasarkan pelanggaran yang Anda lakukan:\n" +
-              "• `/warn` - Pelanggaran Ringan: Peringatan tertulis (Warning) via database bot.\n" +
-              "• `/timeout` - Pelanggaran Sedang: Timeout (Mute otomatis) mulai dari 10 menit hingga 7 hari.\n" +
-              "• `/blacklist` - Pelanggaran Berat: Kick, Banned permanen dari Discord, serta Blacklist HWID & Roblox ID di server database game.\n\n" +
-              "───────────────────────────────\n\n" +
-              "> 📌 *Jika Anda belum terverifikasi, silakan selesaikan proses verifikasi dengan menekan tombol **Verify** di channel verifikasi.*"
-            )
-            .setFooter({ text: "LeonX Hub • Official Guidelines" })
-            .setTimestamp();
+              "> Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama.",
+            sections: [
+              {
+                title: "📜 ATURAN UTAMA SERVER",
+                content:
+                  "Dengan bergabung di server ini, Anda dianggap telah membaca dan menyetujui seluruh ketentuan di bawah ini:\n\n" +
+                  "🚫 **1. Larangan Keras Crack, Leak, & Bypass**\n" +
+                  "Dilarang keras mencoba melakukan cracking/dekripsi loader, membagikan/leaking script LeonX ke luar server, atau menggunakan bypass ilegal. Pelanggaran berat ini akan berakibat pada **Blacklist HWID + Roblox ID + Discord ID secara permanen** dari seluruh layanan kami.\n\n" +
+                  "🤝 **2. Saling Menghormati & Jaga Etika**\n" +
+                  "Gunakan bahasa yang sopan. Dilarang melakukan cyberbullying, harassment, memicu drama/debat kusir, toxic berlebih, SARA, atau mengirim konten NSFW/pornografi.\n\n" +
+                  "🛡️ **3. Saluran Chat Sesuai Fungsi**\n" +
+                  "Gunakan channel sesuai dengan tujuannya. Jangan melakukan spam chat, spam tag staf/developer tanpa alasan mendesak, atau membagikan iklan/link promosi server lain (Anti-Link aktif).\n\n" +
+                  "🎫 **4. Penggunaan Sistem Ticket & Bug Report**\n" +
+                  "Buka ticket support hanya untuk masalah teknis/transaksi yang mendesak. Kirim laporan bug nyata via `/bug-report`. Menyalahgunakan sistem tiket/laporan bug untuk spam atau bercanda akan dikenakan sanksi.\n\n" +
+                  "🔒 **5. Keamanan Akun & Transaksi Resmi**\n" +
+                  "Staf LeonX Hub **TIDAK PERNAH** meminta password akun Roblox atau token Discord Anda. Segala bentuk transaksi resmi hanya dilakukan melalui bot resmi atau langsung dengan Admin."
+              },
+              {
+                title: "⚖️ SISTEM SANKSI & KONSEKUENSI",
+                content:
+                  "Moderator berhak mengambil keputusan mutlak berdasarkan pelanggaran yang Anda lakukan:\n" +
+                  "• `/warn` - Pelanggaran Ringan: Peringatan tertulis (Warning) via database bot.\n" +
+                  "• `/timeout` - Pelanggaran Sedang: Timeout (Mute otomatis) mulai dari 10 menit hingga 7 hari.\n" +
+                  "• `/blacklist` - Pelanggaran Berat: Kick, Banned permanen dari Discord, serta Blacklist HWID & Roblox ID di server database game."
+              }
+            ],
+            footer: "LeonX Hub • Official Guidelines"
+          });
 
-          await (channel as TextChannel).send({ embeds: [embedRules] });
+          await (channel as TextChannel).send(v2Rules);
           await interaction.editReply({
             content: `✅ Sukses mengirimkan rules ke channel <#${channelId}>.`
           });
@@ -2155,10 +2138,8 @@ Format balasan:
             const embed = new EmbedBuilder()
               .setTitle("🔍 Game Update Monitoring List")
               .setDescription(
-                "# 🔍 Game Monitoring List\n" +
                 "Daftar game yang saat ini dipantau secara otomatis:\n\n" +
-                "───────────────────────────────\n\n" +
-                "## 🎮 Game Dipantau\n\n" +
+                "**🎮 Game Dipantau**\n\n" +
                 list.map((item, idx) =>
                   `• \`${idx + 1}. ${item.name}:\` Place ID: \`${item.place_id}\` | Update: \`${new Date(item.last_updated).toLocaleString("id-ID")}\``
                 ).join("\n")
@@ -2327,12 +2308,13 @@ Format balasan:
       db.prepare("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?")
         .run(interaction.user.id, interaction.channel.id);
 
-      const claimEmbed = new EmbedBuilder()
-        .setTitle("✋ Ticket Diklaim")
-        .setDescription(`<@${interaction.user.id}> telah mengklaim ticket ini dan akan segera membantu menyelesaikan masalah Anda.`)
-        .setTimestamp();
+      const v2Claim = buildV2Container({
+        title: "✋ Ticket Diklaim",
+        description: `<@${interaction.user.id}> telah mengklaim ticket ini dan akan segera membantu menyelesaikan masalah Anda.`,
+        footer: "LeonX Hub • Support System"
+      });
 
-      await interaction.reply({ embeds: [claimEmbed] });
+      await interaction.reply(v2Claim);
     }
 
     if (interaction.isButton() && interaction.customId === "ticket:close") {
@@ -2440,22 +2422,24 @@ Format balasan:
       if (config.LOG_CHANNEL_ID) {
         const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
-          const logEmbed = new EmbedBuilder()
-            .setTitle("📊 Log Rating Ticket Baru")
-            .setDescription(
-              `Ulasan baru diterima untuk Ticket **#${ticketData.id}**!\n\n` +
-              "---\n\n" +
-              "### 📜 Detail Ulasan\n" +
-              `• \`Ticket ID:\` **#${ticketData.id}**\n` +
-              `• \`Kategori:\` **${TICKET_CATEGORIES[ticketData.category as TicketCategory]?.label || ticketData.category}**\n` +
-              `• \`Rating:\` **${"⭐".repeat(rating)} (${rating}/5)**\n` +
-              `• \`Pembuat Ticket:\` <@${ticketData.user_id}>\n` +
-              `• \`Staff Claim:\` ${ticketData.claimed_by ? `<@${ticketData.claimed_by}>` : "Unclaimed"}`
-            )
-            .setFooter({ text: "LeonX Hub • Support Feedback" })
-            .setTimestamp();
+          const v2RatingLog = buildV2Container({
+            title: "📊 Log Rating Ticket Baru",
+            description: `Ulasan baru diterima untuk Ticket **#${ticketData.id}**!`,
+            sections: [
+              {
+                title: "📜 Detail Ulasan",
+                content:
+                  `• \`Ticket ID:\` **#${ticketData.id}**\n` +
+                  `• \`Kategori:\` **${TICKET_CATEGORIES[ticketData.category as TicketCategory]?.label || ticketData.category}**\n` +
+                  `• \`Rating:\` **${"⭐".repeat(rating)} (${rating}/5)**\n` +
+                  `• \`Pembuat Ticket:\` <@${ticketData.user_id}>\n` +
+                  `• \`Staff Claim:\` ${ticketData.claimed_by ? `<@${ticketData.claimed_by}>` : "Unclaimed"}`
+              }
+            ],
+            footer: "LeonX Hub • Support Feedback"
+          });
 
-          await logChannel.send({ embeds: [logEmbed] });
+          await logChannel.send(v2RatingLog);
         }
       }
 
@@ -2479,20 +2463,21 @@ Format balasan:
       const channel = config.BUG_REPORT_CHANNEL_ID
         ? await client.channels.fetch(config.BUG_REPORT_CHANNEL_ID).catch(() => null)
         : null;
-      const reportEmbed = new EmbedBuilder()
-        .setTitle(`🐛 Laporan Bug #${result.lastInsertRowid}: ${title}`)
-        .setDescription(
-          `# 🐛 Laporan Bug #${result.lastInsertRowid}\n` +
-          `Dilaporkan oleh: <@${interaction.user.id}> (\`${interaction.user.id}\`)\n\n` +
-          "───────────────────────────────\n\n" +
-          "## 📋 Deskripsi Masalah\n" +
-          `${description}\n\n` +
-          "───────────────────────────────\n\n" +
-          "## 🔄 Langkah Mengulang Bug\n" +
-          `${steps}`
-        )
-        .setFooter({ text: "LeonX Hub • Bug Report System" })
-        .setTimestamp();
+      const v2Report = buildV2Container({
+        title: `🐛 Laporan Bug #${result.lastInsertRowid}: ${title}`,
+        description: `Dilaporkan oleh: <@${interaction.user.id}> (\`${interaction.user.id}\`)`,
+        sections: [
+          {
+            title: "📋 Deskripsi Masalah",
+            content: description
+          },
+          {
+            title: "🔄 Langkah Mengulang Bug",
+            content: steps
+          }
+        ],
+        footer: "LeonX Hub • Bug Report System"
+      });
 
       let reportUrl: string | null = null;
       if (channel?.type === ChannelType.GuildForum) {
@@ -2502,13 +2487,13 @@ Format balasan:
             content:
               `Laporan dari <@${interaction.user.id}>\n` +
               "Silakan kirim screenshot atau video pendukung di bawah post ini.",
-            embeds: [reportEmbed]
+            ...v2Report
           },
           reason: `Bug report #${result.lastInsertRowid}`
         });
         reportUrl = thread.url;
       } else if (channel?.isSendable()) {
-        const message = await channel.send({ embeds: [reportEmbed] });
+        const message = await channel.send(v2Report);
         reportUrl = message.url;
       } else {
         throw new Error("BUG_REPORT_CHANNEL_ID bukan channel teks atau forum yang dapat digunakan.");
@@ -2641,17 +2626,19 @@ Tugas Anda:
     if (geminiResult.ok) {
       const finalReply = (geminiResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
 
-      const embed = new EmbedBuilder()
-        .setTitle("🤖 AI Support Assistant (Solusi Awal)")
-        .setDescription(
-          "# 🤖 AI Support Assistant\n" +
-          `${finalReply}\n\n` +
-          "───────────────────────────────\n\n" +
-          "> 📌 *Tim support manusia akan segera membantu secara langsung jika masalah belum teratasi.*"
-        )
-        .setFooter({ text: "LeonX Hub • AI Support Assistant" });
+      const v2Ai = buildV2Container({
+        title: "🤖 AI Support Assistant",
+        description: finalReply,
+        sections: [
+          {
+            title: "📌 Catatan",
+            content: "*Tim support manusia akan segera membantu secara langsung jika masalah belum teratasi.*"
+          }
+        ],
+        footer: "LeonX Hub • AI Support Assistant"
+      });
 
-      await message.reply({ embeds: [embed] });
+      await message.reply(v2Ai);
 
       // Update database agar tidak merespons lagi di tiket ini
       db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
@@ -2914,12 +2901,12 @@ Format balasan:
         if (config.LOG_CHANNEL_ID) {
           const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
           if (logChannel?.isSendable()) {
-            const embed = new EmbedBuilder()
-              .setTitle("🛡️ Auto Mod: Banned User")
-              .setDescription(`Pengguna <@${message.author.id}> di-ban otomatis karena menulis kata terlarang (selingkuh).`)
-              .setFooter({ text: "LeonX Hub • Auto Mod" })
-              .setTimestamp();
-            await logChannel.send({ embeds: [embed] });
+            const v2Log = buildV2Container({
+              title: "🛡️ Auto Mod: Banned User",
+              description: `Pengguna <@${message.author.id}> di-ban otomatis karena menulis kata terlarang (selingkuh).`,
+              footer: "LeonX Hub • Auto Mod"
+            });
+            await logChannel.send(v2Log);
           }
         }
     } catch (err) {
@@ -2957,12 +2944,12 @@ Format balasan:
       if (config.LOG_CHANNEL_ID) {
         const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
-          const embed = new EmbedBuilder()
-            .setTitle("🛡️ Auto Mod: Link Terblokir")
-            .setDescription(`Pesan dari <@${message.author.id}> otomatis dihapus karena mengandung link invite server lain.\nChannel: <#${message.channel.id}>`)
-            .setFooter({ text: "LeonX Hub • Auto Mod" })
-            .setTimestamp();
-          await logChannel.send({ embeds: [embed] });
+          const v2Log = buildV2Container({
+            title: "🛡️ Auto Mod: Link Terblokir",
+            description: `Pesan dari <@${message.author.id}> otomatis dihapus karena mengandung link invite server lain.\nChannel: <#${message.channel.id}>`,
+            footer: "LeonX Hub • Auto Mod"
+          });
+          await logChannel.send(v2Log);
         }
       }
     } catch (err) {
@@ -3023,12 +3010,12 @@ Format balasan:
         if (config.LOG_CHANNEL_ID) {
           const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
           if (logChannel?.isSendable()) {
-            const embed = new EmbedBuilder()
-              .setTitle("🛡️ Auto Mod: Timeout User")
-              .setDescription(`Pengguna <@${message.author.id}> otomatis di-timeout selama 10 menit karena spamming berlebih.`)
-              .setFooter({ text: "LeonX Hub • Auto Mod" })
-              .setTimestamp();
-            await logChannel.send({ embeds: [embed] });
+            const v2Log = buildV2Container({
+              title: "🛡️ Auto Mod: Timeout User",
+              description: `Pengguna <@${message.author.id}> otomatis di-timeout selama 10 menit karena spamming berlebih.`,
+              footer: "LeonX Hub • Auto Mod"
+            });
+            await logChannel.send(v2Log);
           }
         }
       }
@@ -3159,21 +3146,23 @@ http.createServer(async (req, res) => {
       try {
         const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
         if (logChannel?.isSendable()) {
-          const logEmbed = new EmbedBuilder()
-            .setTitle("📊 In-Game Script Executed!")
-            .setDescription(
-              `Script loader baru saja dieksekusi di dalam game Roblox!\n\n` +
-              "---\n\n" +
-              "### 🎮 Detail Eksekusi\n" +
-              `• \`Discord User:\` ${result.discordId ? `<@${result.discordId}>` : "Unknown"}\n` +
-              `• \`Roblox User:\` [${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)\n` +
-              `• \`Place ID:\` [${placeId}](https://www.roblox.com/games/${placeId})\n` +
-              `• \`Executor:\` \`${executor}\`\n` +
-              `• \`Perangkat (HWID):\` \`${hwid || "N/A"}\``
-            )
-            .setFooter({ text: "LeonX Hub • Execution Log" })
-            .setTimestamp();
-          await logChannel.send({ embeds: [logEmbed] });
+          const v2ExecLog = buildV2Container({
+            title: "📊 In-Game Script Executed!",
+            description: `Script loader baru saja dieksekusi di dalam game Roblox!`,
+            sections: [
+              {
+                title: "🎮 Detail Eksekusi",
+                content:
+                  `• \`Discord User:\` ${result.discordId ? `<@${result.discordId}>` : "Unknown"}\n` +
+                  `• \`Roblox User:\` [${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)\n` +
+                  `• \`Place ID:\` [${placeId}](https://www.roblox.com/games/${placeId})\n` +
+                  `• \`Executor:\` \`${executor}\`\n` +
+                  `• \`Perangkat (HWID):\` \`${hwid || "N/A"}\``
+              }
+            ],
+            footer: "LeonX Hub • Execution Log"
+          });
+          await logChannel.send(v2ExecLog);
         }
       } catch (logErr) {
         console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
@@ -3525,27 +3514,26 @@ client.on(Events.GuildMemberAdd, async (member) => {
       await member.ban({ reason: `[Auto-Ban] Akun terlalu baru (${accountAgeDays} hari). Minimal 30 hari.` });
 
       // Kirim log ke channel
-      const logEmbed = new EmbedBuilder()
-        .setTitle("⛔ Auto-Ban: Akun Terlalu Baru")
-        .setDescription(
+      const v2BanLog = buildV2Container({
+        title: "⛔ Auto-Ban: Akun Terlalu Baru",
+        thumbnailUrl: member.user.displayAvatarURL({ size: 256 }),
+        description:
           `Pengguna <@${member.user.id}> (\`${member.user.id}\`) otomatis di-ban demi keamanan server.\n\n` +
           `• **Umur Akun:** ${accountAgeDays} hari\n` +
-          `• **Tanggal Dibuat:** <t:${createdUnix}:F> (<t:${createdUnix}:R>)`
-        )
-        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-        .setFooter({ text: "LeonX Hub • Anti-Raid Protection" })
-        .setTimestamp();
+          `• **Tanggal Dibuat:** <t:${createdUnix}:F> (<t:${createdUnix}:R>)`,
+        footer: "LeonX Hub • Anti-Raid Protection"
+      });
 
       if (config.LOG_CHANNEL_ID) {
         const logChannel = await member.guild.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
-          await logChannel.send({ embeds: [logEmbed] });
+          await logChannel.send(v2BanLog);
         }
       }
 
       const welcomeChannel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
       if (welcomeChannel?.isSendable()) {
-        await welcomeChannel.send({ embeds: [logEmbed] });
+        await welcomeChannel.send(v2BanLog);
       }
 
       return; // Jangan kirim welcome message
@@ -3554,23 +3542,18 @@ client.on(Events.GuildMemberAdd, async (member) => {
     console.error("[Anti-Raid] Gagal memproses auto-ban akun baru:", banError);
   }
 
-  // ── Welcome message ──
+  // ── Welcome message (canvas card) ──
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
-      const embed = new EmbedBuilder()
-        .setTitle("✨ Selamat Datang di LeonX Hub!")
-        .setDescription(
-          `Halo <@${member.id}>, selamat datang di **${member.guild.name}**!\n\n` +
-          "---\n\n" +
-          "### 📋 Langkah Awal Member Baru\n" +
-          `• \`1.\` Selesaikan verifikasi di channel <#${config.VERIFY_CHANNEL_ID}>\n` +
-          `• \`2.\` Baca peraturan server di channel rules\n` +
-          `• \`3.\` Gunakan \`/script\` untuk mendapatkan loader script Anda.`
-        )
-        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-        .setFooter({ text: `Member #${member.guild.memberCount}` })
-        .setTimestamp();
+      const welcomeBuf = await renderWelcomeCard({
+        username: member.user.username,
+        avatarUrl: member.user.displayAvatarURL({ size: 256 }),
+        guildName: member.guild.name,
+        memberCount: member.guild.memberCount,
+        verifyChannelId: config.VERIFY_CHANNEL_ID
+      });
+      const { embed, attachment } = cardEmbed(welcomeBuf, undefined, "welcome.png");
 
       const verifyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -3580,7 +3563,12 @@ client.on(Events.GuildMemberAdd, async (member) => {
           .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.VERIFY_CHANNEL_ID}`)
       );
 
-      await channel.send({ content: `Selamat datang <@${member.id}>!`, embeds: [embed], components: [verifyRow] });
+      await channel.send({
+        content: `Selamat datang <@${member.id}>!`,
+        embeds: [embed],
+        files: [attachment],
+        components: [verifyRow]
+      });
     }
   } catch (error) {
     console.error("Gagal mengirim pesan selamat datang:", error);
@@ -3592,18 +3580,15 @@ client.on(Events.GuildMemberRemove, async (member) => {
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
-      const embed = new EmbedBuilder()
-        .setTitle("👋 Member Meninggalkan Server")
-        .setDescription(
-          `**${member.user.tag}** telah meninggalkan server.\n\n` +
-          "---\n\n" +
-          `Terima kasih sudah pernah menjadi bagian dari **${member.guild.name}**!`
-        )
-        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-        .setFooter({ text: `Member #${member.guild.memberCount}` })
-        .setTimestamp();
+      const goodbyeBuf = await renderGoodbyeCard({
+        userTag: member.user.tag,
+        avatarUrl: member.user.displayAvatarURL({ size: 256 }),
+        guildName: member.guild.name,
+        memberCount: member.guild.memberCount
+      });
+      const { embed, attachment } = cardEmbed(goodbyeBuf, undefined, "goodbye.png");
 
-      await channel.send({ embeds: [embed] });
+      await channel.send({ embeds: [embed], files: [attachment] });
     }
   } catch (error) {
     console.error("Gagal mengirim pesan selamat tinggal:", error);
