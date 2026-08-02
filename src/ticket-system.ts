@@ -36,15 +36,19 @@ export type TicketCategory = keyof typeof TICKET_CATEGORIES;
 
 export function createTicketPanel() {
   const embed = new EmbedBuilder()
-    .setColor(0x7c3aed) // Vibrant Purple
+    .setColor(0x2b2d31)
     .setTitle("🎫 Support Ticket System")
     .setDescription(
-      "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai di bawah ini.\n\n" +
-      "**Kategori yang tersedia:**\n" +
-      Object.entries(TICKET_CATEGORIES)
-        .map(([_, cat]) => `${cat.emoji} **${cat.label.split(" ").slice(1).join(" ")}**\n└ *${cat.description}*`)
-        .join("\n\n") +
-      "\n\n> 📌 **Catatan:**\n" +
+      "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai pada menu dropdown di bawah ini.\n\n" +
+      "---\n\n" +
+      "### 🏷️ Kategori Support Tersedia\n\n" +
+      "• `/bug` - Laporkan bug atau error pada script\n" +
+      "• `/script` - Masalah terkait script atau loader\n" +
+      "• `/general` - Pertanyaan umum atau bantuan lainnya\n" +
+      "• `/premium` - Bantuan khusus untuk member premium\n" +
+      "• `/report` - Laporkan user yang melanggar peraturan\n\n" +
+      "---\n\n" +
+      "> 📌 **Catatan:**\n" +
       "> • Satu user hanya bisa memiliki **1 ticket aktif** pada satu waktu.\n" +
       "> • Tim support akan merespons dalam 1-24 jam.\n" +
       "> • Mohon jelaskan masalah Anda secara detail."
@@ -96,17 +100,19 @@ export async function createTicketChannel(
   });
 
   const welcomeEmbed = new EmbedBuilder()
-    .setColor(0x7c3aed)
+    .setColor(0x2b2d31)
     .setTitle(`${categoryInfo.emoji} ${categoryInfo.label}`)
     .setDescription(
       `Halo <@${user.id}>, terima kasih sudah membuka ticket!\n\n` +
-      `• **Kategori:** ${categoryInfo.label}\n` +
-      `• **Status:** 🟢 Open\n\n` +
-      "Silakan jelaskan masalah Anda secara detail di bawah. Tim support kami akan segera membantu.\n\n" +
-      "> 💡 **Tips Bantuan:**\n" +
-      "> • Sertakan screenshot/video jika ada masalah teknis\n" +
-      "> • Jelaskan langkah-langkah yang sudah Anda coba\n" +
-      "> • Sebutkan versi script atau executor yang digunakan"
+      `• \`Kategori:\` **${categoryInfo.label}**\n` +
+      `• \`Status:\` 🟢 **Open**\n\n` +
+      "---\n\n" +
+      "### 💡 Tips Bantuan Troubleshooting\n" +
+      "• `/screenshot` - Sertakan gambar/video jika ada masalah teknis\n" +
+      "• `/langkah` - Jelaskan kronologi atau langkah yang sudah dicoba\n" +
+      "• `/executor` - Sebutkan nama executor & versi script yang dipakai\n\n" +
+      "---\n\n" +
+      "Tim support akan segera merespons pesan Anda."
     )
     .setFooter({ text: `Ticket ID: #${channel.id.slice(-6)}` })
     .setTimestamp();
@@ -412,15 +418,18 @@ export async function closeTicket(
   ).run(reason || "Closed by staff", channel.id);
 
   const closeEmbed = new EmbedBuilder()
-    .setColor(0xef4444)
-    .setTitle("🔒 Ticket Ditutup")
+    .setColor(0x2b2d31)
+    .setTitle("🔒 Ticket Status - Ditutup")
     .setDescription(
       `Ticket ini telah ditutup oleh <@${closedBy.id}>\n\n` +
-      `• **Alasan:** ${reason || "Tidak ada alasan"}\n\n` +
-      "Transcript telah disimpan dan dikirim via DM.\n" +
-      "Pembuat ticket dapat memberikan rating sebelum channel dihapus."
+      "---\n\n" +
+      "### 📋 Detail Penutupan\n" +
+      `• \`Ditutup Oleh:\` <@${closedBy.id}>\n` +
+      `• \`Alasan:\` **${reason || "Tidak ada alasan"}**\n\n` +
+      "---\n\n" +
+      "> 📌 *Transcript telah disimpan dan dikirimkan via DM. Pembuat ticket dapat memberikan rating di bawah ini.*"
     )
-    .setFooter({ text: "Terima kasih sudah menggunakan support system kami!" })
+    .setFooter({ text: "LeonX Hub • Support System" })
     .setTimestamp();
 
   await channel.send({
