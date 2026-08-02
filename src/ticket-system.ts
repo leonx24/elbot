@@ -18,9 +18,9 @@ import { db } from "./database.js";
 import { config } from "./config.js";
 import { renderTicketPanelCard, renderTicketWelcomeCard, renderTicketCloseCard } from "./canvas-cards.js";
 
-function cardEmbed(buffer: Buffer, color: number = 0xffffff, filename = "card.png") {
+function cardEmbed(buffer: Buffer, color?: number, filename = "card.png") {
   const attachment = new AttachmentBuilder(buffer, { name: filename });
-  const embed = new EmbedBuilder().setImage(`attachment://${filename}`).setColor(color);
+  const embed = new EmbedBuilder().setImage(`attachment://${filename}`);
   return { embed, attachment };
 }
 
@@ -36,7 +36,6 @@ export type TicketCategory = keyof typeof TICKET_CATEGORIES;
 
 export function createTicketPanel() {
   const embed = new EmbedBuilder()
-    .setColor(0xffffff)
     .setTitle("🎫 Support Ticket System")
     .setDescription(
       "# 🎫 Support Ticket System\n" +
@@ -101,7 +100,6 @@ export async function createTicketChannel(
   });
 
   const welcomeEmbed = new EmbedBuilder()
-    .setColor(0xffffff)
     .setTitle(`${categoryInfo.emoji} ${categoryInfo.label}`)
     .setDescription(
       `# ${categoryInfo.emoji} ${categoryInfo.label}\n` +
@@ -420,7 +418,6 @@ export async function closeTicket(
   ).run(reason || "Closed by staff", channel.id);
 
   const closeEmbed = new EmbedBuilder()
-    .setColor(0xffffff)
     .setTitle("🔒 Ticket Status - Ditutup")
     .setDescription(
       "# 🔒 Ticket Status - Ditutup\n" +
