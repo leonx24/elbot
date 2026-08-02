@@ -3542,7 +3542,15 @@ client.on(Events.GuildMemberAdd, async (member) => {
         .setFooter({ text: `Member #${member.guild.memberCount}` })
         .setTimestamp();
 
-      await channel.send({ content: `Selamat datang <@${member.id}>!`, embeds: [embed] });
+      const verifyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel("Verifikasi Akun")
+          .setEmoji("✅")
+          .setStyle(ButtonStyle.Link)
+          .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.VERIFY_CHANNEL_ID}`)
+      );
+
+      await channel.send({ content: `Selamat datang <@${member.id}>!`, embeds: [embed], components: [verifyRow] });
     }
   } catch (error) {
     console.error("Gagal mengirim pesan selamat datang:", error);
