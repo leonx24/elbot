@@ -15,50 +15,60 @@ try {
 }
 
 // ──────────────────────────────────────────────────────
-//  Design System
+//  Design System Tokens (Crisp, Elegant & Ultra-Clear)
 // ──────────────────────────────────────────────────────
 const COLORS = {
-  primary: "#7c3aed",
-  primaryLight: "#a78bfa",
-  secondary: "#2563eb",
-  secondaryLight: "#60a5fa",
+  primary: "#a855f7",
+  primaryLight: "#d8b4fe",
+  secondary: "#38bdf8",
+  secondaryLight: "#7dd3fc",
   success: "#22c55e",
   successLight: "#4ade80",
-  warning: "#eab308",
-  warningLight: "#facc15",
+  warning: "#facc15",
+  warningLight: "#fef08a",
   danger: "#ef4444",
-  dangerLight: "#f87171",
+  dangerLight: "#fca5a5",
   info: "#06b6d4",
 
-  bgDark: "#0f0d1a",
-  bgMid: "#1a1333",
-  bgCard: "rgba(255,255,255,0.04)",
-  bgCardBorder: "rgba(255,255,255,0.08)",
+  bgDark: "#090714",
+  bgMid: "#161128",
+  bgCard: "rgba(30, 25, 55, 0.72)",
+  bgCardBorder: "rgba(255, 255, 255, 0.16)",
 
-  textPrimary: "#f2f3f5",
-  textSecondary: "#949ba4",
-  textMuted: "#6b7280",
-  textAccent: "#a78bfa",
+  textPrimary: "#ffffff",
+  textSecondary: "#cbd5e1",
+  textMuted: "#94a3b8",
+  textAccent: "#c084fc",
 
   white: "#ffffff",
   black: "#000000",
 } as const;
 
-const CARD_WIDTH = 800;
-const CARD_PADDING = 36;
-const TITLE_FONT_SIZE = 24;
-const SUBTITLE_FONT_SIZE = 16;
-const BODY_FONT_SIZE = 15;
-const SMALL_FONT_SIZE = 12;
-const FIELD_LABEL_SIZE = 13;
-const FIELD_VALUE_SIZE = 15;
-const LINE_HEIGHT = 1.45;
-const CARD_RADIUS = 16;
-const INNER_CARD_RADIUS = 12;
+const CARD_WIDTH = 960;
+const CARD_PADDING = 40;
+const TITLE_FONT_SIZE = 28;
+const SUBTITLE_FONT_SIZE = 22;
+const BODY_FONT_SIZE = 18;
+const SMALL_FONT_SIZE = 15;
+const FIELD_LABEL_SIZE = 16;
+const FIELD_VALUE_SIZE = 18;
+const LINE_HEIGHT = 1.5;
+const CARD_RADIUS = 18;
+const INNER_CARD_RADIUS = 14;
 
 // ──────────────────────────────────────────────────────
-//  Helper: Drawing Primitives
+//  Helper: Drawing Primitives & Typography
 // ──────────────────────────────────────────────────────
+
+function getFontString(fontSize: number, fontWeight = ""): string {
+  const fw = fontWeight.toLowerCase();
+  let weight = "";
+  if (fw === "bold") weight = "bold ";
+  else if (fw === "semibold") weight = "600 ";
+  else if (fw === "medium") weight = "500 ";
+
+  return `${weight}${fontSize}px Inter, sans-serif`;
+}
 
 function drawRoundedRect(
   ctx: SKRSContext2D,
@@ -90,79 +100,66 @@ function fillGradientBackground(
   ctx.fill();
 }
 
-function drawOuterBorder(ctx: SKRSContext2D, w: number, h: number) {
-  ctx.strokeStyle = COLORS.bgCardBorder;
-  ctx.lineWidth = 1.5;
-  drawRoundedRect(ctx, 0.75, 0.75, w - 1.5, h - 1.5, CARD_RADIUS);
+function drawOuterBorder(ctx: SKRSContext2D, w: number, h: number, color: string = COLORS.bgCardBorder) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  drawRoundedRect(ctx, 1, 1, w - 2, h - 2, CARD_RADIUS);
   ctx.stroke();
 }
 
 function drawAccentBar(
   ctx: SKRSContext2D,
   y: number, w: number,
-  color: string, barHeight = 4
+  color: string, barHeight = 5
 ) {
   const grad = ctx.createLinearGradient(CARD_PADDING, y, w - CARD_PADDING, y);
   grad.addColorStop(0, color);
-  grad.addColorStop(1, color + "33");
+  grad.addColorStop(1, color + "44");
   ctx.fillStyle = grad;
-  drawRoundedRect(ctx, CARD_PADDING, y, w - CARD_PADDING * 2, barHeight, 2);
+  drawRoundedRect(ctx, CARD_PADDING, y, w - CARD_PADDING * 2, barHeight, 3);
   ctx.fill();
 }
 
 function drawInnerCard(
   ctx: SKRSContext2D,
-  x: number, y: number, w: number, h: number
+  x: number, y: number, w: number, h: number,
+  borderColor: string = COLORS.bgCardBorder
 ) {
-  // Fill
   ctx.fillStyle = COLORS.bgCard;
   drawRoundedRect(ctx, x, y, w, h, INNER_CARD_RADIUS);
   ctx.fill();
-  // Border
-  ctx.strokeStyle = COLORS.bgCardBorder;
-  ctx.lineWidth = 1;
+
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1.5;
   drawRoundedRect(ctx, x, y, w, h, INNER_CARD_RADIUS);
   ctx.stroke();
 }
 
 function drawDivider(ctx: SKRSContext2D, y: number, w: number) {
-  const grad = ctx.createLinearGradient(CARD_PADDING + 10, y, w - CARD_PADDING - 10, y);
+  const grad = ctx.createLinearGradient(CARD_PADDING, y, w - CARD_PADDING, y);
   grad.addColorStop(0, "transparent");
   grad.addColorStop(0.2, COLORS.bgCardBorder);
   grad.addColorStop(0.8, COLORS.bgCardBorder);
   grad.addColorStop(1, "transparent");
   ctx.strokeStyle = grad;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(CARD_PADDING + 10, y);
-  ctx.lineTo(w - CARD_PADDING - 10, y);
+  ctx.moveTo(CARD_PADDING, y);
+  ctx.lineTo(w - CARD_PADDING, y);
   ctx.stroke();
 }
 
-function getFontString(fontSize: number, fontWeight = ""): string {
-  const fw = fontWeight.toLowerCase();
-  let weight = "";
-  if (fw === "bold") weight = "bold ";
-  else if (fw === "semibold") weight = "600 ";
-  else if (fw === "medium") weight = "500 ";
-
-  return `${weight}${fontSize}px Inter, sans-serif`;
-}
-
-function drawGlowText(
+function drawTitleText(
   ctx: SKRSContext2D,
   text: string,
   x: number, y: number,
   color: string,
-  fontSize: number,
+  fontSize: number = TITLE_FONT_SIZE,
   fontWeight = "Bold"
 ) {
   ctx.font = getFontString(fontSize, fontWeight);
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 12;
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
-  ctx.shadowBlur = 0;
 }
 
 function drawText(
@@ -204,8 +201,8 @@ function drawFieldRow(
   valueColor = COLORS.textPrimary
 ) {
   drawText(ctx, label, x, y, { color: labelColor, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, value, x, y + 18, { color: valueColor, fontSize: FIELD_VALUE_SIZE });
-  return y + 42;
+  drawText(ctx, value, x, y + 22, { color: valueColor, fontSize: FIELD_VALUE_SIZE, fontWeight: "Bold" });
+  return y + 50;
 }
 
 function drawFieldRowInline(
@@ -217,8 +214,8 @@ function drawFieldRowInline(
 ) {
   drawText(ctx, label, x, y, { color: labelColor, fontSize: FIELD_LABEL_SIZE, fontWeight: "Medium" });
   const labelWidth = ctx.measureText(label).width;
-  drawText(ctx, value, x + labelWidth + 10, y, { color: valueColor, fontSize: FIELD_LABEL_SIZE + 1 });
-  return y + 22;
+  drawText(ctx, value, x + labelWidth + 12, y, { color: valueColor, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "SemiBold" });
+  return y + 26;
 }
 
 function drawStatusBadge(
@@ -226,51 +223,29 @@ function drawStatusBadge(
   text: string, x: number, y: number,
   color: string
 ) {
-  ctx.font = getFontString(SMALL_FONT_SIZE, "SemiBold");
+  ctx.font = getFontString(SMALL_FONT_SIZE, "Bold");
   const textWidth = ctx.measureText(text).width;
-  const badgeW = textWidth + 24;
-  const badgeH = 22;
+  const badgeW = textWidth + 28;
+  const badgeH = 26;
 
-  // Badge background
-  ctx.fillStyle = color + "22";
-  drawRoundedRect(ctx, x, y, badgeW, badgeH, 6);
+  ctx.fillStyle = color + "25";
+  drawRoundedRect(ctx, x, y, badgeW, badgeH, 8);
   ctx.fill();
-  ctx.strokeStyle = color + "66";
-  ctx.lineWidth = 1;
-  drawRoundedRect(ctx, x, y, badgeW, badgeH, 6);
+
+  ctx.strokeStyle = color + "88";
+  ctx.lineWidth = 1.5;
+  drawRoundedRect(ctx, x, y, badgeW, badgeH, 8);
   ctx.stroke();
 
-  // Dot
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(x + 10, y + badgeH / 2, 3, 0, Math.PI * 2);
+  ctx.arc(x + 12, y + badgeH / 2, 4, 0, Math.PI * 2);
   ctx.fill();
 
-  // Text
   ctx.fillStyle = color;
-  ctx.fillText(text, x + 18, y + badgeH / 2 + 4);
+  ctx.fillText(text, x + 22, y + badgeH / 2 + 5);
 
   return badgeW;
-}
-
-function drawProgressBar(
-  ctx: SKRSContext2D,
-  x: number, y: number, w: number, h: number,
-  progress: number,
-  color: string
-) {
-  // Background
-  ctx.fillStyle = COLORS.bgCard;
-  drawRoundedRect(ctx, x, y, w, h, h / 2);
-  ctx.fill();
-  // Fill
-  const fillW = Math.max(h, w * Math.min(1, progress));
-  const grad = ctx.createLinearGradient(x, y, x + fillW, y);
-  grad.addColorStop(0, color);
-  grad.addColorStop(1, color + "88");
-  ctx.fillStyle = grad;
-  drawRoundedRect(ctx, x, y, fillW, h, h / 2);
-  ctx.fill();
 }
 
 function wrapText(
@@ -314,14 +289,12 @@ async function drawCircularAvatar(
     ctx.drawImage(img, x, y, size, size);
     ctx.restore();
 
-    // Border
-    ctx.strokeStyle = COLORS.bgCardBorder;
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = COLORS.primaryLight;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
     ctx.stroke();
   } catch {
-    // Draw placeholder circle
     ctx.fillStyle = COLORS.bgCard;
     ctx.beginPath();
     ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
@@ -329,7 +302,7 @@ async function drawCircularAvatar(
     ctx.strokeStyle = COLORS.bgCardBorder;
     ctx.lineWidth = 2;
     ctx.stroke();
-    drawText(ctx, "?", x + size / 2 - 6, y + size / 2 + 6, { fontSize: 20, color: COLORS.textSecondary });
+    drawText(ctx, "👤", x + size / 2 - 10, y + size / 2 + 8, { fontSize: 24 });
   }
 }
 
@@ -357,24 +330,24 @@ async function finalizeCard(canvas: Canvas): Promise<Buffer> {
 // ──────────────────────────────────────────────────────
 
 export async function renderVerifyCard(): Promise<Buffer> {
-  const H = 220;
+  const H = 240;
   const { canvas, ctx } = createBaseCanvas(H);
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#161b22");
-  drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.success);
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#07120a", "#0f2316");
+  drawOuterBorder(ctx, CARD_WIDTH, H, "rgba(34, 197, 94, 0.4)");
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.success);
 
-  drawGlowText(ctx, "✅  Verifikasi Member", CARD_PADDING, 60, COLORS.success, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "✅  Verifikasi Member", CARD_PADDING, 68, COLORS.successLight, TITLE_FONT_SIZE);
 
-  const desc = "Klik tombol Verify di bawah untuk menyetujui peraturan dan mendapatkan akses ke server.";
+  const desc = "Klik tombol Verify di bawah untuk menyetujui peraturan dan mendapatkan akses penuh ke seluruh channel server.";
   const lines = wrapText(ctx, desc, CARD_WIDTH - CARD_PADDING * 2, BODY_FONT_SIZE);
-  let ty = 90;
+  let ty = 104;
   for (const line of lines) {
     drawText(ctx, line, CARD_PADDING, ty, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
     ty += Math.round(BODY_FONT_SIZE * LINE_HEIGHT);
   }
 
-  drawDivider(ctx, H - 50, CARD_WIDTH);
-  drawFooter(ctx, "LeonX Hub  •  Verification System", H - 26, CARD_WIDTH);
+  drawDivider(ctx, H - 54, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Verification System", H - 24, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -383,7 +356,7 @@ export async function renderStatusCard(data: {
   status: string;
   note: string;
 }): Promise<Buffer> {
-  const H = 240;
+  const H = 260;
   const { canvas, ctx } = createBaseCanvas(H);
 
   const isOp = data.status === "operational";
@@ -392,29 +365,27 @@ export async function renderStatusCard(data: {
   const statusText = isOp ? "Operational" : isTest ? "Testing / Updating" : "Maintenance / Patched";
   const statusIcon = isOp ? "🟢" : isTest ? "🟡" : "🔴";
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#161b22");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#090714", "#161128");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, accentColor);
+  drawAccentBar(ctx, 20, CARD_WIDTH, accentColor);
 
-  drawGlowText(ctx, "📊  Status Script", CARD_PADDING, 60, COLORS.textPrimary, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "📊  Status Script & Bot", CARD_PADDING, 68, COLORS.textPrimary, TITLE_FONT_SIZE);
 
-  // Status fields
   const innerX = CARD_PADDING;
-  const innerY = 80;
+  const innerY = 90;
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, innerX, innerY, innerW, 80);
+  drawInnerCard(ctx, innerX, innerY, innerW, 88);
 
-  drawText(ctx, "LeonX Hub", innerX + 16, innerY + 28, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawStatusBadge(ctx, `${statusIcon} ${statusText}`, innerX + 16, innerY + 38, accentColor);
+  drawText(ctx, "LeonX Hub Script", innerX + 20, innerY + 30, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
+  drawStatusBadge(ctx, `${statusIcon} ${statusText}`, innerX + 20, innerY + 44, accentColor);
 
-  drawText(ctx, "Bot", innerX + innerW / 2, innerY + 28, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawStatusBadge(ctx, "🟢 Online", innerX + innerW / 2, innerY + 38, COLORS.success);
+  drawText(ctx, "Bot Discord", innerX + innerW / 2 + 20, innerY + 30, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
+  drawStatusBadge(ctx, "🟢 Online", innerX + innerW / 2 + 20, innerY + 44, COLORS.success);
 
-  // Note
-  drawText(ctx, "Catatan:", CARD_PADDING, H - 60, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
+  drawText(ctx, "Catatan:", CARD_PADDING, H - 64, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
   drawText(ctx, data.note, CARD_PADDING, H - 42, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, maxWidth: CARD_WIDTH - CARD_PADDING * 2 });
 
-  drawFooter(ctx, "LeonX Hub  •  Status Monitor", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Status Monitor", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -428,60 +399,56 @@ export async function renderKeyInfoCard(data: {
   createdAt: string;
   history: Array<{ date: string; placeId: string; executor: string; robloxName: string }>;
 }): Promise<Buffer> {
-  const historyHeight = data.history.length * 28 + 20;
-  const H = 330 + historyHeight;
+  const historyHeight = data.history.length * 32 + 24;
+  const H = 370 + (data.history.length > 0 ? historyHeight : 0);
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#1a0d2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#090714", "#180e2e");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.primary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.primary);
 
-  drawGlowText(ctx, "🔑  Informasi Key & Lisensi Anda", CARD_PADDING, 60, COLORS.primaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "🔑  Informasi Key & Lisensi Anda", CARD_PADDING, 68, COLORS.primaryLight, TITLE_FONT_SIZE);
 
-  // Key fields
   const innerX = CARD_PADDING;
-  let curY = 80;
+  let curY = 92;
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
 
-  drawInnerCard(ctx, innerX, curY, innerW, 170);
-  const fx = innerX + 18;
-  curY += 10;
-  curY = drawFieldRow(ctx, "🔑  KEY LISENSI", data.key, fx, curY + 14);
+  drawInnerCard(ctx, innerX, curY, innerW, 190);
+  const fx = innerX + 20;
+  curY += 12;
+  curY = drawFieldRow(ctx, "🔑  KEY LISENSI", data.key, fx, curY + 16);
   curY = drawFieldRow(ctx, "👤  AKUN ROBLOX", data.robloxId || "Belum tertaut", fx, curY);
   curY = drawFieldRow(ctx, "💻  PERANGKAT (HWID)", data.hwid || "Belum tertaut", fx, curY);
 
-  // Inline stats row
-  curY += 6;
+  curY += 8;
   const statsY = curY;
-  drawInnerCard(ctx, innerX, statsY, innerW, 46);
+  drawInnerCard(ctx, innerX, statsY, innerW, 54);
   const third = innerW / 3;
-  drawText(ctx, "🔄 Reset", fx, statsY + 18, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE });
-  drawText(ctx, data.cooldownText, fx, statsY + 34, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "SemiBold" });
+  drawText(ctx, "🔄 Reset HWID", fx, statsY + 20, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE });
+  drawText(ctx, data.cooldownText, fx, statsY + 40, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "Bold" });
 
-  drawText(ctx, "📊 Eksekusi", fx + third, statsY + 18, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE });
-  drawText(ctx, `${data.totalExec} kali`, fx + third, statsY + 34, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "SemiBold" });
+  drawText(ctx, "📊 Total Eksekusi", fx + third, statsY + 20, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE });
+  drawText(ctx, `${data.totalExec} kali`, fx + third, statsY + 40, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "Bold" });
 
-  drawText(ctx, "📅 Dibuat", fx + third * 2, statsY + 18, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE });
-  drawText(ctx, data.createdAt, fx + third * 2, statsY + 34, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "SemiBold" });
+  drawText(ctx, "📅 Tanggal Dibuat", fx + third * 2, statsY + 20, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE });
+  drawText(ctx, data.createdAt, fx + third * 2, statsY + 40, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "Bold" });
 
-  curY = statsY + 60;
+  curY = statsY + 74;
 
-  // History
   if (data.history.length > 0) {
-    drawText(ctx, "📜  Riwayat Eksekusi Terakhir", CARD_PADDING, curY + 10, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "SemiBold" });
-    curY += 30;
+    drawText(ctx, "📜  Riwayat Eksekusi Terakhir", CARD_PADDING, curY + 10, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "Bold" });
+    curY += 34;
     drawInnerCard(ctx, innerX, curY, innerW, historyHeight);
-    curY += 14;
+    curY += 16;
 
     for (const entry of data.history) {
       drawText(ctx, `•  ${entry.date}`, fx, curY, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
-      drawText(ctx, `Game: ${entry.placeId}  |  Executor: ${entry.executor}  |  ${entry.robloxName}`, fx + 18, curY + 16, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE });
-      curY += 28;
+      drawText(ctx, `Game: ${entry.placeId}  |  Executor: ${entry.executor}  |  User: ${entry.robloxName}`, fx + 22, curY + 20, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE });
+      curY += 32;
     }
   }
 
-  curY += 16;
-  drawFooter(ctx, "LeonX Hub  •  License System", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  License System", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -489,45 +456,45 @@ export async function renderKeyInfoCard(data: {
 export async function renderFaqCard(topic: string, answer: string): Promise<Buffer> {
   const tempCanvas = createCanvas(1, 1);
   const tempCtx = tempCanvas.getContext("2d");
-  const lines = wrapText(tempCtx, answer, CARD_WIDTH - CARD_PADDING * 2 - 20, BODY_FONT_SIZE);
-  const H = 120 + lines.length * Math.round(BODY_FONT_SIZE * LINE_HEIGHT);
+  const lines = wrapText(tempCtx, answer, CARD_WIDTH - CARD_PADDING * 2 - 32, BODY_FONT_SIZE);
+  const H = 140 + lines.length * Math.round(BODY_FONT_SIZE * LINE_HEIGHT);
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#161b22");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#07141a", "#0e242e");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.info);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.info);
 
-  drawGlowText(ctx, `💡  FAQ: ${topic}`, CARD_PADDING, 58, COLORS.info, TITLE_FONT_SIZE - 2);
+  drawTitleText(ctx, `💡  FAQ: ${topic}`, CARD_PADDING, 68, COLORS.info, TITLE_FONT_SIZE);
 
-  let ty = 84;
+  let ty = 98;
   for (const line of lines) {
-    drawText(ctx, line, CARD_PADDING + 4, ty, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    drawText(ctx, line, CARD_PADDING + 8, ty, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
     ty += Math.round(BODY_FONT_SIZE * LINE_HEIGHT);
   }
 
-  drawFooter(ctx, "LeonX Hub  •  FAQ", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  FAQ", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
 
 export async function renderWebsiteCard(): Promise<Buffer> {
-  const H = 180;
+  const H = 200;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, "🌐  LeonThings Website", CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "🌐  LeonThings Official Website", CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
 
-  drawInnerCard(ctx, CARD_PADDING, 76, CARD_WIDTH - CARD_PADDING * 2, 62);
-  drawText(ctx, "🌐  Website Utama", CARD_PADDING + 16, 100, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, "https://leonthings.my.id", CARD_PADDING + 16, 118, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
+  drawInnerCard(ctx, CARD_PADDING, 88, CARD_WIDTH - CARD_PADDING * 2, 70);
+  drawText(ctx, "🌐  Website Utama", CARD_PADDING + 20, 114, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
+  drawText(ctx, "https://leonthings.my.id", CARD_PADDING + 20, 138, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
 
-  drawText(ctx, "🤖  Bot Console", CARD_PADDING + CARD_WIDTH / 2 - 16, 100, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, "https://leonthings.my.id/bot", CARD_PADDING + CARD_WIDTH / 2 - 16, 118, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
+  drawText(ctx, "🤖  Bot Console", CARD_PADDING + CARD_WIDTH / 2 - 10, 114, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
+  drawText(ctx, "https://leonthings.my.id/bot", CARD_PADDING + CARD_WIDTH / 2 - 10, 138, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
 
-  drawFooter(ctx, "LeonX Hub  •  Official Links", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Official Links", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -551,44 +518,39 @@ export async function renderRobloxProfileCard(data: {
   usernameHistory: string;
   createdAt: string;
 }): Promise<Buffer> {
-  const H = 440;
+  const H = 480;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  // Avatar
   if (data.avatarUrl) {
-    await drawCircularAvatar(ctx, data.avatarUrl, CARD_PADDING, 40, 72);
+    await drawCircularAvatar(ctx, data.avatarUrl, CARD_PADDING, 44, 80);
   }
 
-  // Title
-  const nameX = data.avatarUrl ? CARD_PADDING + 88 : CARD_PADDING;
-  drawGlowText(ctx, `${data.displayName}${data.hasVerifiedBadge ? " ☑️" : ""}`, nameX, 70, COLORS.textPrimary, TITLE_FONT_SIZE);
-  drawText(ctx, `@${data.username}  •  ID: ${data.userId}`, nameX, 92, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
+  const nameX = data.avatarUrl ? CARD_PADDING + 100 : CARD_PADDING;
+  drawTitleText(ctx, `${data.displayName}${data.hasVerifiedBadge ? " ☑️" : ""}`, nameX, 76, COLORS.textPrimary, TITLE_FONT_SIZE);
+  drawText(ctx, `@${data.username}  •  ID: ${data.userId}`, nameX, 100, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
 
-  // Status badgee
   const badgeColor = data.isBanned ? COLORS.danger : COLORS.success;
   const badgeText = data.isBanned ? "Banned" : "Aktif";
-  drawStatusBadge(ctx, badgeText, nameX, 100, badgeColor);
+  drawStatusBadge(ctx, badgeText, nameX, 110, badgeColor);
 
-  // Descriptions
-  let curY = 132;
+  let curY = 146;
   if (data.description) {
-    drawInnerCard(ctx, CARD_PADDING, curY, CARD_WIDTH - CARD_PADDING * 2, 60);
-    const descLines = wrapText(ctx, data.description.slice(0, 200), CARD_WIDTH - CARD_PADDING * 2 - 32, SMALL_FONT_SIZE + 1);
-    let dy = curY + 18;
+    drawInnerCard(ctx, CARD_PADDING, curY, CARD_WIDTH - CARD_PADDING * 2, 70);
+    const descLines = wrapText(ctx, data.description.slice(0, 250), CARD_WIDTH - CARD_PADDING * 2 - 36, SMALL_FONT_SIZE + 1);
+    let dy = curY + 22;
     for (const line of descLines.slice(0, 3)) {
-      drawText(ctx, line, CARD_PADDING + 16, dy, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1 });
-      dy += 16;
+      drawText(ctx, line, CARD_PADDING + 18, dy, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1 });
+      dy += 18;
     }
-    curY += 72;
+    curY += 84;
   }
 
-  // Stats gridd
   const statsW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, curY, statsW, 80);
+  drawInnerCard(ctx, CARD_PADDING, curY, statsW, 90);
   const col = statsW / 4;
   const statItems = [
     { label: "Teman", value: data.friends },
@@ -597,22 +559,20 @@ export async function renderRobloxProfileCard(data: {
     { label: "RAP", value: data.rap },
   ];
   statItems.forEach((item, i) => {
-    const sx = CARD_PADDING + col * i + 16;
-    drawText(ctx, item.label, sx, curY + 26, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-    drawText(ctx, item.value, sx, curY + 48, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+    const sx = CARD_PADDING + col * i + 20;
+    drawText(ctx, item.label, sx, curY + 30, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+    drawText(ctx, item.value, sx, curY + 56, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
   });
-  curY += 96;
+  curY += 106;
 
-  // Username history
   drawText(ctx, "🏷️  Riwayat Nama", CARD_PADDING, curY + 6, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, data.usernameHistory, CARD_PADDING, curY + 24, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, maxWidth: CARD_WIDTH - CARD_PADDING * 2 });
-  curY += 44;
+  drawText(ctx, data.usernameHistory, CARD_PADDING, curY + 28, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, maxWidth: CARD_WIDTH - CARD_PADDING * 2 });
+  curY += 50;
 
-  // Created
-  drawText(ctx, "📅  Dibuat:", CARD_PADDING, curY + 6, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, data.createdAt, CARD_PADDING + 90, curY + 6, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1 });
+  drawText(ctx, "📅  Tanggal Dibuat:", CARD_PADDING, curY + 6, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
+  drawText(ctx, data.createdAt, CARD_PADDING + 160, curY + 6, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "Bold" });
 
-  drawDivider(ctx, H - 40, CARD_WIDTH);
+  drawDivider(ctx, H - 44, CARD_WIDTH);
   drawFooter(ctx, "LeonX Hub  •  Roblox Lookup", H - 18, CARD_WIDTH);
 
   return finalizeCard(canvas);
@@ -631,49 +591,45 @@ export async function renderGameMonitorCard(data: {
   likeRatio: string;
   iconUrl: string | null;
 }): Promise<Buffer> {
-  const H = 320;
+  const H = 350;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d2818");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#07120a", "#0f2316");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.success);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.success);
 
-  // Icon
-  const titleX = CARD_PADDING;
-  drawGlowText(ctx, `🎮  ${data.gameName}`, titleX, 58, COLORS.successLight, TITLE_FONT_SIZE);
-  drawText(ctx, `by ${data.creator}  •  Place: ${data.placeId}  •  Universe: ${data.universeId}`, titleX, 80, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+  drawTitleText(ctx, `🎮  ${data.gameName}`, CARD_PADDING, 68, COLORS.successLight, TITLE_FONT_SIZE);
+  drawText(ctx, `by ${data.creator}  •  Place ID: ${data.placeId}  •  Universe ID: ${data.universeId}`, CARD_PADDING, 94, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
 
-  // Stats grid
   const innerX = CARD_PADDING;
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
 
-  drawInnerCard(ctx, innerX, 98, innerW, 80);
+  drawInnerCard(ctx, innerX, 112, innerW, 90);
   const col3 = innerW / 3;
   const row1 = [
     { label: "🟢 Playing", value: data.playing },
-    { label: "📈 Visits", value: data.visits },
+    { label: "📈 Total Visits", value: data.visits },
     { label: "⭐ Favorites", value: data.favorites },
   ];
   row1.forEach((item, i) => {
-    const sx = innerX + col3 * i + 16;
-    drawText(ctx, item.label, sx, 122, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-    drawText(ctx, item.value, sx, 144, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
+    const sx = innerX + col3 * i + 20;
+    drawText(ctx, item.label, sx, 138, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+    drawText(ctx, item.value, sx, 166, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
   });
 
-  drawInnerCard(ctx, innerX, 192, innerW, 80);
+  drawInnerCard(ctx, innerX, 214, innerW, 90);
   const row2 = [
     { label: "👍 Likes", value: data.likes },
     { label: "👎 Dislikes", value: data.dislikes },
     { label: "📊 Like Ratio", value: data.likeRatio },
   ];
   row2.forEach((item, i) => {
-    const sx = innerX + col3 * i + 16;
-    drawText(ctx, item.label, sx, 216, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-    drawText(ctx, item.value, sx, 238, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
+    const sx = innerX + col3 * i + 20;
+    drawText(ctx, item.label, sx, 240, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+    drawText(ctx, item.value, sx, 268, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
   });
 
-  drawDivider(ctx, H - 40, CARD_WIDTH);
-  drawFooter(ctx, "LeonX Hub  •  Game Monitor", H - 18, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Game Monitor", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -682,32 +638,32 @@ export async function renderGameServersCard(data: {
   placeId: string;
   servers: Array<{ num: number; playing: number; max: number; fps: string; ping: string; joinUrl: string }>;
 }): Promise<Buffer> {
-  const perServer = 56;
-  const H = 140 + data.servers.length * perServer;
+  const perServer = 64;
+  const H = 150 + data.servers.length * perServer;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, `📈  Server Aktif — Place ${data.placeId}`, CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE - 2);
-  drawText(ctx, "Salin link di bawah, lalu paste di Windows Run (Win+R) atau browser.", CARD_PADDING, 80, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+  drawTitleText(ctx, `📈  Server Aktif — Place ID ${data.placeId}`, CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawText(ctx, "Salin link di bawah, lalu paste di Windows Run (Win + R) atau browser.", CARD_PADDING, 94, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
 
   const innerX = CARD_PADDING;
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  let curY = 96;
+  let curY = 112;
 
   for (const srv of data.servers) {
     drawInnerCard(ctx, innerX, curY, innerW, perServer - 8);
-    const sx = innerX + 16;
-    drawText(ctx, `🖥️  Server #${srv.num}`, sx, curY + 18, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
-    drawText(ctx, `${srv.playing}/${srv.max}`, sx + 140, curY + 18, { color: COLORS.textAccent, fontSize: BODY_FONT_SIZE });
-    drawText(ctx, `FPS: ${srv.fps}  |  Ping: ${srv.ping}`, sx + 240, curY + 18, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
-    drawText(ctx, srv.joinUrl, sx, curY + 36, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE, maxWidth: innerW - 40 });
+    const sx = innerX + 20;
+    drawText(ctx, `🖥️  Server #${srv.num}`, sx, curY + 22, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+    drawText(ctx, `${srv.playing}/${srv.max} Players`, sx + 180, curY + 22, { color: COLORS.textAccent, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
+    drawText(ctx, `FPS: ${srv.fps}  |  Ping: ${srv.ping}`, sx + 340, curY + 22, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+    drawText(ctx, srv.joinUrl, sx, curY + 42, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE, maxWidth: innerW - 40 });
     curY += perServer;
   }
 
-  drawFooter(ctx, "LeonX Hub  •  Server Tracker", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Server Tracker", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -718,29 +674,29 @@ export async function renderGameUpdateAlertCard(data: {
   universeId: number;
   updatedAt: string;
 }): Promise<Buffer> {
-  const H = 250;
+  const H = 280;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a0d0d", "#2e0d0d");
-  drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#301010");
+  drawOuterBorder(ctx, CARD_WIDTH, H, "rgba(239, 68, 68, 0.5)");
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  drawGlowText(ctx, `🚨  GAME UPDATE DETECTED`, CARD_PADDING, 58, COLORS.dangerLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, `🚨  GAME UPDATE DETECTED`, CARD_PADDING, 68, COLORS.dangerLight, TITLE_FONT_SIZE);
 
   const innerX = CARD_PADDING;
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, innerX, 76, innerW, 100);
-  const fx = innerX + 16;
-  let fy = 98;
+  drawInnerCard(ctx, innerX, 90, innerW, 114);
+  const fx = innerX + 20;
+  let fy = 114;
   fy = drawFieldRowInline(ctx, "Nama Game:", data.gameName, fx, fy);
   fy = drawFieldRowInline(ctx, "Place ID:", data.placeId, fx, fy);
   fy = drawFieldRowInline(ctx, "Universe ID:", String(data.universeId), fx, fy);
-  fy = drawFieldRowInline(ctx, "Pembaruan:", data.updatedAt, fx, fy);
+  fy = drawFieldRowInline(ctx, "Waktu Pembaruan:", data.updatedAt, fx, fy);
 
-  drawText(ctx, "⚠️  Status bot otomatis diubah ke Testing/Updating.", CARD_PADDING, H - 52, { color: COLORS.warningLight, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, "Pengembang diharapkan segera cek kecocokan script loader.", CARD_PADDING, H - 34, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+  drawText(ctx, "⚠️  Status bot otomatis dialihkan ke Testing/Updating.", CARD_PADDING, H - 56, { color: COLORS.warningLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "Pengembang diharapkan segera mengecek kecocokan script loader.", CARD_PADDING, H - 34, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
 
-  drawFooter(ctx, "LeonX Hub  •  Auto-Update Detector", H - 12, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Auto-Update Detector", H - 14, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -748,29 +704,29 @@ export async function renderGameUpdateAlertCard(data: {
 export async function renderMonitorListCard(data: {
   items: Array<{ name: string; placeId: string; lastUpdated: string }>;
 }): Promise<Buffer> {
-  const perItem = 40;
-  const H = 110 + data.items.length * perItem;
+  const perItem = 48;
+  const H = 130 + data.items.length * perItem;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, "🔍  Game Update Monitoring List", CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE - 2);
+  drawTitleText(ctx, "🔍  Game Update Monitoring List", CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
 
-  let curY = 80;
+  let curY = 96;
   const innerX = CARD_PADDING;
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
 
   for (const item of data.items) {
-    drawInnerCard(ctx, innerX, curY, innerW, perItem - 6);
-    drawText(ctx, `•  ${item.name}`, innerX + 16, curY + 16, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
-    drawText(ctx, `(${item.placeId})`, innerX + 16 + ctx.measureText(`•  ${item.name} `).width, curY + 16, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
-    drawText(ctx, `Last Updated: ${item.lastUpdated}`, innerX + 30, curY + 30, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE });
+    drawInnerCard(ctx, innerX, curY, innerW, perItem - 8);
+    drawText(ctx, `•  ${item.name}`, innerX + 20, curY + 22, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+    drawText(ctx, `(Place ID: ${item.placeId})`, innerX + 20 + ctx.measureText(`•  ${item.name} `).width, curY + 22, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+    drawText(ctx, `Last Updated: ${item.lastUpdated}`, innerX + 40, curY + 38, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE });
     curY += perItem;
   }
 
-  drawFooter(ctx, "LeonX Hub  •  Monitoring", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Monitoring", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -780,34 +736,33 @@ export async function renderMonitorListCard(data: {
 // ──────────────────────────────────────────────────────
 
 export async function renderTicketPanelCard(categories: Array<{ emoji: string; label: string; description: string }>): Promise<Buffer> {
-  const perCat = 28;
-  const H = 210 + categories.length * perCat;
+  const perCat = 34;
+  const H = 260 + categories.length * perCat;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, "🎫  Support Ticket System", CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "🎫  Support Ticket System", CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawText(ctx, "Butuh bantuan? Pilih kategori yang sesuai pada menu di bawah.", CARD_PADDING, 98, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
 
-  drawText(ctx, "Butuh bantuan? Pilih kategori yang sesuai di bawah.", CARD_PADDING, 82, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-
-  let curY = 106;
-  drawText(ctx, "Kategori yang tersedia:", CARD_PADDING, curY, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "SemiBold" });
-  curY += 24;
+  let curY = 128;
+  drawText(ctx, "Kategori yang tersedia:", CARD_PADDING, curY, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "Bold" });
+  curY += 30;
 
   for (const cat of categories) {
-    drawText(ctx, `${cat.emoji}  ${cat.label}`, CARD_PADDING + 8, curY, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "SemiBold" });
-    drawText(ctx, ` — ${cat.description}`, CARD_PADDING + 8 + ctx.measureText(`${cat.emoji}  ${cat.label}`).width, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    drawText(ctx, `${cat.emoji}  ${cat.label}`, CARD_PADDING + 10, curY, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+    drawText(ctx, ` — ${cat.description}`, CARD_PADDING + 10 + ctx.measureText(`${cat.emoji}  ${cat.label}`).width, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
     curY += perCat;
   }
 
-  curY += 8;
-  drawInnerCard(ctx, CARD_PADDING, curY, CARD_WIDTH - CARD_PADDING * 2, 50);
-  drawText(ctx, "📌  Catatan:", CARD_PADDING + 16, curY + 18, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1, fontWeight: "SemiBold" });
-  drawText(ctx, "Satu user hanya bisa memiliki 1 ticket aktif  •  Tim support merespons 1-24 jam", CARD_PADDING + 16, curY + 36, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE });
+  curY += 10;
+  drawInnerCard(ctx, CARD_PADDING, curY, CARD_WIDTH - CARD_PADDING * 2, 58);
+  drawText(ctx, "📌  Catatan:", CARD_PADDING + 20, curY + 22, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "Satu user hanya bisa memiliki 1 ticket aktif  •  Tim support merespons dalam 1-24 jam", CARD_PADDING + 20, curY + 44, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE });
 
-  drawFooter(ctx, "LeonX Hub  •  Support System", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Support System", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -818,34 +773,33 @@ export async function renderTicketWelcomeCard(data: {
   userId: string;
   ticketId: string;
 }): Promise<Buffer> {
-  const H = 280;
+  const H = 310;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, `${data.categoryEmoji}  ${data.categoryLabel}`, CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, `${data.categoryEmoji}  ${data.categoryLabel}`, CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 70);
-  drawText(ctx, "Kategori:", CARD_PADDING + 16, 98, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
-  drawText(ctx, data.categoryLabel, CARD_PADDING + 85, 98, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "SemiBold" });
-  drawText(ctx, "Status:", CARD_PADDING + 16, 120, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
-  drawStatusBadge(ctx, "🟢 Open", CARD_PADDING + 70, 108, COLORS.success);
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 80);
+  drawText(ctx, "Kategori:", CARD_PADDING + 20, 116, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
+  drawText(ctx, data.categoryLabel, CARD_PADDING + 100, 116, { color: COLORS.textPrimary, fontSize: FIELD_LABEL_SIZE + 1, fontWeight: "Bold" });
+  drawText(ctx, "Status:", CARD_PADDING + 20, 144, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
+  drawStatusBadge(ctx, "🟢 Open", CARD_PADDING + 90, 130, COLORS.success);
 
   const tips = [
-    "Sertakan screenshot/video jika memungkinkan",
-    "Jelaskan langkah-langkah yang sudah dicoba",
-    "Sebutkan versi script yang digunakan",
+    "Sertakan screenshot/video jika ada masalah teknis",
+    "Jelaskan langkah-langkah yang sudah Anda coba",
+    "Sebutkan versi script atau executor yang digunakan",
   ];
-  drawText(ctx, "💡  Tips:", CARD_PADDING, 168, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "SemiBold" });
+  drawText(ctx, "💡  Tips Bantuan:", CARD_PADDING, 196, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "Bold" });
   tips.forEach((tip, i) => {
-    drawText(ctx, `•  ${tip}`, CARD_PADDING + 8, 192 + i * 22, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    drawText(ctx, `•  ${tip}`, CARD_PADDING + 10, 224 + i * 24, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
   });
 
-  drawDivider(ctx, H - 40, CARD_WIDTH);
-  drawFooter(ctx, `Ticket ID: #${data.ticketId}`, H - 18, CARD_WIDTH);
+  drawFooter(ctx, `Ticket ID: #${data.ticketId}`, H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -854,21 +808,21 @@ export async function renderTicketCloseCard(data: {
   closedBy: string;
   reason: string;
 }): Promise<Buffer> {
-  const H = 200;
+  const H = 220;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a0d0d", "#1a1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#2b0f16");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  drawGlowText(ctx, "🔒  Ticket Ditutup", CARD_PADDING, 58, COLORS.dangerLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "🔒  Ticket Ditutup", CARD_PADDING, 68, COLORS.dangerLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 64);
-  drawFieldRowInline(ctx, "Ditutup oleh:", data.closedBy, CARD_PADDING + 16, 98);
-  drawFieldRowInline(ctx, "Alasan:", data.reason, CARD_PADDING + 16, 120);
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 74);
+  drawFieldRowInline(ctx, "Ditutup oleh:", data.closedBy, CARD_PADDING + 20, 116);
+  drawFieldRowInline(ctx, "Alasan:", data.reason, CARD_PADDING + 20, 142);
 
-  drawText(ctx, "Transcript telah disimpan. Pembuat ticket dapat memberikan rating.", CARD_PADDING, H - 44, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+  drawText(ctx, "Transcript telah disimpan. Pembuat ticket dapat memberikan rating.", CARD_PADDING, H - 48, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
 
   drawFooter(ctx, "Terima kasih sudah menggunakan support system kami!", H - 16, CARD_WIDTH);
 
@@ -876,36 +830,36 @@ export async function renderTicketCloseCard(data: {
 }
 
 export async function renderTicketRatingCard(): Promise<Buffer> {
-  const H = 160;
+  const H = 180;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, "📊  Beri Rating untuk Support Kami", CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "📊  Beri Rating untuk Support Kami", CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
 
-  drawText(ctx, "Bagaimana pengalamanmu dengan support kami?", CARD_PADDING, 86, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-  drawText(ctx, "Rating kamu sangat membantu kami meningkatkan layanan.", CARD_PADDING, 106, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1 });
+  drawText(ctx, "Bagaimana pengalaman Anda dengan layanan support kami?", CARD_PADDING, 102, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "Rating kamu sangat membantu kami untuk terus meningkatkan layanan.", CARD_PADDING, 128, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
 
-  drawFooter(ctx, "Pilih rating di bawah ini", H - 16, CARD_WIDTH);
+  drawFooter(ctx, "Pilih bintang rating di bawah ini", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
 
 export async function renderRatingThanksCard(rating: number): Promise<Buffer> {
-  const H = 160;
+  const H = 180;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d170d", "#0d1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071a0e", "#0f2e1a");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.success);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.success);
 
-  drawGlowText(ctx, "✅  Terima Kasih!", CARD_PADDING, 58, COLORS.successLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "✅  Terima Kasih!", CARD_PADDING, 68, COLORS.successLight, TITLE_FONT_SIZE);
 
   const stars = "⭐".repeat(rating);
-  drawText(ctx, `Rating kamu: ${stars}`, CARD_PADDING, 90, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "SemiBold" });
-  drawText(ctx, "Kami akan terus meningkatkan layanan support.", CARD_PADDING, 114, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+  drawText(ctx, `Rating kamu: ${stars}`, CARD_PADDING, 106, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
+  drawText(ctx, "Kami akan terus meningkatkan kualitas pelayanan support.", CARD_PADDING, 134, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
 
   drawFooter(ctx, "LeonX Hub  •  Feedback", H - 16, CARD_WIDTH);
 
@@ -919,19 +873,18 @@ export async function renderTicketStatsCard(data: {
   avgRating: string;
   byCategory: Array<{ emoji: string; category: string; count: number }>;
 }): Promise<Buffer> {
-  const catHeight = data.byCategory.length > 0 ? data.byCategory.length * 22 + 30 : 0;
-  const H = 230 + catHeight;
+  const catHeight = data.byCategory.length > 0 ? data.byCategory.length * 26 + 36 : 0;
+  const H = 260 + catHeight;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, "📊  Statistik Ticket System", CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "📊  Statistik Ticket System", CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
 
-  // Stats grid
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 80);
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 90);
   const col = innerW / 4;
   const stats = [
     { label: "📝 Total", value: String(data.total) },
@@ -940,23 +893,22 @@ export async function renderTicketStatsCard(data: {
     { label: "⭐ Avg Rating", value: data.avgRating },
   ];
   stats.forEach((item, i) => {
-    const sx = CARD_PADDING + col * i + 16;
-    drawText(ctx, item.label, sx, 102, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-    drawText(ctx, item.value, sx, 126, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
+    const sx = CARD_PADDING + col * i + 20;
+    drawText(ctx, item.label, sx, 118, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+    drawText(ctx, item.value, sx, 146, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
   });
 
-  // Categories
   if (data.byCategory.length > 0) {
-    let curY = 178;
-    drawText(ctx, "📂  Berdasarkan Kategori:", CARD_PADDING, curY, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "SemiBold" });
-    curY += 24;
+    let curY = 206;
+    drawText(ctx, "📂  Berdasarkan Kategori:", CARD_PADDING, curY, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "Bold" });
+    curY += 28;
     for (const cat of data.byCategory) {
-      drawText(ctx, `${cat.emoji}  ${cat.category}: ${cat.count}`, CARD_PADDING + 8, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-      curY += 22;
+      drawText(ctx, `${cat.emoji}  ${cat.category}: ${cat.count}`, CARD_PADDING + 10, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+      curY += 26;
     }
   }
 
-  drawFooter(ctx, "LeonX Hub  •  Ticket System", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Ticket System", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -971,31 +923,31 @@ export async function renderAdminStatsCard(data: {
   bugReports: number;
   commandsUsed: number;
 }): Promise<Buffer> {
-  const H = 200;
+  const H = 220;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#1a0d2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#090714", "#180e2e");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.primary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.primary);
 
-  drawGlowText(ctx, "📊  Statistik Admin", CARD_PADDING, 58, COLORS.primaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "📊  Statistik Admin Server", CARD_PADDING, 68, COLORS.primaryLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 80);
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 90);
   const col = innerW / 4;
   const stats = [
-    { label: "👥 Members", value: String(data.memberCount) },
+    { label: "👥 Total Member", value: String(data.memberCount) },
     { label: "🎫 Ticket Aktif", value: String(data.openTickets) },
-    { label: "🐛 Bug Reports", value: String(data.bugReports) },
-    { label: "⚡ Commands", value: String(data.commandsUsed) },
+    { label: "🐛 Bug Report", value: String(data.bugReports) },
+    { label: "⚡ Command Dipakai", value: String(data.commandsUsed) },
   ];
   stats.forEach((item, i) => {
-    const sx = CARD_PADDING + col * i + 16;
-    drawText(ctx, item.label, sx, 102, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-    drawText(ctx, item.value, sx, 126, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
+    const sx = CARD_PADDING + col * i + 20;
+    drawText(ctx, item.label, sx, 118, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+    drawText(ctx, item.value, sx, 146, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 4, fontWeight: "Bold" });
   });
 
-  drawFooter(ctx, "LeonX Hub  •  Admin Panel", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Admin Dashboard", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1003,34 +955,34 @@ export async function renderAdminStatsCard(data: {
 export async function renderBlacklistCard(data: {
   items: Array<{ id: number; discordId: string | null; robloxId: string | null; hwid: string | null; reason: string; createdAt: string }>;
 }): Promise<Buffer> {
-  const perItem = 60;
-  const H = 100 + data.items.length * perItem;
+  const perItem = 68;
+  const H = 120 + data.items.length * perItem;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a0d0d", "#1a1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#2b0f16");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  drawGlowText(ctx, "🚫  Daftar Blacklist LeonX", CARD_PADDING, 58, COLORS.dangerLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "🚫  Daftar Blacklist LeonX", CARD_PADDING, 68, COLORS.dangerLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  let curY = 78;
+  let curY = 94;
 
   for (const item of data.items) {
-    drawInnerCard(ctx, CARD_PADDING, curY, innerW, perItem - 8);
-    const fx = CARD_PADDING + 16;
-    drawText(ctx, `#${item.id}`, fx, curY + 18, { color: COLORS.dangerLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+    drawInnerCard(ctx, CARD_PADDING, curY, innerW, perItem - 10);
+    const fx = CARD_PADDING + 20;
+    drawText(ctx, `#${item.id}`, fx, curY + 22, { color: COLORS.dangerLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
 
     let detail = "";
-    if (item.discordId) detail += `Discord: ${item.discordId}  `;
-    if (item.robloxId) detail += `Roblox: ${item.robloxId}  `;
+    if (item.discordId) detail += `Discord ID: ${item.discordId}  `;
+    if (item.robloxId) detail += `Roblox ID: ${item.robloxId}  `;
     if (item.hwid) detail += `HWID: ${item.hwid}`;
-    drawText(ctx, detail, fx + 40, curY + 18, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1, maxWidth: innerW - 80 });
-    drawText(ctx, `Alasan: ${item.reason}  (${item.createdAt})`, fx, curY + 38, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE, maxWidth: innerW - 40 });
+    drawText(ctx, detail, fx + 50, curY + 22, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1, maxWidth: innerW - 90 });
+    drawText(ctx, `Alasan: ${item.reason} (${item.createdAt})`, fx, curY + 44, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE, maxWidth: innerW - 40 });
     curY += perItem;
   }
 
-  drawFooter(ctx, "LeonX Hub  •  Blacklist", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Blacklist System", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1049,57 +1001,54 @@ export async function renderLookupCard(data: {
   }>;
   executions: Array<{ date: string; placeId: string; executor: string; robloxName: string; robloxId: string }>;
 }): Promise<Buffer> {
-  const keyHeight = data.keys.length * 120;
-  const execHeight = data.executions.length * 36;
-  const H = 180 + keyHeight + execHeight + (data.executions.length > 0 ? 40 : 0);
+  const keyHeight = data.keys.length * 130;
+  const execHeight = data.executions.length * 40;
+  const H = 200 + keyHeight + execHeight + (data.executions.length > 0 ? 50 : 0);
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a0d0d", "#1a1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#2b0f16");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  drawGlowText(ctx, "🔍  Hasil Pencarian / Lookup", CARD_PADDING, 58, COLORS.dangerLight, TITLE_FONT_SIZE);
-  drawText(ctx, `Kriteria: ${data.searchCriteria}`, CARD_PADDING, 80, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
+  drawTitleText(ctx, "🔍  Hasil Lookup Data Lisensi", CARD_PADDING, 68, COLORS.dangerLight, TITLE_FONT_SIZE);
+  drawText(ctx, `Kriteria: ${data.searchCriteria}`, CARD_PADDING, 94, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
 
-  // Blacklist status
   const blColor = data.isBlacklisted ? COLORS.danger : COLORS.success;
-  drawStatusBadge(ctx, data.isBlacklisted ? "BLACKLISTED" : "Clean", CARD_PADDING, 92, blColor);
+  drawStatusBadge(ctx, data.isBlacklisted ? "BLACKLISTED" : "Clean", CARD_PADDING, 106, blColor);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  let curY = 124;
+  let curY = 144;
 
-  // Keys
   if (data.keys.length === 0) {
-    drawInnerCard(ctx, CARD_PADDING, curY, innerW, 36);
-    drawText(ctx, "❌  Tidak ditemukan data key/lisensi.", CARD_PADDING + 16, curY + 22, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-    curY += 48;
+    drawInnerCard(ctx, CARD_PADDING, curY, innerW, 44);
+    drawText(ctx, "❌  Tidak ditemukan data key/lisensi.", CARD_PADDING + 20, curY + 28, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    curY += 60;
   } else {
     for (let i = 0; i < data.keys.length; i++) {
       const k = data.keys[i]!;
-      drawText(ctx, `🔑  Key #${i + 1}`, CARD_PADDING, curY + 6, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "SemiBold" });
-      curY += 22;
-      drawInnerCard(ctx, CARD_PADDING, curY, innerW, 90);
-      const fx = CARD_PADDING + 16;
-      let fy = curY + 16;
+      drawText(ctx, `🔑  Key #${i + 1}`, CARD_PADDING, curY + 6, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "Bold" });
+      curY += 28;
+      drawInnerCard(ctx, CARD_PADDING, curY, innerW, 100);
+      const fx = CARD_PADDING + 20;
+      let fy = curY + 20;
       fy = drawFieldRowInline(ctx, "Key:", k.key, fx, fy);
       fy = drawFieldRowInline(ctx, "Discord:", k.discordId, fx, fy);
       fy = drawFieldRowInline(ctx, "Roblox:", k.robloxId || "Belum tertaut", fx, fy);
       fy = drawFieldRowInline(ctx, "HWID:", k.hwid || "Belum tertaut", fx, fy);
-      curY += 100;
+      curY += 114;
     }
   }
 
-  // Executions
   if (data.executions.length > 0) {
-    drawText(ctx, "📊  Riwayat Eksekusi", CARD_PADDING, curY + 6, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "SemiBold" });
-    curY += 26;
+    drawText(ctx, "📊  Riwayat Eksekusi", CARD_PADDING, curY + 6, { color: COLORS.textAccent, fontSize: SUBTITLE_FONT_SIZE, fontWeight: "Bold" });
+    curY += 30;
     for (const ex of data.executions) {
-      drawText(ctx, `•  ${ex.date}  —  Game: ${ex.placeId}  |  Exec: ${ex.executor}  |  ${ex.robloxName}`, CARD_PADDING + 8, curY, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1, maxWidth: innerW - 16 });
-      curY += 20;
+      drawText(ctx, `•  ${ex.date}  —  Game: ${ex.placeId}  |  Exec: ${ex.executor}  |  ${ex.robloxName}`, CARD_PADDING + 10, curY, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1, maxWidth: innerW - 20 });
+      curY += 24;
     }
   }
 
-  drawFooter(ctx, "LeonX Hub  •  Admin Tools", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Admin Lookup", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1115,40 +1064,38 @@ export async function renderBugReportCard(data: {
   const tempCtx = tempCanvas.getContext("2d");
   const descLines = wrapText(tempCtx, data.description, CARD_WIDTH - CARD_PADDING * 2 - 40, BODY_FONT_SIZE);
   const stepsLines = wrapText(tempCtx, data.steps, CARD_WIDTH - CARD_PADDING * 2 - 40, BODY_FONT_SIZE);
-  const descH = descLines.length * 20 + 28;
-  const stepsH = stepsLines.length * 20 + 28;
-  const H = 140 + descH + stepsH;
+  const descH = descLines.length * 24 + 36;
+  const stepsH = stepsLines.length * 24 + 36;
+  const H = 160 + descH + stepsH;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a1a0d", "#1a1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1f1807", "#332709");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.warning);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.warning);
 
-  drawGlowText(ctx, `🐛  #${data.id} ${data.title}`, CARD_PADDING, 58, COLORS.warningLight, TITLE_FONT_SIZE - 2);
+  drawTitleText(ctx, `🐛  Laporan Bug #${data.id}: ${data.title}`, CARD_PADDING, 68, COLORS.warningLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  let curY = 78;
+  let curY = 94;
 
-  // Description
   drawInnerCard(ctx, CARD_PADDING, curY, innerW, descH);
-  drawText(ctx, "Deskripsi:", CARD_PADDING + 16, curY + 18, { color: COLORS.textAccent, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  let ly = curY + 36;
+  drawText(ctx, "Deskripsi Bug:", CARD_PADDING + 20, curY + 24, { color: COLORS.textAccent, fontSize: FIELD_LABEL_SIZE, fontWeight: "Bold" });
+  let ly = curY + 48;
   for (const line of descLines) {
-    drawText(ctx, line, CARD_PADDING + 16, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-    ly += 20;
+    drawText(ctx, line, CARD_PADDING + 20, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    ly += 24;
   }
-  curY += descH + 8;
+  curY += descH + 12;
 
-  // Steps
   drawInnerCard(ctx, CARD_PADDING, curY, innerW, stepsH);
-  drawText(ctx, "Cara Mengulang:", CARD_PADDING + 16, curY + 18, { color: COLORS.textAccent, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  ly = curY + 36;
+  drawText(ctx, "Langkah Mengulang Bug:", CARD_PADDING + 20, curY + 24, { color: COLORS.textAccent, fontSize: FIELD_LABEL_SIZE, fontWeight: "Bold" });
+  ly = curY + 48;
   for (const line of stepsLines) {
-    drawText(ctx, line, CARD_PADDING + 16, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-    ly += 20;
+    drawText(ctx, line, CARD_PADDING + 20, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    ly += 24;
   }
 
-  drawFooter(ctx, `Dilaporkan oleh ${data.reporter}`, H - 14, CARD_WIDTH);
+  drawFooter(ctx, `Dilaporkan oleh ${data.reporter}`, H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1166,57 +1113,52 @@ export async function renderChangelogCard(data: {
 }): Promise<Buffer> {
   const tempCanvas = createCanvas(1, 1);
   const tempCtx = tempCanvas.getContext("2d");
+  const innerW = CARD_WIDTH - CARD_PADDING * 2;
   const contentLines = data.formattedContent.split("\n").filter(Boolean);
-  const contentH = contentLines.length * 22 + 20;
-  const H = 240 + contentH;
+  const contentH = contentLines.length * 26 + 30;
+  const H = 270 + contentH;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  const color = data.typeColor;
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#161b22");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#090714", "#161128");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, color);
+  drawAccentBar(ctx, 20, CARD_WIDTH, data.typeColor);
 
-  drawGlowText(ctx, "LeonX Script Update Logs", CARD_PADDING, 54, COLORS.textPrimary, TITLE_FONT_SIZE);
-  drawStatusBadge(ctx, `${data.typeEmoji} ${data.typeLabel}`, CARD_PADDING, 64, color);
+  drawTitleText(ctx, "🚀  LeonX Script Update Logs", CARD_PADDING, 68, COLORS.textPrimary, TITLE_FONT_SIZE);
+  drawStatusBadge(ctx, `${data.typeEmoji} ${data.typeLabel}`, CARD_PADDING + 420, 48, data.typeColor);
 
-  const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 96, innerW, 60);
-  drawFieldRowInline(ctx, "Place:", data.gameName, CARD_PADDING + 16, 116);
-  drawFieldRowInline(ctx, "Version:", data.version, CARD_PADDING + 16, 138);
+  drawInnerCard(ctx, CARD_PADDING, 94, innerW, 68);
+  drawFieldRowInline(ctx, "Place:", data.gameName, CARD_PADDING + 20, 118);
+  drawFieldRowInline(ctx, "Version:", data.version, CARD_PADDING + 20, 142);
 
-  // Summary
-  drawText(ctx, "Developer Notes:", CARD_PADDING, 178, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  const summaryLines = wrapText(ctx, data.summary, innerW - 10, BODY_FONT_SIZE);
-  let sy = 196;
+  drawText(ctx, "Developer Notes:", CARD_PADDING, 186, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "Bold" });
+  const summaryLines = wrapText(tempCtx, data.summary, innerW, BODY_FONT_SIZE);
+  let sy = 210;
   for (const line of summaryLines.slice(0, 2)) {
-    drawText(ctx, line, CARD_PADDING + 4, sy, { color: COLORS.textMuted, fontSize: BODY_FONT_SIZE });
-    sy += 20;
+    drawText(ctx, line, CARD_PADDING, sy, { color: COLORS.textMuted, fontSize: BODY_FONT_SIZE });
+    sy += 24;
   }
 
-  // Content
-  drawDivider(ctx, sy + 4, CARD_WIDTH);
-  sy += 18;
+  drawDivider(ctx, sy + 8, CARD_WIDTH);
+  sy += 26;
 
   for (const line of contentLines) {
-    // Strip markdown formatting for canvas
     const cleanLine = line.replace(/\*\*/g, "").replace(/`/g, "").replace(/> /g, "");
-    const isSection = cleanLine.startsWith("✨") || cleanLine.startsWith("🔧") || cleanLine.startsWith("⚡") || cleanLine.startsWith("🗑️");
+    const isSection = cleanLine.startsWith("✨") || cleanLine.startsWith("🔧") || cleanLine.startsWith("⚡") || cleanLine.startsWith("🗑️") || cleanLine.startsWith("🛠️") || cleanLine.startsWith("🚀");
     if (isSection) {
-      drawText(ctx, cleanLine, CARD_PADDING, sy, { color: COLORS.textAccent, fontSize: BODY_FONT_SIZE + 1, fontWeight: "SemiBold" });
+      drawText(ctx, cleanLine, CARD_PADDING, sy, { color: COLORS.textAccent, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
     } else {
-      drawText(ctx, cleanLine, CARD_PADDING + 8, sy, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, maxWidth: innerW - 16 });
+      drawText(ctx, cleanLine, CARD_PADDING + 12, sy, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, maxWidth: innerW - 24 });
     }
-    sy += 22;
+    sy += 26;
   }
 
-  drawDivider(ctx, H - 40, CARD_WIDTH);
   drawFooter(ctx, `LeonX Hub ${data.version}  •  ${data.statusFooter}`, H - 18, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
 
 // ──────────────────────────────────────────────────────
-//  CARD RENDERERS — Group 5: Logs
+//  CARD RENDERERS — Group 5: Logs & AutoMod
 // ──────────────────────────────────────────────────────
 
 export async function renderAutoModCard(data: {
@@ -1227,33 +1169,33 @@ export async function renderAutoModCard(data: {
   detail: string;
   extraField?: string;
 }): Promise<Buffer> {
-  const H = 220;
+  const H = 240;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a0d0d", "#1a1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#2b0f16");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  drawGlowText(ctx, `🛡️  ${data.title}`, CARD_PADDING, 58, COLORS.dangerLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, `🛡️  ${data.title}`, CARD_PADDING, 68, COLORS.dangerLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 80);
-  const fx = CARD_PADDING + 16;
-  let fy = 98;
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 90);
+  const fx = CARD_PADDING + 20;
+  let fy = 114;
   fy = drawFieldRowInline(ctx, "Pengguna:", `${data.userTag} (${data.userId})`, fx, fy);
   fy = drawFieldRowInline(ctx, "Detail:", data.detail, fx, fy);
   if (data.extraField) {
-    fy = drawFieldRowInline(ctx, "Info:", data.extraField, fx, fy);
+    fy = drawFieldRowInline(ctx, "Info Tambahan:", data.extraField, fx, fy);
   }
 
-  const descLines = wrapText(ctx, data.description, innerW - 10, SMALL_FONT_SIZE + 1);
-  let dy = H - 48;
+  const descLines = wrapText(ctx, data.description, innerW, SMALL_FONT_SIZE + 1);
+  let dy = H - 52;
   for (const line of descLines.slice(0, 2)) {
     drawText(ctx, line, CARD_PADDING, dy, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
-    dy += 16;
+    dy += 18;
   }
 
-  drawFooter(ctx, "LeonX Hub  •  Auto Mod", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Auto Mod", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1266,26 +1208,26 @@ export async function renderExecutionLogCard(data: {
   executor: string;
   hwid: string;
 }): Promise<Buffer> {
-  const H = 220;
+  const H = 240;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d170d", "#0d1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#07170e", "#0f2e1a");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.success);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.success);
 
-  drawGlowText(ctx, "📊  In-Game Script Executed!", CARD_PADDING, 58, COLORS.successLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "📊  In-Game Script Executed!", CARD_PADDING, 68, COLORS.successLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 100);
-  const fx = CARD_PADDING + 16;
-  let fy = 96;
-  fy = drawFieldRowInline(ctx, "Discord:", data.discordId || "Unknown", fx, fy);
-  fy = drawFieldRowInline(ctx, "Roblox:", `${data.robloxUsername} (${data.robloxId || "N/A"})`, fx, fy);
-  fy = drawFieldRowInline(ctx, "Game:", `Place ID: ${data.placeId}`, fx, fy);
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 110);
+  const fx = CARD_PADDING + 20;
+  let fy = 114;
+  fy = drawFieldRowInline(ctx, "Discord User:", data.discordId || "Unknown", fx, fy);
+  fy = drawFieldRowInline(ctx, "Roblox User:", `${data.robloxUsername} (${data.robloxId || "N/A"})`, fx, fy);
+  fy = drawFieldRowInline(ctx, "Game / Place ID:", data.placeId, fx, fy);
   fy = drawFieldRowInline(ctx, "Executor:", data.executor, fx, fy);
-  drawFieldRowInline(ctx, "HWID:", data.hwid || "N/A", fx, fy);
+  drawFieldRowInline(ctx, "Perangkat (HWID):", data.hwid || "N/A", fx, fy);
 
-  drawFooter(ctx, "LeonX Hub  •  Execution Log", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Execution Log", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1297,31 +1239,31 @@ export async function renderRatingLogCard(data: {
   userId: string;
   claimedBy: string;
 }): Promise<Buffer> {
-  const H = 200;
+  const H = 220;
   const { canvas, ctx } = createBaseCanvas(H);
   const ratingColor = data.rating >= 4 ? COLORS.success : data.rating >= 3 ? COLORS.warning : COLORS.danger;
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#161b22");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#090714", "#161128");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, ratingColor);
+  drawAccentBar(ctx, 20, CARD_WIDTH, ratingColor);
 
-  drawGlowText(ctx, "📊  New Ticket Rating", CARD_PADDING, 58, ratingColor, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "📊  Rating Ticket Terbaru", CARD_PADDING, 68, ratingColor, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 80);
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 90);
   const half = innerW / 2;
-  const fx = CARD_PADDING + 16;
+  const fx = CARD_PADDING + 20;
 
-  drawText(ctx, "Ticket ID", fx, 98, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-  drawText(ctx, `#${data.ticketId}`, fx, 116, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "Ticket ID", fx, 114, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+  drawText(ctx, `#${data.ticketId}`, fx, 138, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
 
-  drawText(ctx, "Category", fx + half / 2, 98, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-  drawText(ctx, data.category, fx + half / 2, 116, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "Kategori", fx + half / 2, 114, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+  drawText(ctx, data.category, fx + half / 2, 138, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
 
-  drawText(ctx, "Rating", fx + half, 98, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
-  drawText(ctx, `${"⭐".repeat(data.rating)} (${data.rating}/5)`, fx + half, 116, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "Rating", fx + half, 114, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE, fontWeight: "Medium" });
+  drawText(ctx, `${"⭐".repeat(data.rating)} (${data.rating}/5)`, fx + half, 138, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
 
-  drawFooter(ctx, "LeonX Hub  •  Support Feedback", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Support Feedback", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1333,37 +1275,36 @@ export async function renderAutoBanCard(data: {
   createdAt: string;
   avatarUrl: string | null;
 }): Promise<Buffer> {
-  const H = 250;
+  const H = 280;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1a0d0d", "#2e0d0d");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#301010");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  drawGlowText(ctx, "⛔  Auto-Ban: Akun Terlalu Baru", CARD_PADDING, 58, COLORS.dangerLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "⛔  Auto-Ban: Akun Terlalu Baru", CARD_PADDING, 68, COLORS.dangerLight, TITLE_FONT_SIZE);
 
   if (data.avatarUrl) {
-    await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH - CARD_PADDING - 64, 34, 64);
+    await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH - CARD_PADDING - 72, 40, 72);
   }
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, 90);
-  const fx = CARD_PADDING + 16;
-  let fy = 96;
+  drawInnerCard(ctx, CARD_PADDING, 90, innerW, 100);
+  const fx = CARD_PADDING + 20;
+  let fy = 114;
   fy = drawFieldRowInline(ctx, "User:", `${data.userTag} (${data.userId})`, fx, fy);
   fy = drawFieldRowInline(ctx, "Umur Akun:", `${data.accountAgeDays} hari`, fx, fy);
   fy = drawFieldRowInline(ctx, "Akun Dibuat:", data.createdAt, fx, fy);
 
-  drawText(ctx, "Akun ini otomatis di-ban karena berumur kurang dari 30 hari.", CARD_PADDING, H - 52, { color: COLORS.warningLight, fontSize: BODY_FONT_SIZE });
+  drawText(ctx, "Akun ini otomatis di-ban demi keamanan server karena berumur kurang dari 30 hari.", CARD_PADDING, H - 56, { color: COLORS.warningLight, fontSize: BODY_FONT_SIZE });
 
-  drawDivider(ctx, H - 40, CARD_WIDTH);
-  drawFooter(ctx, "LeonX Hub  •  Anti-Raid Protection", H - 18, CARD_WIDTH);
+  drawFooter(ctx, "LeonX Hub  •  Anti-Raid Protection", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
 
 // ──────────────────────────────────────────────────────
-//  CARD RENDERERS — Group 6: Events
+//  CARD RENDERERS — Group 6: Events & Rules
 // ──────────────────────────────────────────────────────
 
 export async function renderWelcomeCard(data: {
@@ -1373,36 +1314,23 @@ export async function renderWelcomeCard(data: {
   memberCount: number;
   verifyChannelId: string;
 }): Promise<Buffer> {
-  const H = 260;
+  const H = 290;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  // Special gradient for welcome
-  const grad = ctx.createLinearGradient(0, 0, CARD_WIDTH, H);
-  grad.addColorStop(0, "#0d0d2e");
-  grad.addColorStop(0.5, "#1a0d33");
-  grad.addColorStop(1, "#0d1b2e");
-  ctx.fillStyle = grad;
-  drawRoundedRect(ctx, 0, 0, CARD_WIDTH, H, CARD_RADIUS);
-  ctx.fill();
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  // Avatar
-  await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH / 2 - 42, 36, 84);
+  await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH / 2 - 48, 36, 96);
 
-  // Title
-  drawGlowText(ctx, "Selamat Datang!", CARD_WIDTH / 2, 148, COLORS.secondaryLight, TITLE_FONT_SIZE + 4, "Bold");
-  ctx.textAlign = "center";
-  drawText(ctx, data.username, CARD_WIDTH / 2, 148, { color: COLORS.secondaryLight, fontSize: TITLE_FONT_SIZE + 4, fontWeight: "Bold", align: "center" });
-
-  drawText(ctx, `di ${data.guildName}`, CARD_WIDTH / 2, 174, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE + 1, align: "center" });
+  drawText(ctx, "Selamat Datang!", CARD_WIDTH / 2, 160, { color: COLORS.secondaryLight, fontSize: TITLE_FONT_SIZE + 4, fontWeight: "Bold", align: "center" });
+  drawText(ctx, `${data.username} di ${data.guildName}`, CARD_WIDTH / 2, 188, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE + 1, align: "center" });
 
   const innerW = CARD_WIDTH - CARD_PADDING * 4;
-  drawInnerCard(ctx, CARD_PADDING * 2, 192, innerW, 32);
-  drawText(ctx, "1. Baca peraturan  •  2. Verifikasi di channel verifikasi", CARD_WIDTH / 2, 212, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, align: "center" });
+  drawInnerCard(ctx, CARD_PADDING * 2, 206, innerW, 36);
+  drawText(ctx, "1. Baca peraturan server  •  2. Verifikasi di channel verifikasi", CARD_WIDTH / 2, 229, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, align: "center" });
 
-  ctx.textAlign = "left";
-  drawFooter(ctx, `Member #${data.memberCount}`, H - 14, CARD_WIDTH);
+  drawFooter(ctx, `Member #${data.memberCount}`, H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
@@ -1413,84 +1341,167 @@ export async function renderGoodbyeCard(data: {
   guildName: string;
   memberCount: number;
 }): Promise<Buffer> {
-  const H = 220;
+  const H = 250;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  const grad = ctx.createLinearGradient(0, 0, CARD_WIDTH, H);
-  grad.addColorStop(0, "#1a0d0d");
-  grad.addColorStop(1, "#1a1117");
-  ctx.fillStyle = grad;
-  drawRoundedRect(ctx, 0, 0, CARD_WIDTH, H, CARD_RADIUS);
-  ctx.fill();
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#2b0f16");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.danger);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
 
-  // Avatar
-  await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH / 2 - 36, 30, 72);
+  await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH / 2 - 40, 32, 80);
 
-  drawText(ctx, "Sampai Jumpa!", CARD_WIDTH / 2, 126, { color: COLORS.dangerLight, fontSize: TITLE_FONT_SIZE + 2, fontWeight: "Bold", align: "center" });
-  drawText(ctx, `${data.userTag} telah meninggalkan ${data.guildName}`, CARD_WIDTH / 2, 150, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, align: "center" });
-  drawText(ctx, "Terima kasih sudah bergabung. Sampai jumpa lagi! ✨", CARD_WIDTH / 2, 172, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, align: "center" });
+  drawText(ctx, "Sampai Jumpa!", CARD_WIDTH / 2, 140, { color: COLORS.dangerLight, fontSize: TITLE_FONT_SIZE + 2, fontWeight: "Bold", align: "center" });
+  drawText(ctx, `${data.userTag} telah meninggalkan ${data.guildName}`, CARD_WIDTH / 2, 168, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, align: "center" });
+  drawText(ctx, "Terima kasih sudah pernah bergabung bersama kami! ✨", CARD_WIDTH / 2, 192, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, align: "center" });
 
-  drawFooter(ctx, `Member #${data.memberCount}`, H - 14, CARD_WIDTH);
+  drawFooter(ctx, `Member #${data.memberCount}`, H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
 
+/**
+ * Full, Dynamic, Ultra-Clear Server Rules Card
+ * Renders exact requested wording without truncation or symbols.
+ */
 export async function renderRulesCard(): Promise<Buffer> {
-  const H = 700;
+  const tempCanvas = createCanvas(1, 1);
+  const tempCtx = tempCanvas.getContext("2d");
+  const pad = CARD_PADDING;
+  const innerW = CARD_WIDTH - pad * 2;
+
+  const introText =
+    "Selamat datang di server resmi LeonX Hub. Server ini adalah wadah diskusi, pembaruan script, laporan bug, serta layanan bantuan bagi seluruh pengguna LeonX Hub.\n\n" +
+    "Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama di dalam server ini.";
+
+  const rulesData = [
+    {
+      icon: "🚫",
+      title: "Larangan Keras Crack, Leak, & Bypass",
+      desc: "Dilarang keras mencoba melakukan cracking/dekripsi loader, membagikan/leaking script LeonX ke luar server, atau menggunakan bypass ilegal. Pelanggaran berat ini akan berakibat pada Blacklist HWID + Roblox ID + Discord ID secara permanen dari seluruh layanan kami."
+    },
+    {
+      icon: "🤝",
+      title: "Saling Menghormati & Jaga Etika",
+      desc: "Gunakan bahasa yang sopan. Dilarang melakukan cyberbullying, harassment, memicu drama/debat kusir, toxic berlebih, SARA, atau mengirim konten NSFW/pornografi."
+    },
+    {
+      icon: "🛡️",
+      title: "Saluran Chat Sesuai Fungsi",
+      desc: "Gunakan channel sesuai dengan tujuannya. Jangan melakukan spam chat, spam tag staf/developer tanpa alasan mendesak, atau membagikan iklan/link promosi server lain (Anti-Link aktif)."
+    },
+    {
+      icon: "🎫",
+      title: "Penggunaan Sistem Ticket & Bug Report",
+      desc: "Buka ticket support hanya untuk masalah teknis/transaksi yang mendesak. Kirim laporan bug nyata via /bug-report. Menyalahgunakan sistem tiket/laporan bug untuk spam atau bercanda akan dikenakan sanksi."
+    },
+    {
+      icon: "🔒",
+      title: "Keamanan Akun & Transaksi Resmi",
+      desc: "Staf LeonX Hub TIDAK PERNAH meminta password akun Roblox atau token Discord Anda. Segala bentuk transaksi resmi hanya dilakukan melalui bot resmi atau langsung dengan Admin."
+    }
+  ];
+
+  const sanctionsData = [
+    "• Pelanggaran Ringan: Peringatan tertulis (Warning) via database bot.",
+    "• Pelanggaran Sedang: Timeout (Mute otomatis) mulai dari 10 menit hingga 7 hari.",
+    "• Pelanggaran Berat: Kick, Banned permanen dari Discord, serta Blacklist HWID & Roblox ID di server database game."
+  ];
+
+  const footerNote = "Jika Anda belum terverifikasi, silakan selesaikan proses verifikasi dengan menekan tombol Verify di channel verifikasi.";
+
+  // Pre-calculate heights
+  const introLines = wrapText(tempCtx, introText, innerW - 40, BODY_FONT_SIZE);
+  const introBlockH = introLines.length * 28 + 36;
+
+  const ruleHeights: number[] = [];
+  for (const r of rulesData) {
+    const lines = wrapText(tempCtx, r.desc, innerW - 48, BODY_FONT_SIZE);
+    const boxH = 46 + lines.length * 28 + 18;
+    ruleHeights.push(boxH);
+  }
+  const rulesTotalH = ruleHeights.reduce((acc, h) => acc + h + 16, 0);
+
+  const sanctionLinesList: string[][] = [];
+  for (const s of sanctionsData) {
+    sanctionLinesList.push(wrapText(tempCtx, s, innerW - 48, BODY_FONT_SIZE));
+  }
+  const sanctionsBoxH = 60 + sanctionLinesList.reduce((acc, l) => acc + l.length * 28 + 6, 0);
+
+  const footerLines = wrapText(tempCtx, footerNote, innerW - 40, SMALL_FONT_SIZE + 1);
+  const footerBlockH = footerLines.length * 24 + 40;
+
+  const H = 220 + introBlockH + rulesTotalH + sanctionsBoxH + footerBlockH;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d0d1a", "#1a0d33");
-  drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.primary);
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#090714", "#180e2e");
+  drawOuterBorder(ctx, CARD_WIDTH, H, "rgba(168, 85, 247, 0.4)");
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.primary);
 
-  drawGlowText(ctx, "✨  Welcome to LeonX Hub Server  ✨", CARD_PADDING, 54, COLORS.primaryLight, TITLE_FONT_SIZE);
+  // Title
+  drawTitleText(ctx, "✨  Welcome to LeonX Hub Server  ✨", pad, 72, COLORS.primaryLight, TITLE_FONT_SIZE + 2);
 
-  const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  const descLines = wrapText(ctx, "Selamat datang di server resmi LeonX Hub. Harap luangkan waktu untuk membaca dan mematuhi peraturan demi kenyamanan bersama.", innerW - 32, BODY_FONT_SIZE);
-  let curY = 72;
-  for (const line of descLines) {
-    drawText(ctx, line, CARD_PADDING, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-    curY += 20;
+  let curY = 96;
+
+  // Intro box
+  drawInnerCard(ctx, pad, curY, innerW, introBlockH);
+  let ly = curY + 28;
+  for (const line of introLines) {
+    drawText(ctx, line, pad + 20, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+    ly += 28;
+  }
+  curY += introBlockH + 24;
+
+  // Rules Section Title
+  drawTitleText(ctx, "📜  SERVER RULES & GUIDELINES", pad, curY + 8, COLORS.primaryLight, SUBTITLE_FONT_SIZE + 2);
+  curY += 34;
+  drawText(ctx, "Dengan bergabung di server ini, Anda dianggap telah membaca dan menyetujui seluruh ketentuan di bawah ini:", pad, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+  curY += 36;
+
+  // Rules Boxes
+  for (let i = 0; i < rulesData.length; i++) {
+    const r = rulesData[i]!;
+    const boxH = ruleHeights[i]!;
+
+    drawInnerCard(ctx, pad, curY, innerW, boxH);
+
+    drawText(ctx, `${r.icon}  ${r.title}`, pad + 20, curY + 28, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 2, fontWeight: "Bold" });
+
+    const lines = wrapText(ctx, r.desc, innerW - 40, BODY_FONT_SIZE);
+    let rly = curY + 54;
+    for (const line of lines) {
+      drawText(ctx, line, pad + 20, rly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
+      rly += 28;
+    }
+    curY += boxH + 16;
   }
 
-  curY += 8;
-  drawGlowText(ctx, "📜  SERVER RULES & GUIDELINES", CARD_PADDING, curY, COLORS.primaryLight, TITLE_FONT_SIZE - 2);
-  curY += 20;
+  curY += 12;
 
-  const rules = [
-    { num: "1", icon: "🚫", title: "Larangan Crack, Leak, & Bypass", desc: "Dilarang keras cracking/dekripsi loader, leak script, atau bypass ilegal. Sanksi: Blacklist permanen." },
-    { num: "2", icon: "🤝", title: "Saling Menghormati & Jaga Etika", desc: "Bahasa sopan. Dilarang bullying, harassment, drama, toxic, SARA, NSFW." },
-    { num: "3", icon: "🛡️", title: "Saluran Chat Sesuai Fungsi", desc: "Gunakan channel sesuai tujuan. Jangan spam chat, spam tag staf, atau iklan server lain." },
-    { num: "4", icon: "🎫", title: "Sistem Ticket & Bug Report", desc: "Buka ticket hanya untuk masalah mendesak. Jangan abuse sistem tiket/bug report." },
-    { num: "5", icon: "🔒", title: "Keamanan Akun & Transaksi", desc: "Staf TIDAK PERNAH meminta password. Transaksi resmi hanya via bot atau langsung Admin." },
-  ];
+  // Sanctions Section Title
+  drawTitleText(ctx, "⚖️  SISTEM SANKSI & KONSEKUENSI", pad, curY + 8, COLORS.warningLight, SUBTITLE_FONT_SIZE + 2);
+  curY += 36;
 
-  for (const rule of rules) {
-    drawInnerCard(ctx, CARD_PADDING, curY, innerW, 60);
-    drawText(ctx, `${rule.icon}  ${rule.num}. ${rule.title}`, CARD_PADDING + 16, curY + 20, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE + 1, fontWeight: "Bold" });
-    const ruleLines = wrapText(ctx, rule.desc, innerW - 48, SMALL_FONT_SIZE + 1);
-    ruleLines.forEach((line, i) => {
-      drawText(ctx, line, CARD_PADDING + 16, curY + 38 + i * 16, { color: COLORS.textSecondary, fontSize: SMALL_FONT_SIZE + 1 });
-    });
-    curY += 68;
+  drawInnerCard(ctx, pad, curY, innerW, sanctionsBoxH, "rgba(250, 204, 21, 0.3)");
+  drawText(ctx, "Moderator berhak mengambil keputusan mutlak berdasarkan pelanggaran yang Anda lakukan:", pad + 20, curY + 28, { color: COLORS.warningLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+
+  let sly = curY + 56;
+  for (const sLines of sanctionLinesList) {
+    for (const line of sLines) {
+      drawText(ctx, line, pad + 20, sly, { color: COLORS.textPrimary, fontSize: BODY_FONT_SIZE });
+      sly += 28;
+    }
+    sly += 4;
+  }
+  curY += sanctionsBoxH + 20;
+
+  // Footer Note box
+  drawInnerCard(ctx, pad, curY, innerW, footerBlockH, "rgba(56, 189, 248, 0.3)");
+  let fly = curY + 26;
+  for (const line of footerLines) {
+    drawText(ctx, line, pad + 20, fly, { color: COLORS.secondaryLight, fontSize: SMALL_FONT_SIZE + 1, fontWeight: "Bold" });
+    fly += 24;
   }
 
-  curY += 8;
-  drawGlowText(ctx, "⚖️  SISTEM SANKSI", CARD_PADDING, curY, COLORS.warningLight, TITLE_FONT_SIZE - 2);
-  curY += 22;
-  const sanctions = [
-    "Ringan: Peringatan tertulis (Warning)",
-    "Sedang: Timeout 10 menit — 7 hari",
-    "Berat: Kick/Ban + Blacklist HWID & Roblox ID",
-  ];
-  for (const s of sanctions) {
-    drawText(ctx, `•  ${s}`, CARD_PADDING + 8, curY, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE });
-    curY += 22;
-  }
-
-  drawDivider(ctx, H - 40, CARD_WIDTH);
   drawFooter(ctx, "LeonX Hub  •  Official Guidelines", H - 18, CARD_WIDTH);
 
   return finalizeCard(canvas);
@@ -1502,44 +1513,40 @@ export async function renderAiResponseCard(data: {
 }): Promise<Buffer> {
   const tempCanvas = createCanvas(1, 1);
   const tempCtx = tempCanvas.getContext("2d");
-  const respLines = wrapText(tempCtx, data.response.replace(/\*\*/g, "").replace(/`/g, ""), CARD_WIDTH - CARD_PADDING * 2 - 32, BODY_FONT_SIZE);
-  const H = 130 + respLines.length * 20;
+  const respLines = wrapText(tempCtx, data.response.replace(/\*\*/g, "").replace(/`/g, ""), CARD_WIDTH - CARD_PADDING * 2 - 40, BODY_FONT_SIZE);
+  const H = 150 + respLines.length * 26;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d1117", "#0d1b2e");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.secondary);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
 
-  drawGlowText(ctx, "🤖  AI Support Assistant", CARD_PADDING, 58, COLORS.secondaryLight, TITLE_FONT_SIZE);
+  drawTitleText(ctx, "🤖  AI Support Assistant (Solusi Awal)", CARD_PADDING, 68, COLORS.secondaryLight, TITLE_FONT_SIZE);
 
   const innerW = CARD_WIDTH - CARD_PADDING * 2;
-  const contentH = respLines.length * 20 + 16;
-  drawInnerCard(ctx, CARD_PADDING, 76, innerW, contentH);
-  let ly = 94;
+  const contentH = respLines.length * 26 + 24;
+  drawInnerCard(ctx, CARD_PADDING, 94, innerW, contentH);
+  let ly = 120;
   for (const line of respLines) {
-    drawText(ctx, line, CARD_PADDING + 16, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, maxWidth: innerW - 32 });
-    ly += 20;
+    drawText(ctx, line, CARD_PADDING + 20, ly, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, maxWidth: innerW - 40 });
+    ly += 26;
   }
 
-  drawFooter(ctx, "Tim support manusia akan segera membantu jika masalah belum teratasi.", H - 14, CARD_WIDTH);
+  drawFooter(ctx, "Tim support manusia akan segera membantu jika masalah belum teratasi.", H - 16, CARD_WIDTH);
 
   return finalizeCard(canvas);
 }
 
-// ──────────────────────────────────────────────────────
-//  CARD RENDERERS — Claim & Small utility
-// ──────────────────────────────────────────────────────
-
 export async function renderClaimCard(claimedBy: string): Promise<Buffer> {
-  const H = 100;
+  const H = 120;
   const { canvas, ctx } = createBaseCanvas(H);
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#0d170d", "#0d1117");
+  fillGradientBackground(ctx, CARD_WIDTH, H, "#071a0e", "#0f2e1a");
   drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 18, CARD_WIDTH, COLORS.success);
+  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.success);
 
-  drawGlowText(ctx, "✋  Ticket Diklaim", CARD_PADDING, 52, COLORS.successLight, TITLE_FONT_SIZE);
-  drawText(ctx, `${claimedBy} telah claim ticket ini dan akan membantu menyelesaikan masalahmu.`, CARD_PADDING, 76, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, maxWidth: CARD_WIDTH - CARD_PADDING * 2 });
+  drawTitleText(ctx, "✋  Ticket Diklaim", CARD_PADDING, 62, COLORS.successLight, TITLE_FONT_SIZE);
+  drawText(ctx, `${claimedBy} telah claim ticket ini dan akan membantu menyelesaikan masalahmu.`, CARD_PADDING, 90, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, maxWidth: CARD_WIDTH - CARD_PADDING * 2 });
 
   return finalizeCard(canvas);
 }
