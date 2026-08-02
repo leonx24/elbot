@@ -565,7 +565,7 @@ export async function renderRobloxProfileCard(data: {
   const badgeText = data.isBanned ? "Banned" : "Aktif";
   drawStatusBadge(ctx, badgeText, nameX, 100, badgeColor);
 
-  // Description
+  // Descriptions
   let curY = 132;
   if (data.description) {
     drawInnerCard(ctx, CARD_PADDING, curY, CARD_WIDTH - CARD_PADDING * 2, 60);
