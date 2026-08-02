@@ -9,6 +9,7 @@ const schema = z.object({
   VERIFY_CHANNEL_ID: z.string().regex(/^\d+$/, "VERIFY_CHANNEL_ID harus berupa channel ID"),
   VERIFIED_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   PREMIUM_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  OWNER_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   TICKET_CATEGORY_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   SUPPORT_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   BUG_REPORT_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),

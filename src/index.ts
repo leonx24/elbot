@@ -2678,30 +2678,42 @@ client.on(Events.MessageCreate, async (message) => {
 
     // $help
     if (cmd === "help") {
+      const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
+      const isOwner =
+        (ownerRoleId ? member.roles.cache.has(ownerRoleId) : false) ||
+        member.roles.cache.some(r => r.name.toLowerCase().includes("owner")) ||
+        member.permissions.has(PermissionFlagsBits.Administrator) ||
+        member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+        message.guild.ownerId === member.id;
+
+      const sections = [
+        {
+          title: "📌 Perintah Umum & Informasi",
+          content:
+            "• `$help` — Menampilkan daftar perintah bot ini\n" +
+            "• `$status` — Melihat status operasional script & bot\n" +
+            "• `$website` — Menampilkan link resmi website & bot console\n" +
+            "• `$faq [topik]` — Melihat informasi FAQ (misal: `$faq script`, `$faq error`)"
+        },
+        {
+          title: "🎮 Perintah Roblox",
+          content:
+            "• `$roblox <username>` — Lookup profil Roblox, statistik, RAP, & riwayat nama"
+        }
+      ];
+
+      if (isOwner) {
+        sections.push({
+          title: "🛡️ Perintah Moderator / Admin",
+          content:
+            "• `$stats` — Melihat ringkasan statistik komunitas & bot"
+        });
+      }
+
       const v2Help = buildV2Container({
         title: "📖 Daftar Perintah Bot (Prefix: `$`)",
         description: "Berikut adalah daftar perintah prefix yang dapat Anda gunakan di server ini:",
-        sections: [
-          {
-            title: "📌 Perintah Umum & Informasi",
-            content:
-              "• `$help` — Menampilkan daftar perintah bot ini\n" +
-              "• `$status` — Melihat status operasional script & bot\n" +
-              "• `$website` — Menampilkan link resmi website & bot console\n" +
-              "• `$faq [topik]` — Melihat informasi FAQ (misal: `$faq script`, `$faq error`)"
-          },
-          {
-            title: "🔑 Perintah Lisensi & Roblox",
-            content:
-              "• `$key` — Melihat detail lisensi key Anda & 5 riwayat eksekusi\n" +
-              "• `$roblox <username>` — Lookup profil Roblox, statistik, RAP, & riwayat nama"
-          },
-          {
-            title: "🛡️ Perintah Moderator / Admin",
-            content:
-              "• `$stats` — Melihat ringkasan statistik komunitas & bot (Admin only)"
-          }
-        ],
+        sections,
         footer: "LeonX Hub • Command List"
       });
       await message.reply(v2Help);
@@ -2937,9 +2949,17 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
-    // $stats (admin only)
+    // $stats (admin / owner only)
     if (cmd === "stats") {
-      if (!member.permissions.has(PermissionFlagsBits.ManageGuild) && member.id !== config.OWNER_ID) {
+      const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
+      const isOwner =
+        (ownerRoleId ? member.roles.cache.has(ownerRoleId) : false) ||
+        member.roles.cache.some(r => r.name.toLowerCase().includes("owner")) ||
+        member.permissions.has(PermissionFlagsBits.Administrator) ||
+        member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+        message.guild.ownerId === member.id;
+
+      if (!isOwner) {
         await message.reply("❌ Anda tidak memiliki izin untuk melihat statistik admin.");
         return;
       }
