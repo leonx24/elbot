@@ -34,15 +34,23 @@ export const TICKET_CATEGORIES = {
 
 export type TicketCategory = keyof typeof TICKET_CATEGORIES;
 
-export async function createTicketPanel() {
-  const categoriesList = Object.values(TICKET_CATEGORIES).map(cat => ({
-    emoji: cat.emoji,
-    label: cat.label.split(" ").slice(1).join(" "),
-    description: cat.description
-  }));
-
-  const cardBuf = await renderTicketPanelCard(categoriesList);
-  const { embed, attachment } = cardEmbed(cardBuf, 0x2563eb, "ticket_panel.png");
+export function createTicketPanel() {
+  const embed = new EmbedBuilder()
+    .setColor(0x7c3aed) // Vibrant Purple
+    .setTitle("🎫 Support Ticket System")
+    .setDescription(
+      "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai di bawah ini.\n\n" +
+      "**Kategori yang tersedia:**\n" +
+      Object.entries(TICKET_CATEGORIES)
+        .map(([_, cat]) => `${cat.emoji} **${cat.label.split(" ").slice(1).join(" ")}**\n└ *${cat.description}*`)
+        .join("\n\n") +
+      "\n\n> 📌 **Catatan:**\n" +
+      "> • Satu user hanya bisa memiliki **1 ticket aktif** pada satu waktu.\n" +
+      "> • Tim support akan merespons dalam 1-24 jam.\n" +
+      "> • Mohon jelaskan masalah Anda secara detail."
+    )
+    .setFooter({ text: "LeonX Hub • Support System" })
+    .setTimestamp();
 
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId("ticket:category")
@@ -58,7 +66,6 @@ export async function createTicketPanel() {
 
   return {
     embeds: [embed],
-    files: [attachment],
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)]
   };
 }
@@ -88,13 +95,21 @@ export async function createTicketChannel(
     ]
   });
 
-  const cardBuf = await renderTicketWelcomeCard({
-    categoryEmoji: categoryInfo.emoji,
-    categoryLabel: categoryInfo.label,
-    userId: user.id,
-    ticketId: channel.id.slice(-6)
-  });
-  const { embed: welcomeEmbed, attachment: welcomeAtt } = cardEmbed(cardBuf, 0x2563eb, "ticket_welcome.png");
+  const welcomeEmbed = new EmbedBuilder()
+    .setColor(0x7c3aed)
+    .setTitle(`${categoryInfo.emoji} ${categoryInfo.label}`)
+    .setDescription(
+      `Halo <@${user.id}>, terima kasih sudah membuka ticket!\n\n` +
+      `• **Kategori:** ${categoryInfo.label}\n` +
+      `• **Status:** 🟢 Open\n\n` +
+      "Silakan jelaskan masalah Anda secara detail di bawah. Tim support kami akan segera membantu.\n\n" +
+      "> 💡 **Tips Bantuan:**\n" +
+      "> • Sertakan screenshot/video jika ada masalah teknis\n" +
+      "> • Jelaskan langkah-langkah yang sudah Anda coba\n" +
+      "> • Sebutkan versi script atau executor yang digunakan"
+    )
+    .setFooter({ text: `Ticket ID: #${channel.id.slice(-6)}` })
+    .setTimestamp();
 
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -112,7 +127,6 @@ export async function createTicketChannel(
   await channel.send({
     content: config.SUPPORT_ROLE_ID ? `<@${user.id}> | <@&${config.SUPPORT_ROLE_ID}>` : `<@${user.id}>`,
     embeds: [welcomeEmbed],
-    files: [welcomeAtt],
     components: [buttons]
   });
 
@@ -397,16 +411,20 @@ export async function closeTicket(
     "UPDATE tickets SET status = 'closed', closed_at = CURRENT_TIMESTAMP, close_reason = ? WHERE channel_id = ?"
   ).run(reason || "Closed by staff", channel.id);
 
-  const cardBuf = await renderTicketCloseCard({
-    closedBy: closedBy.tag,
-    reason: reason || "Tidak ada alasan"
-  });
-  const { embed: closeEmbed, attachment: closeAtt } = cardEmbed(cardBuf, 0xef4444, "ticket_close.png");
+  const closeEmbed = new EmbedBuilder()
+    .setColor(0xef4444)
+    .setTitle("🔒 Ticket Ditutup")
+    .setDescription(
+      `Ticket ini telah ditutup oleh <@${closedBy.id}>\n\n` +
+      `• **Alasan:** ${reason || "Tidak ada alasan"}\n\n` +
+      "Transcript telah disimpan dan dikirim via DM.\n" +
+      "Pembuat ticket dapat memberikan rating sebelum channel dihapus."
+    )
+    .setFooter({ text: "Terima kasih sudah menggunakan support system kami!" })
+    .setTimestamp();
 
   await channel.send({
-    content: `Ticket ini telah ditutup oleh <@${closedBy.id}>`,
-    embeds: [closeEmbed],
-    files: [closeAtt]
+    embeds: [closeEmbed]
   });
 
   return { transcript, ticketData };

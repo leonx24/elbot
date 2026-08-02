@@ -244,19 +244,25 @@ function onCooldown(userId: string, action: string, duration = 5_000): boolean {
   return false;
 }
 
-async function verificationPanel() {
+function verificationPanel() {
   const button = new ButtonBuilder()
     .setCustomId("verify:accept")
     .setLabel("Verify")
     .setEmoji("✅")
     .setStyle(ButtonStyle.Success);
 
-  const cardBuffer = await renderVerifyCard();
-  const { embed, attachment } = cardEmbed(cardBuffer, 0x22c55e, "verify.png");
+  const embed = new EmbedBuilder()
+    .setColor(0x22c55e)
+    .setTitle("Verifikasi Member")
+    .setDescription(
+      "Selamat datang di server **LeonX Hub**!\n\n" +
+      "Klik tombol **Verify** di bawah untuk menyetujui peraturan server dan mendapatkan akses penuh ke seluruh channel."
+    )
+    .setFooter({ text: "LeonX Hub • Verification System" })
+    .setTimestamp();
 
   return {
     embeds: [embed],
-    files: [attachment],
     components: [new ActionRowBuilder<ButtonBuilder>().addComponents(button)]
   };
 }
@@ -294,7 +300,7 @@ async function ensureVerificationPanel(): Promise<void> {
     }
   }
 
-  const message = await channel.send(await verificationPanel());
+  const message = await channel.send(verificationPanel());
   db.prepare(`
     INSERT INTO bot_settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -336,7 +342,7 @@ async function ensureTicketPanel(): Promise<void> {
     }
   }
 
-  const message = await channel.send(await createTicketPanel());
+  const message = await channel.send(createTicketPanel());
   db.prepare(`
     INSERT INTO bot_settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -417,15 +423,21 @@ async function checkMonitoredPlaces(): Promise<void> {
         const unixTimestamp = Math.floor(updatedDate.getTime() / 1000);
 
         // 2. Kirim pesan Embed Alert ke channel update-logs
-        const alertCard = await renderGameUpdateAlertCard({
-          gameName: gameData.name,
-          placeId: item.place_id,
-          universeId: item.universe_id,
-          updatedAt: updatedDate.toLocaleString("id-ID"),
-        });
-        const { embed, attachment } = cardEmbed(alertCard, 0xef4444, "game_update.png");
+        const embed = new EmbedBuilder()
+          .setColor(0xef4444)
+          .setTitle(`🚨 GAME UPDATE DETECTED: ${gameData.name}`)
+          .setDescription(
+            `Sebuah pembaruan baru terdeteksi pada game yang sedang dipantau!\n\n` +
+            `• **Nama Game:** ${gameData.name}\n` +
+            `• **Place ID:** \`${item.place_id}\`\n` +
+            `• **Universe ID:** \`${item.universe_id}\`\n` +
+            `• **Tanggal Pembaruan:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n\n` +
+            `⚠️ **Status Bot Otomatis Diubah:** Status bot kini dialihkan ke **Testing/Updating** dan status suara disesuaikan. Pengembang diharapkan untuk segera mengecek kecocokan script loader.`
+          )
+          .setFooter({ text: "LeonX Hub • Auto-Update Detector" })
+          .setTimestamp();
 
-        await channel.send({ content: "@everyone", embeds: [embed], files: [attachment] }).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
+        await channel.send({ content: "@everyone", embeds: [embed] }).catch((err) => console.error("Gagal mengirim notifikasi update game:", err));
 
         // 3. Otomatis set status bot ke 'testing'
         db.prepare(`
@@ -656,29 +668,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }).join("\n");
         }
 
-        const historyList = lastExecutions.map(ex => {
-          const utcTime = ex.executed_at.includes("Z") || ex.executed_at.includes("UTC") ? ex.executed_at : ex.executed_at + " UTC";
-          const date = new Date(utcTime).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" });
-          return {
-            date,
-            placeId: String(ex.place_id),
-            executor: ex.executor || "Unknown",
-            robloxName: ex.roblox_username || "Unknown"
-          };
-        });
+        const embed = new EmbedBuilder()
+          .setColor(0x7c3aed)
+          .setTitle("🔑 Informasi Key & Lisensi Anda")
+          .setDescription("Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.")
+          .addFields(
+            { name: "🔑 Key Lisensi", value: `\`||${keyData.key}||\` *(Klik untuk menyalin)*`, inline: false },
+            { name: "👤 Akun Roblox", value: keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut", inline: true },
+            { name: "💻 Perangkat (HWID)", value: keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut", inline: true },
+            { name: "🔄 Reset HWID Cooldown", value: cooldownText, inline: true },
+            { name: "📊 Total Eksekusi", value: `\`${totalExec}\` kali`, inline: true },
+            { name: "📅 Dibuat Pada", value: new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" }), inline: true },
+            { name: "📜 Riwayat 5 Eksekusi Terakhir", value: historyText, inline: false }
+          )
+          .setFooter({ text: "LeonX Hub • Lisensi System" })
+          .setTimestamp();
 
-        const keyCardBuf = await renderKeyInfoCard({
-          key: keyData.key,
-          robloxId: keyData.roblox_id,
-          hwid: keyData.hwid,
-          cooldownText,
-          totalExec,
-          createdAt: new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" }),
-          history: historyList
-        });
-        const { embed, attachment } = cardEmbed(keyCardBuf, 0x7c3aed, "keyinfo.png");
-
-        await interaction.editReply({ embeds: [embed], files: [attachment] });
+        await interaction.editReply({ embeds: [embed] });
       }
 
       if (interaction.commandName === "lookup") {
@@ -760,36 +766,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }).join("\n");
         }
 
-        const keysFormatted = keyRows.map(row => ({
-          key: row.key,
-          discordId: row.discord_id,
-          robloxId: row.roblox_id,
-          hwid: row.hwid,
-          lastReset: row.last_reset_at ? new Date(row.last_reset_at + " UTC").toLocaleString("id-ID") : "Belum pernah di-reset",
-          createdAt: new Date(row.created_at + " UTC").toLocaleString("id-ID")
-        }));
+        const embed = new EmbedBuilder()
+          .setColor(0xef4444)
+          .setTitle("🔍 Hasil Pencarian / Lookup Data")
+          .setDescription(`Pencarian berdasarkan kriteria: ${searchCriteria}`)
+          .addFields(
+            { name: "🛡️ Status Blacklist", value: blacklistStatus, inline: false }
+          );
 
-        const executionsFormatted = executions.map(ex => {
-          const utcTime = ex.executed_at.includes("Z") || ex.executed_at.includes("UTC") ? ex.executed_at : ex.executed_at + " UTC";
-          return {
-            date: new Date(utcTime).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }),
-            placeId: String(ex.place_id),
-            executor: ex.executor || "Unknown",
-            robloxName: ex.roblox_username || "Unknown",
-            robloxId: String(ex.roblox_id || "N/A")
-          };
-        });
+        if (keyRows.length === 0) {
+          embed.addFields({ name: "🔑 Data Lisensi / Key", value: "❌ Tidak ditemukan data key/lisensi yang terdaftar untuk kriteria pencarian ini.", inline: false });
+        } else {
+          keyRows.forEach((row, idx) => {
+            let resetTimeText = "Belum pernah di-reset";
+            if (row.last_reset_at) {
+              resetTimeText = new Date(row.last_reset_at + " UTC").toLocaleString("id-ID");
+            }
 
-        const lookupBuf = await renderLookupCard({
-          searchCriteria: searchCriteria.replace(/<@(\d+)>/g, "$1"),
-          blacklistStatus,
-          isBlacklisted: blacklistCheck.blacklisted,
-          keys: keysFormatted,
-          executions: executionsFormatted
-        });
-        const { embed, attachment } = cardEmbed(lookupBuf, 0xef4444, "lookup.png");
+            embed.addFields({
+              name: `🔑 Key Lisensi #${idx + 1}`,
+              value: `**Key**: \`${row.key}\`\n` +
+                     `**Discord User**: <@${row.discord_id}> (\`${row.discord_id}\`)\n` +
+                     `**Roblox**: ${row.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${row.roblox_id}/profile) (\`${row.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
+                     `**HWID**: ${row.hwid ? `\`${row.hwid}\`` : "🔴 Belum tertaut"}\n` +
+                     `**Terakhir Reset HWID**: \`${resetTimeText}\`\n` +
+                     `**Dibuat Pada**: \`${new Date(row.created_at + " UTC").toLocaleString("id-ID")}\``,
+              inline: false
+            });
+          });
+        }
 
-        await interaction.editReply({ embeds: [embed], files: [attachment] });
+        embed.addFields({ name: "📊 Riwayat 5 Eksekusi Terakhir", value: executionsText, inline: false });
+        embed.setFooter({ text: "LeonX Hub • Admin Tools" }).setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
       }
 
       if (interaction.commandName === "ai") {
@@ -1039,9 +1049,24 @@ Format balasan:
         const reasonVal = dbReason?.value || "Semua sistem berjalan dengan normal.";
         const statusColor = statusVal === "operational" ? 0x22c55e : statusVal === "testing" ? 0xeab308 : 0xef4444;
 
-        const statusCardBuf = await renderStatusCard({ status: statusVal, note: reasonVal });
-        const { embed: statusEmbed, attachment: statusAtt } = cardEmbed(statusCardBuf, statusColor, "status.png");
-        await interaction.reply({ embeds: [statusEmbed], files: [statusAtt] });
+        let statusText = "🟢 Operational";
+        if (statusVal === "testing") {
+          statusText = "🟡 Testing / Updating";
+        } else if (statusVal === "maintenance") {
+          statusText = "🔴 Maintenance / Patched";
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(statusColor)
+          .setTitle("📊 Status Script & Bot")
+          .addFields(
+            { name: "LeonX Hub Script", value: statusText, inline: true },
+            { name: "Bot Discord", value: "🟢 Online", inline: true },
+            { name: "Catatan", value: reasonVal, inline: false }
+          )
+          .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
       }
 
       if (interaction.commandName === "setstatus") {
@@ -1103,18 +1128,25 @@ Format balasan:
         if (!faqAnswer) {
           await interaction.reply({ content: "Topik tidak ditemukan.", flags: MessageFlags.Ephemeral });
         } else {
-          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-          const faqBuf = await renderFaqCard(topic, faqAnswer);
-          const { embed: faqEmbed, attachment: faqAtt } = cardEmbed(faqBuf, 0x06b6d4, "faq.png");
-          await interaction.editReply({ embeds: [faqEmbed], files: [faqAtt] });
+          const embed = new EmbedBuilder()
+            .setColor(0x06b6d4)
+            .setTitle(`💡 FAQ: ${topic}`)
+            .setDescription(faqAnswer)
+            .setFooter({ text: "LeonX Hub • FAQ" });
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         }
       }
 
       if (interaction.commandName === "website") {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const webBuf = await renderWebsiteCard();
-        const { embed: webEmbed, attachment: webAtt } = cardEmbed(webBuf, 0x2563eb, "website.png");
-        await interaction.editReply({ embeds: [webEmbed], files: [webAtt] });
+        const embed = new EmbedBuilder()
+          .setColor(0x2563eb)
+          .setTitle("🌐 Website Resmi LeonThings")
+          .setDescription(
+            "• **Website Utama:** https://leonthings.my.id\n" +
+            "• **Bot Console Page:** https://leonthings.my.id/bot"
+          )
+          .setFooter({ text: "LeonX Hub • Official Links" });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       }
 
       if (interaction.commandName === "ticket") {
@@ -1195,12 +1227,17 @@ Format balasan:
           }
 
           // Kirim rating prompt
-          const ratingBuf = await renderTicketRatingCard();
-          const { embed: ratingEmbed, attachment: ratingAtt } = cardEmbed(ratingBuf, 0x2563eb, "ticket_rating.png");
+          const ratingEmbed = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("📊 Beri Rating untuk Support Kami")
+            .setDescription(
+              "Bagaimana pengalaman Anda dengan layanan support kami?\n" +
+              "Rating Anda sangat membantu kami untuk terus meningkatkan kualitas layanan."
+            )
+            .setFooter({ text: "Pilih rating bintang di bawah ini" });
 
           await interaction.channel.send({
             embeds: [ratingEmbed],
-            files: [ratingAtt],
             components: [createRatingButtons()]
           });
 
@@ -1248,23 +1285,25 @@ Format balasan:
 
         if (sub === "stats") {
           const stats = getTicketStats();
-          const categoryFormatted = stats.byCategory.map(c => ({
-            emoji: TICKET_CATEGORIES[c.category as TicketCategory]?.emoji || "📌",
-            category: c.category,
-            count: c.count
-          }));
-          const statsBuf = await renderTicketStatsCard({
-            total: stats.total,
-            open: stats.open,
-            closed: stats.closed,
-            avgRating: stats.avgRating,
-            byCategory: categoryFormatted
-          });
-          const { embed: statsEmbed, attachment: statsAtt } = cardEmbed(statsBuf, 0x2563eb, "ticket_stats.png");
+          const categoryFormatted = stats.byCategory
+            .map(c => `• **${TICKET_CATEGORIES[c.category as TicketCategory]?.label || c.category}**: ${c.count}`)
+            .join("\n");
+
+          const statsEmbed = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("📊 Statistik Ticket System")
+            .addFields(
+              { name: "📝 Total Ticket", value: String(stats.total), inline: true },
+              { name: "🟢 Ticket Open", value: String(stats.open), inline: true },
+              { name: "🔒 Ticket Closed", value: String(stats.closed), inline: true },
+              { name: "⭐ Rata-rata Rating", value: stats.avgRating ? `${Number(stats.avgRating).toFixed(1)} / 5.0` : "Belum ada rating", inline: true },
+              { name: "📂 Per Kategori", value: categoryFormatted || "Belum ada data", inline: false }
+            )
+            .setFooter({ text: "LeonX Hub • Support System" })
+            .setTimestamp();
 
           await interaction.reply({
             embeds: [statsEmbed],
-            files: [statsAtt],
             flags: MessageFlags.Ephemeral
           });
         }
@@ -1321,18 +1360,18 @@ Format balasan:
 
           const gameName = interaction.options.getString("game") || "Universal";
 
-          const cardBuf = await renderChangelogCard({
-            version,
-            title,
-            typeLabel: type.label,
-            typeEmoji: type.emoji,
-            typeColor: "#" + type.color.toString(16).padStart(6, "0"),
-            gameName,
-            summary,
-            formattedContent,
-            statusFooter: statusFooterText
-          });
-          const { embed: changelogEmbed, attachment: changelogAtt } = cardEmbed(cardBuf, type.color, "changelog.png");
+          const changelogEmbed = new EmbedBuilder()
+            .setColor(type.color)
+            .setTitle(`🚀 ${changelogTitle}`)
+            .setDescription(
+              `**Target Game:** ${gameName}\n` +
+              `**Jenis Update:** ${type.emoji} ${type.label}\n\n` +
+              `> ${summary}\n\n` +
+              `### 📋 Change Details:\n` +
+              formattedContent
+            )
+            .setFooter({ text: `LeonX Hub ${version} • ${statusFooterText}` })
+            .setTimestamp();
 
           const buttonsList: ButtonBuilder[] = [];
 
@@ -1374,7 +1413,6 @@ Format balasan:
               message: {
                 content: `@everyone  ${type.emoji} **${type.label}**`,
                 embeds: [changelogEmbed],
-                files: [changelogAtt],
                 components: [links]
               },
               reason: `Changelog ${version}`
@@ -1383,7 +1421,6 @@ Format balasan:
             await channel.send({
               content: `@everyone  ${type.emoji} **${type.label}**`,
               embeds: [changelogEmbed],
-              files: [changelogAtt],
               components: [links]
             });
           } else {
@@ -1402,20 +1439,12 @@ Format balasan:
           if (!row) {
             await interaction.reply({ content: "Belum ada changelog.", flags: MessageFlags.Ephemeral });
           } else {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            const cardBuf = await renderChangelogCard({
-              version: "v1.0.0",
-              title: row.title,
-              typeLabel: "NEW UPDATE",
-              typeEmoji: "✨",
-              typeColor: "#7c3aed",
-              gameName: "Universal",
-              summary: row.title,
-              formattedContent: row.content,
-              statusFooter: row.created_at
-            });
-            const { embed: cE, attachment: cA } = cardEmbed(cardBuf, 0x7c3aed, "changelog_latest.png");
-            await interaction.editReply({ embeds: [cE], files: [cA] });
+            const embed = new EmbedBuilder()
+              .setColor(0x7c3aed)
+              .setTitle(`🚀 ${row.title}`)
+              .setDescription(row.content)
+              .setFooter({ text: `Published on ${row.created_at}` });
+            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
           }
         }
       }
@@ -1442,18 +1471,23 @@ Format balasan:
       }
 
       if (interaction.commandName === "stats") {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const openTickets = (db.prepare("SELECT COUNT(*) AS count FROM tickets WHERE status = 'open'").get() as { count: number }).count;
         const reports = (db.prepare("SELECT COUNT(*) AS count FROM bug_reports").get() as { count: number }).count;
         const uses = (db.prepare("SELECT COALESCE(SUM(uses), 0) AS count FROM command_usage").get() as { count: number }).count;
-        const statsBuf = await renderAdminStatsCard({
-          memberCount: interaction.guild?.memberCount ?? 0,
-          openTickets,
-          bugReports: reports,
-          commandsUsed: uses,
-        });
-        const { embed: statsE, attachment: statsA } = cardEmbed(statsBuf, 0x7c3aed, "stats.png");
-        await interaction.editReply({ embeds: [statsE], files: [statsA] });
+
+        const embed = new EmbedBuilder()
+          .setColor(0x7c3aed)
+          .setTitle("📊 Statistik Admin Server")
+          .addFields(
+            { name: "👥 Total Member", value: String(interaction.guild?.memberCount ?? 0), inline: true },
+            { name: "🎫 Ticket Aktif", value: String(openTickets), inline: true },
+            { name: "🐛 Laporan Bug", value: String(reports), inline: true },
+            { name: "⚡ Command Dipakai", value: String(uses), inline: true }
+          )
+          .setFooter({ text: "LeonX Hub • Admin Dashboard" })
+          .setTimestamp();
+
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       }
 
       if (interaction.commandName === "blacklist") {
@@ -1527,21 +1561,23 @@ Format balasan:
             await interaction.reply({ content: "ℹ️ Daftar blacklist saat ini kosong.", flags: MessageFlags.Ephemeral });
             return;
           }
-          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-          const blItems = list.map(item => ({
-            id: item.id,
-            discordId: item.discord_id,
-            robloxId: item.roblox_id,
-            hwid: item.hwid,
-            reason: item.reason,
-            createdAt: item.created_at
-          }));
+          const embed = new EmbedBuilder()
+            .setColor(0xef4444)
+            .setTitle("🚫 Daftar Blacklist LeonX Hub")
+            .setDescription(`Total target ter-blacklist: **${list.length}**\n\n` +
+              list.map((item, idx) => {
+                let detail = "";
+                if (item.discord_id) detail += `Discord: <@${item.discord_id}> (\`${item.discord_id}\`) `;
+                if (item.roblox_id) detail += `Roblox ID: \`${item.roblox_id}\` `;
+                if (item.hwid) detail += `HWID: \`${item.hwid}\``;
+                return `**${idx + 1}.** ${detail}\n└ *Alasan:* ${item.reason} (${item.created_at})`;
+              }).join("\n\n")
+            )
+            .setFooter({ text: "LeonX Hub • Blacklist System" })
+            .setTimestamp();
 
-          const blBuf = await renderBlacklistCard({ items: blItems });
-          const { embed: blEmbed, attachment: blAtt } = cardEmbed(blBuf, 0xef4444, "blacklist.png");
-
-          await interaction.editReply({ embeds: [blEmbed], files: [blAtt] });
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -1673,24 +1709,27 @@ Format balasan:
 
           const creationDate = new Date(details.created);
 
-          const rblxBuf = await renderRobloxProfileCard({
-            username: details.name,
-            displayName: details.displayName,
-            userId,
-            description: details.description || "",
-            isBanned: details.isBanned,
-            hasVerifiedBadge: details.hasVerifiedBadge,
-            avatarUrl,
-            followers: String(followersCount),
-            following: String(followingCount),
-            friends: String(friendsCount),
-            rap: rapText,
-            usernameHistory: historyText,
-            createdAt: creationDate.toLocaleDateString("id-ID")
-          });
-          const { embed, attachment } = cardEmbed(rblxBuf, 0x2563eb, "roblox_profile.png");
+          const embed = new EmbedBuilder()
+            .setColor(details.isBanned ? 0xef4444 : 0x2563eb)
+            .setTitle(`${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`)
+            .setURL(`https://www.roblox.com/users/${userId}/profile`)
+            .setDescription(`@${details.name} • **ID:** \`${userId}\`\nStatus: ${details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**"}\n\n${details.description ? `*${details.description.slice(0, 300)}*` : ""}`)
+            .addFields(
+              { name: "👥 Teman", value: String(friendsCount), inline: true },
+              { name: "📈 Pengikut", value: String(followersCount), inline: true },
+              { name: "➕ Mengikuti", value: String(followingCount), inline: true },
+              { name: "💎 RAP Collectibles", value: rapText, inline: true },
+              { name: "📅 Tanggal Dibuat", value: creationDate.toLocaleDateString("id-ID"), inline: true },
+              { name: "🏷️ Riwayat Nama", value: historyText, inline: false }
+            )
+            .setFooter({ text: "LeonX Hub • Roblox Lookup" })
+            .setTimestamp();
 
-          await interaction.editReply({ embeds: [embed], files: [attachment] });
+          if (avatarUrl) {
+            embed.setThumbnail(avatarUrl);
+          }
+
+          await interaction.editReply({ embeds: [embed] });
         } catch (error) {
           console.error("Gagal melakukan lookup Roblox:", error);
           await interaction.editReply("❌ Terjadi kesalahan saat menghubungi server Roblox. Silakan coba beberapa saat lagi.");
@@ -1778,22 +1817,27 @@ Format balasan:
             }
           }
 
-          const gBuf = await renderGameMonitorCard({
-            gameName,
-            creator: creatorName,
-            placeId: String(placeId),
-            universeId,
-            playing: playing.toLocaleString("id-ID"),
-            visits: visits.toLocaleString("id-ID"),
-            favorites: favoritedCount.toLocaleString("id-ID"),
-            likes: likes.toLocaleString("id-ID"),
-            dislikes: dislikes.toLocaleString("id-ID"),
-            likeRatio,
-            iconUrl
-          });
-          const { embed, attachment } = cardEmbed(gBuf, 0x22c55e, "game_monitor.png");
+          const embed = new EmbedBuilder()
+            .setColor(0x22c55e)
+            .setTitle(`🎮 ${gameName}`)
+            .setURL(`https://www.roblox.com/games/${placeId}`)
+            .setDescription(`Developer / Creator: **${creatorName}**\nPlace ID: \`${placeId}\` | Universe ID: \`${universeId}\``)
+            .addFields(
+              { name: "🟢 Playing", value: playing.toLocaleString("id-ID"), inline: true },
+              { name: "📈 Total Visits", value: visits.toLocaleString("id-ID"), inline: true },
+              { name: "⭐ Favorites", value: favoritedCount.toLocaleString("id-ID"), inline: true },
+              { name: "👍 Likes", value: likes.toLocaleString("id-ID"), inline: true },
+              { name: "👎 Dislikes", value: dislikes.toLocaleString("id-ID"), inline: true },
+              { name: "📊 Like Ratio", value: likeRatio, inline: true }
+            )
+            .setFooter({ text: "LeonX Hub • Game Monitor" })
+            .setTimestamp();
 
-          await interaction.editReply({ embeds: [embed], files: [attachment] });
+          if (iconUrl) {
+            embed.setThumbnail(iconUrl);
+          }
+
+          await interaction.editReply({ embeds: [embed] });
         } catch (error) {
           console.error("Gagal memantau game Roblox:", error);
           await interaction.editReply("❌ Terjadi kesalahan saat mengambil data game. Silakan coba beberapa saat lagi.");
@@ -1846,13 +1890,19 @@ Format balasan:
             joinUrl: `roblox://experiences/start?placeId=${placeId}&gameInstanceId=${s.id}`
           }));
 
-          const srvBuf = await renderGameServersCard({
-            placeId: String(placeId),
-            servers: serversList
-          });
-          const { embed, attachment } = cardEmbed(srvBuf, 0x2563eb, "game_servers.png");
+          const embed = new EmbedBuilder()
+            .setColor(0x2563eb)
+            .setTitle(`📈 Server Aktif — Place ID ${placeId}`)
+            .setDescription("Salin link di bawah ini, lalu buka di browser/Windows Run (Win + R) untuk langsung bergabung ke server:\n\n" +
+              serversList.map(srv =>
+                `**Server #${srv.num}** (${srv.playing}/${srv.max} Players | FPS: ${srv.fps} | Ping: ${srv.ping})\n` +
+                `\`\`\`text\n${srv.joinUrl}\n\`\`\``
+              ).join("\n")
+            )
+            .setFooter({ text: "LeonX Hub • Server Tracker" })
+            .setTimestamp();
 
-          await interaction.editReply({ embeds: [embed], files: [attachment] });
+          await interaction.editReply({ embeds: [embed] });
         } catch (error) {
           console.error("Gagal mendapatkan server game:", error);
           await interaction.editReply("❌ Terjadi kesalahan saat mengambil daftar server. Pastikan Place ID benar.");
@@ -1882,10 +1932,45 @@ Format balasan:
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-          const rulesBuf = await renderRulesCard();
-          const { embed, attachment } = cardEmbed(rulesBuf, 0x7c3aed, "rules.png");
+          const embedWelcome = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("✨ Welcome to LeonX Hub Server ✨")
+            .setDescription(
+              "Selamat datang di server resmi LeonX Hub. Server ini adalah wadah diskusi, pembaruan script, laporan bug, serta layanan bantuan bagi seluruh pengguna LeonX Hub.\n\n" +
+              "Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama di dalam server ini."
+            );
 
-          await (channel as TextChannel).send({ embeds: [embed], files: [attachment] });
+          const embedRules = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("📜 SERVER RULES & GUIDELINES")
+            .setDescription(
+              "Dengan bergabung di server ini, Anda dianggap telah membaca dan menyetujui seluruh ketentuan di bawah ini:\n\n" +
+              "**1. 🚫 Larangan Keras Crack, Leak, & Bypass**\n" +
+              "Dilarang keras mencoba melakukan cracking/dekripsi loader, membagikan/leaking script LeonX ke luar server, atau menggunakan bypass ilegal. Pelanggaran berat ini akan berakibat pada **Blacklist HWID + Roblox ID + Discord ID secara permanen** dari seluruh layanan kami.\n\n" +
+              "**2. 🤝 Saling Menghormati & Jaga Etika**\n" +
+              "Gunakan bahasa yang sopan. Dilarang melakukan cyberbullying, harassment, memicu drama/debat kusir, toxic berlebih, SARA, atau mengirim konten NSFW/pornografi.\n\n" +
+              "**3. 🛡️ Saluran Chat Sesuai Fungsi**\n" +
+              "Gunakan channel sesuai dengan tujuannya. Jangan melakukan spam chat, spam tag staf/developer tanpa alasan mendesak, atau membagikan iklan/link promosi server lain (Anti-Link aktif).\n\n" +
+              "**4. 🎫 Penggunaan Sistem Ticket & Bug Report**\n" +
+              "Buka ticket support hanya untuk masalah teknis/transaksi yang mendesak. Kirim laporan bug nyata via `/bug-report`. Menyalahgunakan sistem tiket/laporan bug untuk spam atau bercanda akan dikenakan sanksi.\n\n" +
+              "**5. 🔒 Keamanan Akun & Transaksi Resmi**\n" +
+              "Staf LeonX Hub **TIDAK PERNAH** meminta password akun Roblox atau token Discord Anda. Segala bentuk transaksi resmi hanya dilakukan melalui bot resmi atau langsung dengan Admin."
+            );
+
+          const embedSanctions = new EmbedBuilder()
+            .setColor(0x7c3aed)
+            .setTitle("⚖️ SISTEM SANKSI & KONSEKUENSI")
+            .setDescription(
+              "Moderator berhak mengambil keputusan mutlak berdasarkan pelanggaran yang Anda lakukan:\n" +
+              "• **Pelanggaran Ringan:** Peringatan tertulis (Warning) via database bot.\n" +
+              "• **Pelanggaran Sedang:** Timeout (Mute otomatis) mulai dari 10 menit hingga 7 hari.\n" +
+              "• **Pelanggaran Berat:** Kick, Banned permanen dari Discord, serta **Blacklist HWID & Roblox ID** di server database game.\n\n" +
+              "> 📌 *Jika Anda belum terverifikasi, silakan selesaikan proses verifikasi dengan menekan tombol **Verify** di channel verifikasi.*"
+            )
+            .setFooter({ text: "LeonX Hub • Official Guidelines" })
+            .setTimestamp();
+
+          await (channel as TextChannel).send({ embeds: [embedWelcome, embedRules, embedSanctions] });
           await interaction.editReply({
             content: `✅ Sukses mengirimkan rules ke channel <#${channelId}>.`
           });
@@ -1987,15 +2072,18 @@ Format balasan:
               return;
             }
 
-            const monitorItems = list.map(item => ({
-              name: item.name,
-              placeId: item.place_id,
-              lastUpdated: new Date(item.last_updated).toLocaleString("id-ID")
-            }));
-            const mBuf = await renderMonitorListCard({ items: monitorItems });
-            const { embed, attachment } = cardEmbed(mBuf, 0x2563eb, "monitor_list.png");
+            const embed = new EmbedBuilder()
+              .setColor(0x2563eb)
+              .setTitle("🔍 Game Update Monitoring List")
+              .setDescription(`Daftar game yang saat ini dipantau secara otomatis:\n\n` +
+                list.map((item, idx) =>
+                  `**${idx + 1}. ${item.name}**\n└ Place ID: \`${item.place_id}\` | Terakhir Update: \`${new Date(item.last_updated).toLocaleString("id-ID")}\``
+                ).join("\n\n")
+              )
+              .setFooter({ text: "LeonX Hub • Monitoring System" })
+              .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed], files: [attachment] });
+            await interaction.editReply({ embeds: [embed] });
           } catch (error) {
             console.error("Gagal mengambil daftar pemantauan:", error);
             await interaction.editReply("❌ Terjadi kesalahan saat mengambil daftar pemantauan.");
@@ -2156,10 +2244,13 @@ Format balasan:
       db.prepare("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?")
         .run(interaction.user.id, interaction.channel.id);
 
-      const claimBuf = await renderClaimCard(interaction.user.tag);
-      const { embed: claimEmbed, attachment: claimAtt } = cardEmbed(claimBuf, 0x22c55e, "ticket_claim.png");
+      const claimEmbed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setTitle("✋ Ticket Diklaim")
+        .setDescription(`<@${interaction.user.id}> telah mengklaim ticket ini dan akan segera membantu menyelesaikan masalah Anda.`)
+        .setTimestamp();
 
-      await interaction.reply({ embeds: [claimEmbed], files: [claimAtt] });
+      await interaction.reply({ embeds: [claimEmbed] });
     }
 
     if (interaction.isButton() && interaction.customId === "ticket:close") {
@@ -2253,12 +2344,14 @@ Format balasan:
       db.prepare("UPDATE tickets SET rating = ? WHERE channel_id = ?")
         .run(rating, interaction.channel.id);
 
-      const thanksBuf = await renderRatingThanksCard(rating);
-      const { embed: thanksEmbed, attachment: thanksAtt } = cardEmbed(thanksBuf, 0x22c55e, "rating_thanks.png");
+      const thanksEmbed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setTitle("✅ Terima Kasih atas Rating Anda!")
+        .setDescription(`Rating Anda: ${"⭐".repeat(rating)} (${rating}/5)\nKami akan terus berusaha meningkatkan kualitas pelayanan support kami.`)
+        .setFooter({ text: "LeonX Hub • Support Feedback" });
 
       await interaction.reply({
         embeds: [thanksEmbed],
-        files: [thanksAtt],
         flags: MessageFlags.Ephemeral
       });
 
@@ -2266,16 +2359,19 @@ Format balasan:
       if (config.LOG_CHANNEL_ID) {
         const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
-          const logBuf = await renderRatingLogCard({
-            ticketId: ticketData.id,
-            category: TICKET_CATEGORIES[ticketData.category as TicketCategory]?.label || ticketData.category,
-            rating,
-            userId: ticketData.user_id,
-            claimedBy: ticketData.claimed_by ? ticketData.claimed_by : "Unclaimed"
-          });
-          const { embed: logEmbed, attachment: logAtt } = cardEmbed(logBuf, rating >= 4 ? 0x22c55e : rating >= 3 ? 0xeab308 : 0xef4444, "rating_log.png");
+          const logEmbed = new EmbedBuilder()
+            .setColor(rating >= 4 ? 0x22c55e : rating >= 3 ? 0xeab308 : 0xef4444)
+            .setTitle("📊 Log Rating Ticket Baru")
+            .addFields(
+              { name: "Ticket ID", value: `#${ticketData.id}`, inline: true },
+              { name: "Kategori", value: TICKET_CATEGORIES[ticketData.category as TicketCategory]?.label || ticketData.category, inline: true },
+              { name: "Rating", value: `${"⭐".repeat(rating)} (${rating}/5)`, inline: true },
+              { name: "Pembuat Ticket", value: `<@${ticketData.user_id}>`, inline: true },
+              { name: "Staff Claim", value: ticketData.claimed_by ? `<@${ticketData.claimed_by}>` : "Unclaimed", inline: true }
+            )
+            .setTimestamp();
 
-          await logChannel.send({ embeds: [logEmbed], files: [logAtt] });
+          await logChannel.send({ embeds: [logEmbed] });
         }
       }
 
@@ -2299,14 +2395,16 @@ Format balasan:
       const channel = config.BUG_REPORT_CHANNEL_ID
         ? await client.channels.fetch(config.BUG_REPORT_CHANNEL_ID).catch(() => null)
         : null;
-      const reportBuf = await renderBugReportCard({
-        id: Number(result.lastInsertRowid),
-        title,
-        description,
-        steps,
-        reporter: `${interaction.user.tag} (${interaction.user.id})`
-      });
-      const { embed: reportEmbed, attachment: reportAtt } = cardEmbed(reportBuf, 0xeab308, "bug_report.png");
+      const reportEmbed = new EmbedBuilder()
+        .setColor(0xeab308)
+        .setTitle(`🐛 Laporan Bug #${result.lastInsertRowid}: ${title}`)
+        .setDescription(
+          `**Pelapor:** <@${interaction.user.id}> (\`${interaction.user.id}\`)\n\n` +
+          `**Deskripsi Bug:**\n${description}\n\n` +
+          `**Langkah Mengulang Bug:**\n${steps}`
+        )
+        .setFooter({ text: "LeonX Hub • Bug Report" })
+        .setTimestamp();
 
       let reportUrl: string | null = null;
       if (channel?.type === ChannelType.GuildForum) {
@@ -2455,13 +2553,13 @@ Tugas Anda:
     if (geminiResult.ok) {
       const finalReply = (geminiResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
 
-      const aiBuf = await renderAiResponseCard({
-        categoryLabel: "Ticket Support",
-        response: finalReply
-      });
-      const { embed, attachment } = cardEmbed(aiBuf, 0x2563eb, "ai_support.png");
+      const embed = new EmbedBuilder()
+        .setColor(0x2563eb)
+        .setTitle("🤖 AI Support Assistant (Solusi Awal)")
+        .setDescription(finalReply)
+        .setFooter({ text: "Tim support manusia akan segera membantu jika masalah belum teratasi." });
 
-      await message.reply({ embeds: [embed], files: [attachment] });
+      await message.reply({ embeds: [embed] });
 
       // Update database agar tidak merespons lagi di tiket ini
       db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
@@ -2724,15 +2822,13 @@ Format balasan:
         if (config.LOG_CHANNEL_ID) {
           const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
           if (logChannel?.isSendable()) {
-            const modBuf = await renderAutoModCard({
-              title: "Auto Mod: Banned User",
-              description: `Pengguna <@${message.author.id}> di-ban otomatis karena menulis kata terlarang.`,
-              userTag: message.author.tag,
-              userId: message.author.id,
-              detail: "Kata Terlarang: selingkuh"
-            });
-            const { embed, attachment } = cardEmbed(modBuf, 0xef4444, "automod_ban.png");
-            await logChannel.send({ embeds: [embed], files: [attachment] });
+            const embed = new EmbedBuilder()
+              .setColor(0xef4444)
+              .setTitle("🛡️ Auto Mod: Banned User")
+              .setDescription(`Pengguna <@${message.author.id}> di-ban otomatis karena menulis kata terlarang (selingkuh).`)
+              .setFooter({ text: "LeonX Hub • Auto Mod" })
+              .setTimestamp();
+            await logChannel.send({ embeds: [embed] });
           }
         }
     } catch (err) {
@@ -2770,15 +2866,13 @@ Format balasan:
       if (config.LOG_CHANNEL_ID) {
         const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
-          const modBuf = await renderAutoModCard({
-            title: "Auto Mod: Link Terblokir",
-            description: `Pesan dari <@${message.author.id}> otomatis dihapus karena mengandung link invite server lain.`,
-            userTag: message.author.tag,
-            userId: message.author.id,
-            detail: `Channel: #${(message.channel as TextChannel).name}`
-          });
-          const { embed, attachment } = cardEmbed(modBuf, 0xef4444, "automod_link.png");
-          await logChannel.send({ embeds: [embed], files: [attachment] });
+          const embed = new EmbedBuilder()
+            .setColor(0xef4444)
+            .setTitle("🛡️ Auto Mod: Link Terblokir")
+            .setDescription(`Pesan dari <@${message.author.id}> otomatis dihapus karena mengandung link invite server lain.\nChannel: <#${message.channel.id}>`)
+            .setFooter({ text: "LeonX Hub • Auto Mod" })
+            .setTimestamp();
+          await logChannel.send({ embeds: [embed] });
         }
       }
     } catch (err) {
@@ -2839,15 +2933,13 @@ Format balasan:
         if (config.LOG_CHANNEL_ID) {
           const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
           if (logChannel?.isSendable()) {
-            const modBuf = await renderAutoModCard({
-              title: "Auto Mod: Tindakan Mute (Timeout)",
-              description: `Pengguna <@${message.author.id}> secara otomatis di-timeout selama 10 menit karena spamming.`,
-              userTag: message.author.tag,
-              userId: message.author.id,
-              detail: isSpammingFast ? "Mengirim pesan terlalu cepat" : "Mengirim pesan duplikat berulang"
-            });
-            const { embed, attachment } = cardEmbed(modBuf, 0xef4444, "automod_timeout.png");
-            await logChannel.send({ embeds: [embed], files: [attachment] });
+            const embed = new EmbedBuilder()
+              .setColor(0xef4444)
+              .setTitle("🛡️ Auto Mod: Timeout User")
+              .setDescription(`Pengguna <@${message.author.id}> otomatis di-timeout selama 10 menit karena spamming berlebih.`)
+              .setFooter({ text: "LeonX Hub • Auto Mod" })
+              .setTimestamp();
+            await logChannel.send({ embeds: [embed] });
           }
         }
       }
@@ -2978,16 +3070,19 @@ http.createServer(async (req, res) => {
       try {
         const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
         if (logChannel?.isSendable()) {
-          const execBuf = await renderExecutionLogCard({
-            discordId: result.discordId || "Unknown",
-            robloxUsername: username,
-            robloxId: robloxId || "N/A",
-            placeId,
-            executor,
-            hwid: hwid || "N/A"
-          });
-          const { embed, attachment } = cardEmbed(execBuf, 0x22c55e, "exec_log.png");
-          await logChannel.send({ embeds: [embed], files: [attachment] });
+          const logEmbed = new EmbedBuilder()
+            .setColor(0x22c55e)
+            .setTitle("📊 In-Game Script Executed!")
+            .addFields(
+              { name: "Discord User", value: result.discordId ? `<@${result.discordId}>` : "Unknown", inline: true },
+              { name: "Roblox User", value: `[${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)`, inline: true },
+              { name: "Place ID", value: `[${placeId}](https://www.roblox.com/games/${placeId})`, inline: true },
+              { name: "Executor", value: `\`${executor}\``, inline: true },
+              { name: "Perangkat (HWID)", value: `\`${hwid || "N/A"}\``, inline: true }
+            )
+            .setFooter({ text: "LeonX Hub • Execution Log" })
+            .setTimestamp();
+          await logChannel.send({ embeds: [logEmbed] });
         }
       } catch (logErr) {
         console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
@@ -3339,27 +3434,28 @@ client.on(Events.GuildMemberAdd, async (member) => {
       await member.ban({ reason: `[Auto-Ban] Akun terlalu baru (${accountAgeDays} hari). Minimal 30 hari.` });
 
       // Kirim log ke channel
-      const banBuf = await renderAutoBanCard({
-        userTag: member.user.tag,
-        userId: member.user.id,
-        accountAgeDays,
-        createdAt: new Date(member.user.createdTimestamp).toLocaleDateString("id-ID"),
-        avatarUrl: member.user.displayAvatarURL({ size: 256 })
-      });
-      const { embed: logEmbed, attachment: logAtt } = cardEmbed(banBuf, 0xef4444, "autoban.png");
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle("⛔ Auto-Ban: Akun Terlalu Baru")
+        .setDescription(
+          `Pengguna <@${member.user.id}> (\`${member.user.id}\`) otomatis di-ban demi keamanan server.\n\n` +
+          `• **Umur Akun:** ${accountAgeDays} hari\n` +
+          `• **Tanggal Dibuat:** <t:${createdUnix}:F> (<t:${createdUnix}:R>)`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: "LeonX Hub • Anti-Raid Protection" })
+        .setTimestamp();
 
-      // Kirim ke log channel (jika ada)
       if (config.LOG_CHANNEL_ID) {
         const logChannel = await member.guild.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
-          await logChannel.send({ embeds: [logEmbed], files: [logAtt] });
+          await logChannel.send({ embeds: [logEmbed] });
         }
       }
 
-      // Kirim juga ke welcome channel sebagai notifikasi
       const welcomeChannel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
       if (welcomeChannel?.isSendable()) {
-        await welcomeChannel.send({ embeds: [logEmbed], files: [logAtt] });
+        await welcomeChannel.send({ embeds: [logEmbed] });
       }
 
       return; // Jangan kirim welcome message
@@ -3372,16 +3468,20 @@ client.on(Events.GuildMemberAdd, async (member) => {
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
-      const wBuf = await renderWelcomeCard({
-        username: member.user.username,
-        avatarUrl: member.user.displayAvatarURL({ size: 256 }),
-        guildName: member.guild.name,
-        memberCount: member.guild.memberCount,
-        verifyChannelId: config.VERIFY_CHANNEL_ID
-      });
-      const { embed, attachment } = cardEmbed(wBuf, 0x2563eb, "welcome.png");
+      const embed = new EmbedBuilder()
+        .setColor(0x2563eb)
+        .setTitle("✨ Selamat Datang di LeonX Hub!")
+        .setDescription(
+          `Halo <@${member.id}>, selamat datang di **${member.guild.name}**!\n\n` +
+          `1. Selesaikan verifikasi di channel <#${config.VERIFY_CHANNEL_ID}>\n` +
+          `2. Baca peraturan server di channel rules\n` +
+          `3. Gunakan \`/script\` untuk mendapatkan loader script Anda.`
+        )
+        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: `Member #${member.guild.memberCount}` })
+        .setTimestamp();
 
-      await channel.send({ content: `Selamat datang <@${member.id}>!`, embeds: [embed], files: [attachment] });
+      await channel.send({ content: `Selamat datang <@${member.id}>!`, embeds: [embed] });
     }
   } catch (error) {
     console.error("Gagal mengirim pesan selamat datang:", error);
@@ -3393,15 +3493,15 @@ client.on(Events.GuildMemberRemove, async (member) => {
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
-      const gBuf = await renderGoodbyeCard({
-        userTag: member.user.tag,
-        avatarUrl: member.user.displayAvatarURL({ size: 256 }),
-        guildName: member.guild.name,
-        memberCount: member.guild.memberCount
-      });
-      const { embed, attachment } = cardEmbed(gBuf, 0xef4444, "goodbye.png");
+      const embed = new EmbedBuilder()
+        .setColor(0xef4444)
+        .setTitle("👋 Sampai Jumpa!")
+        .setDescription(`**${member.user.tag}** telah meninggalkan server. Terima kasih pernah bergabung bersama kami!`)
+        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: `Member #${member.guild.memberCount}` })
+        .setTimestamp();
 
-      await channel.send({ content: `Sampai jumpa **${member.user.tag}**!`, embeds: [embed], files: [attachment] });
+      await channel.send({ embeds: [embed] });
     }
   } catch (error) {
     console.error("Gagal mengirim pesan selamat tinggal:", error);
