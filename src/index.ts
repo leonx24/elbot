@@ -1351,13 +1351,27 @@ Format balasan:
       if (interaction.commandName === "changelog") {
         const sub = interaction.options.getSubcommand();
         if (sub === "publish") {
-          if (interaction.user.id !== config.OWNER_ID) {
+          const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
+          const isOwner =
+            (interaction.member instanceof GuildMember && (
+              (ownerRoleId ? interaction.member.roles.cache.has(ownerRoleId) : false) ||
+              interaction.member.roles.cache.some(r => r.name.toLowerCase().includes("owner")) ||
+              interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
+              interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)
+            )) ||
+            interaction.guild?.ownerId === interaction.user.id ||
+            interaction.user.id === config.OWNER_ID;
+
+          if (!isOwner) {
             await interaction.reply({
               content: "Hanya owner yang dapat menerbitkan changelog.",
               flags: MessageFlags.Ephemeral
             });
             return;
           }
+
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
           const version = interaction.options.getString("versi", true);
           const title = interaction.options.getString("judul", true);
           const typeKey = interaction.options.getString("jenis", true) as keyof typeof changelogTypes;
@@ -1471,29 +1485,41 @@ Format balasan:
           });
 
           const channel = await client.channels.fetch(config.CHANGELOG_CHANNEL_ID).catch(() => null);
-          if (channel?.type === ChannelType.GuildForum) {
-            await channel.threads.create({
-              name: `${version} — ${title}`.slice(0, 100),
-              message: {
+          if (!channel || (!channel.isSendable() && channel.type !== ChannelType.GuildForum)) {
+            await interaction.editReply({
+              content: `❌ Gagal: Channel changelog (<#${config.CHANGELOG_CHANNEL_ID}>) tidak dapat diakses atau bukan channel teks/forum.`
+            });
+            return;
+          }
+
+          try {
+            if (channel.type === ChannelType.GuildForum) {
+              await channel.threads.create({
+                name: `${version} — ${title}`.slice(0, 100),
+                message: {
+                  content: `@everyone  ${type.emoji} **${type.label}**`,
+                  ...v2Payload
+                },
+                reason: `Changelog ${version}`
+              });
+            } else {
+              await channel.send({
                 content: `@everyone  ${type.emoji} **${type.label}**`,
                 ...v2Payload
-              },
-              reason: `Changelog ${version}`
+              });
+            }
+          } catch (sendErr) {
+            console.error("Gagal mengirim changelog ke channel:", sendErr);
+            await interaction.editReply({
+              content: `❌ Terjadi kesalahan saat mengirim pesan ke channel changelog: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`
             });
-          } else if (channel?.isSendable()) {
-            await channel.send({
-              content: `@everyone  ${type.emoji} **${type.label}**`,
-              ...v2Payload
-            });
-          } else {
-            throw new Error("CHANGELOG_CHANNEL_ID bukan channel teks atau forum yang dapat digunakan.");
+            return;
           }
 
           db.prepare("INSERT INTO changelogs (title, content, author_id) VALUES (?, ?, ?)")
             .run(changelogTitle, formattedContent, interaction.user.id);
-          await interaction.reply({
-            content: `Changelog berhasil diterbitkan di <#${config.CHANGELOG_CHANNEL_ID}>.`,
-            flags: MessageFlags.Ephemeral
+          await interaction.editReply({
+            content: `✅ Changelog **${version}** berhasil diterbitkan di <#${config.CHANGELOG_CHANNEL_ID}>.`
           });
         } else {
           const row = db.prepare("SELECT title, content, created_at FROM changelogs ORDER BY id DESC LIMIT 1")
