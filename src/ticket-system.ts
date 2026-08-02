@@ -18,7 +18,7 @@ import { db } from "./database.js";
 import { config } from "./config.js";
 import { renderTicketPanelCard, renderTicketWelcomeCard, renderTicketCloseCard } from "./canvas-cards.js";
 
-function cardEmbed(buffer: Buffer, color: number = 0x2b2d31, filename = "card.png") {
+function cardEmbed(buffer: Buffer, color: number = 0xffffff, filename = "card.png") {
   const attachment = new AttachmentBuilder(buffer, { name: filename });
   const embed = new EmbedBuilder().setImage(`attachment://${filename}`).setColor(color);
   return { embed, attachment };
@@ -36,7 +36,7 @@ export type TicketCategory = keyof typeof TICKET_CATEGORIES;
 
 export function createTicketPanel() {
   const embed = new EmbedBuilder()
-    .setColor(0x2b2d31)
+    .setColor(0xffffff)
     .setTitle("🎫 Support Ticket System")
     .setDescription(
       "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai pada menu dropdown di bawah ini.\n\n" +
@@ -100,7 +100,7 @@ export async function createTicketChannel(
   });
 
   const welcomeEmbed = new EmbedBuilder()
-    .setColor(0x2b2d31)
+    .setColor(0xffffff)
     .setTitle(`${categoryInfo.emoji} ${categoryInfo.label}`)
     .setDescription(
       `Halo <@${user.id}>, terima kasih sudah membuka ticket!\n\n` +
@@ -418,7 +418,7 @@ export async function closeTicket(
   ).run(reason || "Closed by staff", channel.id);
 
   const closeEmbed = new EmbedBuilder()
-    .setColor(0x2b2d31)
+    .setColor(0xffffff)
     .setTitle("🔒 Ticket Status - Ditutup")
     .setDescription(
       `Ticket ini telah ditutup oleh <@${closedBy.id}>\n\n` +
