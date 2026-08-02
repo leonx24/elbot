@@ -65,9 +65,9 @@ import {
 } from "./canvas-cards.js";
 
 /** Helper: wrap a canvas card Buffer into an EmbedBuilder + AttachmentBuilder pair */
-function cardEmbed(buffer: Buffer, color: number = 0x7c3aed, filename = "card.png") {
+function cardEmbed(buffer: Buffer, color?: number, filename = "card.png") {
   const attachment = new AttachmentBuilder(buffer, { name: filename });
-  const embed = new EmbedBuilder().setImage(`attachment://${filename}`).setColor(color);
+  const embed = new EmbedBuilder().setImage(`attachment://${filename}`);
   return { embed, attachment };
 }
 
@@ -252,7 +252,6 @@ function verificationPanel() {
     .setStyle(ButtonStyle.Success);
 
   const embed = new EmbedBuilder()
-    .setColor(0x2b2d31)
     .setTitle("✅ Verification Panel - LeonX Hub")
     .setDescription(
       "Selamat datang di server **LeonX Hub**!\n\n" +
@@ -428,7 +427,6 @@ async function checkMonitoredPlaces(): Promise<void> {
 
         // 2. Kirim pesan Embed Alert ke channel update-logs
         const embed = new EmbedBuilder()
-          .setColor(0x2b2d31)
           .setTitle("🚨 Game Update Detected!")
           .setDescription(
             `Sebuah pembaruan baru terdeteksi pada game yang sedang dipantau!\n\n` +
@@ -676,7 +674,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const embed = new EmbedBuilder()
-          .setColor(0x2b2d31)
           .setTitle("🔑 Informasi Key & Lisensi Anda")
           .setDescription(
             "Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.\n\n" +
@@ -790,7 +787,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const embed = new EmbedBuilder()
-          .setColor(0x2b2d31)
           .setTitle("🔍 Hasil Lookup Data Lisensi")
           .setDescription(
             `Kriteria pencarian: ${searchCriteria}\n\n` +
@@ -1065,7 +1061,6 @@ Format balasan:
         }
 
         const embed = new EmbedBuilder()
-          .setColor(0x2b2d31)
           .setTitle("📊 Status Script & Bot System")
           .setDescription(
             "Berikut adalah status terkini dari seluruh infrastruktur LeonX Hub.\n\n" +
@@ -1143,7 +1138,6 @@ Format balasan:
           await interaction.reply({ content: "Topik tidak ditemukan.", flags: MessageFlags.Ephemeral });
         } else {
           const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle(`💡 FAQ - ${topic}`)
             .setDescription(
               `Berikut adalah informasi mengenai topik **${topic}**:\n\n` +
@@ -1158,7 +1152,6 @@ Format balasan:
 
       if (interaction.commandName === "website") {
         const embed = new EmbedBuilder()
-          .setColor(0x2b2d31)
           .setTitle("🌐 LeonThings Official Website")
           .setDescription(
             "Silakan gunakan tautan resmi di bawah ini untuk mengakses layanan kami:\n\n" +
@@ -1251,7 +1244,6 @@ Format balasan:
 
           // Kirim rating prompt
           const ratingEmbed = new EmbedBuilder()
-            .setColor(0x7c3aed)
             .setTitle("📊 Beri Rating untuk Support Kami")
             .setDescription(
               "Bagaimana pengalaman Anda dengan layanan support kami?\n" +
@@ -1313,7 +1305,6 @@ Format balasan:
             .join("\n");
 
           const statsEmbed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle("📊 Statistik Support Ticket System")
             .setDescription(
               "Ringkasan statistik penggunaan ticket support:\n\n" +
@@ -1389,7 +1380,6 @@ Format balasan:
           const gameName = interaction.options.getString("game") || "Universal";
 
           const changelogEmbed = new EmbedBuilder()
-            .setColor(type.color)
             .setTitle(`🚀 ${changelogTitle}`)
             .setDescription(
               `**Target Game:** ${gameName}\n` +
@@ -1468,7 +1458,6 @@ Format balasan:
             await interaction.reply({ content: "Belum ada changelog.", flags: MessageFlags.Ephemeral });
           } else {
             const embed = new EmbedBuilder()
-              .setColor(0x7c3aed)
               .setTitle(`🚀 ${row.title}`)
               .setDescription(row.content)
               .setFooter({ text: `Published on ${row.created_at}` });
@@ -1504,7 +1493,6 @@ Format balasan:
         const uses = (db.prepare("SELECT COALESCE(SUM(uses), 0) AS count FROM command_usage").get() as { count: number }).count;
 
         const embed = new EmbedBuilder()
-          .setColor(0x2b2d31)
           .setTitle("📊 Statistik Admin Server")
           .setDescription(
             "Ringkasan statistik aktivitas bot dan server:\n\n" +
@@ -1594,7 +1582,6 @@ Format balasan:
           }
 
           const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle("🚫 Daftar Blacklist LeonX Hub")
             .setDescription(
               `Total target ter-blacklist: **${list.length}**\n\n` +
@@ -1744,7 +1731,6 @@ Format balasan:
           const creationDate = new Date(details.created);
 
           const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle(`👤 Roblox Profile - ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`)
             .setURL(`https://www.roblox.com/users/${userId}/profile`)
             .setDescription(
@@ -1857,7 +1843,6 @@ Format balasan:
           }
 
           const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle(`🎮 Game Monitor - ${gameName}`)
             .setURL(`https://www.roblox.com/games/${placeId}`)
             .setDescription(
@@ -1935,7 +1920,6 @@ Format balasan:
           }));
 
           const embed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle(`📈 Server Aktif — Place ID ${placeId}`)
             .setDescription(
               "Salin link di bawah ini, lalu buka di browser/Windows Run (Win + R) untuk langsung bergabung ke server:\n\n" +
@@ -1980,7 +1964,6 @@ Format balasan:
 
         try {
           const embedRules = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle("📖 LeonX Hub - Server Rules & Guidelines")
             .setDescription(
               "✨ **Welcome to LeonX Hub Server** ✨\n" +
@@ -2114,7 +2097,6 @@ Format balasan:
             }
 
             const embed = new EmbedBuilder()
-              .setColor(0x2b2d31)
               .setTitle("🔍 Game Update Monitoring List")
               .setDescription(
                 "Daftar game yang saat ini dipantau secara otomatis:\n\n" +
@@ -2289,7 +2271,6 @@ Format balasan:
         .run(interaction.user.id, interaction.channel.id);
 
       const claimEmbed = new EmbedBuilder()
-        .setColor(0x22c55e)
         .setTitle("✋ Ticket Diklaim")
         .setDescription(`<@${interaction.user.id}> telah mengklaim ticket ini dan akan segera membantu menyelesaikan masalah Anda.`)
         .setTimestamp();
@@ -2404,7 +2385,6 @@ Format balasan:
         const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
           const logEmbed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle("📊 Log Rating Ticket Baru")
             .setDescription(
               `Ulasan baru diterima untuk Ticket **#${ticketData.id}**!\n\n` +
@@ -2444,7 +2424,6 @@ Format balasan:
         ? await client.channels.fetch(config.BUG_REPORT_CHANNEL_ID).catch(() => null)
         : null;
       const reportEmbed = new EmbedBuilder()
-        .setColor(0x2b2d31)
         .setTitle(`🐛 Laporan Bug #${result.lastInsertRowid}: ${title}`)
         .setDescription(
           `Dilaporkan oleh: <@${interaction.user.id}> (\`${interaction.user.id}\`)\n\n` +
@@ -2606,7 +2585,6 @@ Tugas Anda:
       const finalReply = (geminiResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
 
       const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
         .setTitle("🤖 AI Support Assistant (Solusi Awal)")
         .setDescription(
           `${finalReply}\n\n` +
@@ -2879,7 +2857,6 @@ Format balasan:
           const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
           if (logChannel?.isSendable()) {
             const embed = new EmbedBuilder()
-              .setColor(0xef4444)
               .setTitle("🛡️ Auto Mod: Banned User")
               .setDescription(`Pengguna <@${message.author.id}> di-ban otomatis karena menulis kata terlarang (selingkuh).`)
               .setFooter({ text: "LeonX Hub • Auto Mod" })
@@ -2923,7 +2900,6 @@ Format balasan:
         const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
         if (logChannel?.isSendable()) {
           const embed = new EmbedBuilder()
-            .setColor(0xef4444)
             .setTitle("🛡️ Auto Mod: Link Terblokir")
             .setDescription(`Pesan dari <@${message.author.id}> otomatis dihapus karena mengandung link invite server lain.\nChannel: <#${message.channel.id}>`)
             .setFooter({ text: "LeonX Hub • Auto Mod" })
@@ -2990,7 +2966,6 @@ Format balasan:
           const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
           if (logChannel?.isSendable()) {
             const embed = new EmbedBuilder()
-              .setColor(0xef4444)
               .setTitle("🛡️ Auto Mod: Timeout User")
               .setDescription(`Pengguna <@${message.author.id}> otomatis di-timeout selama 10 menit karena spamming berlebih.`)
               .setFooter({ text: "LeonX Hub • Auto Mod" })
@@ -3127,7 +3102,6 @@ http.createServer(async (req, res) => {
         const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
         if (logChannel?.isSendable()) {
           const logEmbed = new EmbedBuilder()
-            .setColor(0x2b2d31)
             .setTitle("📊 In-Game Script Executed!")
             .setDescription(
               `Script loader baru saja dieksekusi di dalam game Roblox!\n\n` +
@@ -3494,7 +3468,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
       // Kirim log ke channel
       const logEmbed = new EmbedBuilder()
-        .setColor(0xef4444)
         .setTitle("⛔ Auto-Ban: Akun Terlalu Baru")
         .setDescription(
           `Pengguna <@${member.user.id}> (\`${member.user.id}\`) otomatis di-ban demi keamanan server.\n\n` +
@@ -3528,7 +3501,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
       const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
         .setTitle("✨ Selamat Datang di LeonX Hub!")
         .setDescription(
           `Halo <@${member.id}>, selamat datang di **${member.guild.name}**!\n\n` +
@@ -3563,7 +3535,6 @@ client.on(Events.GuildMemberRemove, async (member) => {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
       const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
         .setTitle("👋 Member Meninggalkan Server")
         .setDescription(
           `**${member.user.tag}** telah meninggalkan server.\n\n` +
