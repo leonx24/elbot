@@ -70,12 +70,9 @@ export function buildV2Container(params: V2ContainerParams) {
 
   const container: any = {
     type: 17, // ComponentType.Container
+    accent_color: params.accentColor ?? null,
     components: containerComponents
   };
-
-  if (params.accentColor !== undefined) {
-    container.accent_color = params.accentColor;
-  }
 
   return {
     components: [container],
