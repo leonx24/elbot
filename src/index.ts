@@ -21,6 +21,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { buildV2Container } from "./components-v2.js";
 import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, forceGenerateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
 import {
   createTicketPanel,
@@ -248,24 +249,22 @@ function verificationPanel() {
     .setEmoji("✅")
     .setStyle(ButtonStyle.Success);
 
-  const embed = new EmbedBuilder()
-    .setTitle("✅ Verification Panel - LeonX Hub")
-    .setDescription(
-      "# ✅ Verification Panel\n" +
-      "Selamat datang di server **LeonX Hub**!\n\n" +
-      "───────────────────────────────\n\n" +
-      "## 📋 Langkah Verifikasi\n" +
-      "• Klik tombol `/verify` di bawah ini untuk memulai.\n" +
-      "• Dengan menekan tombol verifikasi, Anda menyetujui seluruh **Rules & Guidelines** server.\n" +
-      "• Anda akan mendapatkan role terverifikasi dan akses penuh ke seluruh channel."
-    )
-    .setFooter({ text: "LeonX Hub • Verification System" })
-    .setTimestamp();
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(button)]
-  };
+  return buildV2Container({
+    title: "✅ Verification Panel - LeonX Hub",
+    description: "Selamat datang di server **LeonX Hub**!",
+    sections: [
+      {
+        title: "📋 Langkah Verifikasi",
+        content:
+          "• Klik tombol `Verify` di bawah ini untuk memulai.\n" +
+          "• Dengan menekan tombol verifikasi, Anda menyetujui seluruh **Rules & Guidelines** server.\n" +
+          "• Anda akan mendapatkan role terverifikasi dan akses penuh ke seluruh channel."
+      }
+    ],
+    actionRows: [row]
+  });
 }
 
 async function ensureVerificationPanel(): Promise<void> {

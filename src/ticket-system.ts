@@ -17,6 +17,7 @@ import {
 import { db } from "./database.js";
 import { config } from "./config.js";
 import { renderTicketPanelCard, renderTicketWelcomeCard, renderTicketCloseCard } from "./canvas-cards.js";
+import { buildV2Container } from "./components-v2.js";
 
 function cardEmbed(buffer: Buffer, color?: number, filename = "card.png") {
   const attachment = new AttachmentBuilder(buffer, { name: filename });
@@ -35,27 +36,6 @@ export const TICKET_CATEGORIES = {
 export type TicketCategory = keyof typeof TICKET_CATEGORIES;
 
 export function createTicketPanel() {
-  const embed = new EmbedBuilder()
-    .setTitle("🎫 Support Ticket System")
-    .setDescription(
-      "# 🎫 Support Ticket System\n" +
-      "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai pada menu dropdown di bawah ini.\n\n" +
-      "───────────────────────────────\n\n" +
-      "## 🏷️ Kategori Support Tersedia\n\n" +
-      "• `/bug` - Laporkan bug atau error pada script\n" +
-      "• `/script` - Masalah terkait script atau loader\n" +
-      "• `/general` - Pertanyaan umum atau bantuan lainnya\n" +
-      "• `/premium` - Bantuan khusus untuk member premium\n" +
-      "• `/report` - Laporkan user yang melanggar peraturan\n\n" +
-      "───────────────────────────────\n\n" +
-      "> 📌 **Catatan:**\n" +
-      "> • Satu user hanya bisa memiliki **1 ticket aktif** pada satu waktu.\n" +
-      "> • Tim support akan merespons dalam 1-24 jam.\n" +
-      "> • Mohon jelaskan masalah Anda secara detail."
-    )
-    .setFooter({ text: "LeonX Hub • Support System" })
-    .setTimestamp();
-
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId("ticket:category")
     .setPlaceholder("Pilih kategori ticket...")
@@ -68,10 +48,31 @@ export function createTicketPanel() {
       }))
     );
 
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)]
-  };
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  return buildV2Container({
+    title: "🎫 Support Ticket System",
+    description: "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai pada menu dropdown di bawah ini.",
+    sections: [
+      {
+        title: "🏷️ Kategori Support Tersedia",
+        content:
+          "• `/bug` - Laporkan bug atau error pada script\n" +
+          "• `/script` - Masalah terkait script atau loader\n" +
+          "• `/general` - Pertanyaan umum atau bantuan lainnya\n" +
+          "• `/premium` - Bantuan khusus untuk member premium\n" +
+          "• `/report` - Laporkan user yang melanggar peraturan"
+      },
+      {
+        content:
+          "> 📌 **Catatan:**\n" +
+          "> • Satu user hanya bisa memiliki **1 ticket aktif** pada satu waktu.\n" +
+          "> • Tim support akan merespons dalam 1-24 jam.\n" +
+          "> • Mohon jelaskan masalah Anda secara detail."
+      }
+    ],
+    actionRows: [row]
+  });
 }
 
 export async function createTicketChannel(
