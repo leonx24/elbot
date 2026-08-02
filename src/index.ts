@@ -283,7 +283,10 @@ async function ensureVerificationPanel(): Promise<void> {
 
   if (saved) {
     const existing = await channel.messages.fetch(saved.value).catch(() => null);
-    if (existing) return;
+    if (existing) {
+      await existing.edit(verificationPanel()).catch(() => null);
+      return;
+    }
   }
 
   // Scan channel history for existing panel to handle database wipes on Railway redeployment
@@ -292,14 +295,15 @@ async function ensureVerificationPanel(): Promise<void> {
     const existingPanel = messages.find(
       (m) =>
         m.author.id === client.user?.id &&
-        m.embeds.some((e) => e.title === "Verifikasi Member")
+        m.components.some((row: any) => row.components?.some((c: any) => c.customId === "verify:accept"))
     );
     if (existingPanel) {
+      await existingPanel.edit(verificationPanel()).catch(() => null);
       db.prepare(`
         INSERT INTO bot_settings (key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(settingKey, existingPanel.id);
-      console.log(`Panel verifikasi ditemukan (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
+      console.log(`Panel verifikasi diperbarui (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
       return;
     }
   }
@@ -325,7 +329,10 @@ async function ensureTicketPanel(): Promise<void> {
 
   if (saved) {
     const existing = await channel.messages.fetch(saved.value).catch(() => null);
-    if (existing) return;
+    if (existing) {
+      await existing.edit(createTicketPanel()).catch(() => null);
+      return;
+    }
   }
 
   // Scan channel history for existing panel to handle database wipes on Railway redeployment
@@ -334,14 +341,15 @@ async function ensureTicketPanel(): Promise<void> {
     const existingPanel = messages.find(
       (m) =>
         m.author.id === client.user?.id &&
-        m.embeds.some((e) => e.title === "🎫 Support Ticket System")
+        m.components.some((row: any) => row.components?.some((c: any) => c.customId === "ticket:category"))
     );
     if (existingPanel) {
+      await existingPanel.edit(createTicketPanel()).catch(() => null);
       db.prepare(`
         INSERT INTO bot_settings (key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(settingKey, existingPanel.id);
-      console.log(`Panel ticket ditemukan (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
+      console.log(`Panel ticket diperbarui (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
       return;
     }
   }
