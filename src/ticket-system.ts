@@ -39,15 +39,16 @@ export function createTicketPanel() {
     .setColor(0xffffff)
     .setTitle("🎫 Support Ticket System")
     .setDescription(
+      "# 🎫 Support Ticket System\n" +
       "Butuh bantuan? Buka ticket support dengan memilih kategori yang sesuai pada menu dropdown di bawah ini.\n\n" +
-      "---\n\n" +
-      "### 🏷️ Kategori Support Tersedia\n\n" +
+      "───────────────────────────────\n\n" +
+      "## 🏷️ Kategori Support Tersedia\n\n" +
       "• `/bug` - Laporkan bug atau error pada script\n" +
       "• `/script` - Masalah terkait script atau loader\n" +
       "• `/general` - Pertanyaan umum atau bantuan lainnya\n" +
       "• `/premium` - Bantuan khusus untuk member premium\n" +
       "• `/report` - Laporkan user yang melanggar peraturan\n\n" +
-      "---\n\n" +
+      "───────────────────────────────\n\n" +
       "> 📌 **Catatan:**\n" +
       "> • Satu user hanya bisa memiliki **1 ticket aktif** pada satu waktu.\n" +
       "> • Tim support akan merespons dalam 1-24 jam.\n" +
@@ -103,16 +104,17 @@ export async function createTicketChannel(
     .setColor(0xffffff)
     .setTitle(`${categoryInfo.emoji} ${categoryInfo.label}`)
     .setDescription(
+      `# ${categoryInfo.emoji} ${categoryInfo.label}\n` +
       `Halo <@${user.id}>, terima kasih sudah membuka ticket!\n\n` +
       `• \`Kategori:\` **${categoryInfo.label}**\n` +
       `• \`Status:\` 🟢 **Open**\n\n` +
-      "---\n\n" +
-      "### 💡 Tips Bantuan Troubleshooting\n" +
+      "───────────────────────────────\n\n" +
+      "## 💡 Tips Bantuan Troubleshooting\n" +
       "• `/screenshot` - Sertakan gambar/video jika ada masalah teknis\n" +
       "• `/langkah` - Jelaskan kronologi atau langkah yang sudah dicoba\n" +
       "• `/executor` - Sebutkan nama executor & versi script yang dipakai\n\n" +
-      "---\n\n" +
-      "Tim support akan segera merespons pesan Anda."
+      "───────────────────────────────\n\n" +
+      "> 💬 *Tim support akan segera merespons pesan Anda.*"
     )
     .setFooter({ text: `Ticket ID: #${channel.id.slice(-6)}` })
     .setTimestamp();
@@ -421,12 +423,13 @@ export async function closeTicket(
     .setColor(0xffffff)
     .setTitle("🔒 Ticket Status - Ditutup")
     .setDescription(
+      "# 🔒 Ticket Status - Ditutup\n" +
       `Ticket ini telah ditutup oleh <@${closedBy.id}>\n\n` +
-      "---\n\n" +
-      "### 📋 Detail Penutupan\n" +
+      "───────────────────────────────\n\n" +
+      "## 📋 Detail Penutupan\n" +
       `• \`Ditutup Oleh:\` <@${closedBy.id}>\n` +
       `• \`Alasan:\` **${reason || "Tidak ada alasan"}**\n\n` +
-      "---\n\n" +
+      "───────────────────────────────\n\n" +
       "> 📌 *Transcript telah disimpan dan dikirimkan via DM. Pembuat ticket dapat memberikan rating di bawah ini.*"
     )
     .setFooter({ text: "LeonX Hub • Support System" })

@@ -252,9 +252,10 @@ function verificationPanel() {
     .setColor(0xffffff)
     .setTitle("✅ Verification Panel - LeonX Hub")
     .setDescription(
+      "# ✅ Verification Panel\n" +
       "Selamat datang di server **LeonX Hub**!\n\n" +
-      "---\n\n" +
-      "### 📋 Langkah Verifikasi\n" +
+      "───────────────────────────────\n\n" +
+      "## 📋 Langkah Verifikasi\n" +
       "• Klik tombol `/verify` di bawah ini untuk memulai.\n" +
       "• Dengan menekan tombol verifikasi, Anda menyetujui seluruh **Rules & Guidelines** server.\n" +
       "• Anda akan mendapatkan role terverifikasi dan akses penuh ke seluruh channel."
@@ -684,17 +685,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setColor(0xffffff)
           .setTitle("🔑 Informasi Key & Lisensi Anda")
           .setDescription(
+            "# 🔑 Detail Lisensi & Akses Anda\n" +
             "Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.\n\n" +
-            "---\n\n" +
-            "### 🔑 Detail Lisensi\n" +
+            "───────────────────────────────\n\n" +
+            "## 🔑 Informasis Lisensi\n" +
             `• \`Key Lisensi:\` \`||${keyData.key}||\` *(Klik untuk menyalin)*\n` +
             `• \`Akun Roblox:\` ${keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
             `• \`Perangkat (HWID):\` ${keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut"}\n` +
             `• \`Cooldown Reset:\` ${cooldownText}\n` +
             `• \`Total Eksekusi:\` \`${totalExec}\` kali\n` +
             `• \`Dibuat Pada:\` \`${new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" })}\`\n\n` +
-            "---\n\n" +
-            "### 📜 Riwayat 5 Eksekusi Terakhir\n" +
+            "───────────────────────────────\n\n" +
+            "## 📜 Riwayat 5 Eksekusi Terakhir\n" +
             historyText
           )
           .setFooter({ text: "LeonX Hub • License System" })
@@ -798,15 +800,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setColor(0xffffff)
           .setTitle("🔍 Hasil Lookup Data Lisensi")
           .setDescription(
+            "# 🔍 Hasil Lookup Data Lisensi\n" +
             `Kriteria pencarian: ${searchCriteria}\n\n` +
-            "---\n\n" +
-            "### 🛡️ Status Blacklist\n" +
+            "───────────────────────────────\n\n" +
+            "## 🛡️ Status Blacklist\n" +
             `${blacklistStatus}\n\n` +
-            "---\n\n" +
-            "### 🔑 Data Lisensi / Key\n" +
+            "───────────────────────────────\n\n" +
+            "## 🔑 Data Lisensi / Key\n" +
             `${keysFormatted}\n\n` +
-            "---\n\n" +
-            "### 📊 Riwayat 5 Eksekusi Terakhir\n" +
+            "───────────────────────────────\n\n" +
+            "## 📊 Riwayat 5 Eksekusi Terakhir\n" +
             `${executionsText}`
           )
           .setFooter({ text: "LeonX Hub • Admin Tools" })
@@ -1073,13 +1076,14 @@ Format balasan:
           .setColor(0xffffff)
           .setTitle("📊 Status Script & Bot System")
           .setDescription(
+            "# 📊 Status System & Infrastruktur\n" +
             "Berikut adalah status terkini dari seluruh infrastruktur LeonX Hub.\n\n" +
-            "---\n\n" +
-            "### 🟢 Status Layanan\n" +
+            "───────────────────────────────\n\n" +
+            "## 🟢 Status Layanan\n" +
             `• \`LeonX Hub Script:\` ${statusText}\n` +
             `• \`Bot Discord:\` 🟢 **Online**\n\n` +
-            "---\n\n" +
-            `### 📝 Catatan Sistem\n` +
+            "───────────────────────────────\n\n" +
+            `## 📝 Catatan Sistem\n` +
             `*${reasonVal}*`
           )
           .setFooter({ text: "LeonX Hub • Status Monitor" })
@@ -1151,8 +1155,9 @@ Format balasan:
             .setColor(0xffffff)
             .setTitle(`💡 FAQ - ${topic}`)
             .setDescription(
+              `# 💡 FAQ — ${topic}\n` +
               `Berikut adalah informasi mengenai topik **${topic}**:\n\n` +
-              "---\n\n" +
+              "───────────────────────────────\n\n" +
               faqAnswer
             )
             .setFooter({ text: "LeonX Hub • FAQ System" })
@@ -1166,9 +1171,10 @@ Format balasan:
           .setColor(0xffffff)
           .setTitle("🌐 LeonThings Official Website")
           .setDescription(
+            "# 🌐 Official Website & Links\n" +
             "Silakan gunakan tautan resmi di bawah ini untuk mengakses layanan kami:\n\n" +
-            "---\n\n" +
-            "### 🔗 Link Resmi\n" +
+            "───────────────────────────────\n\n" +
+            "## 🔗 Link Resmi\n" +
             "• `/website` - **Website Utama:** https://leonthings.my.id\n" +
             "• `/console` - **Bot Console & HWID Reset:** https://leonthings.my.id/bot"
           )
@@ -1321,15 +1327,16 @@ Format balasan:
             .setColor(0xffffff)
             .setTitle("📊 Statistik Support Ticket System")
             .setDescription(
+              "# 📊 Statistik Support Ticket System\n" +
               "Ringkasan statistik penggunaan ticket support:\n\n" +
-              "---\n\n" +
-              "### 📊 Ringkasan Ticket\n" +
+              "───────────────────────────────\n\n" +
+              "## 📊 Ringkasan Ticket\n" +
               `• \`Total Ticket:\` **${stats.total}**\n` +
               `• \`Ticket Open:\` **${stats.open}**\n` +
               `• \`Ticket Closed:\` **${stats.closed}**\n` +
               `• \`Rata-rata Rating:\` **${stats.avgRating ? `${Number(stats.avgRating).toFixed(1)} / 5.0` : "Belum ada rating"}**\n\n` +
-              "---\n\n" +
-              "### 📂 Tiket Per Kategori\n" +
+              "───────────────────────────────\n\n" +
+              "## 📂 Tiket Per Kategori\n" +
               (categoryFormatted || "Belum ada data")
             )
             .setFooter({ text: "LeonX Hub • Support System" })
@@ -1562,9 +1569,10 @@ Format balasan:
           .setColor(0xffffff)
           .setTitle("📊 Statistik Admin Server")
           .setDescription(
+            "# 📊 Dashboard & Statistik Server\n" +
             "Ringkasan statistik aktivitas bot dan server:\n\n" +
-            "---\n\n" +
-            "### 👥 Statistik Komunitas & Bot\n" +
+            "───────────────────────────────\n\n" +
+            "## 👥 Statistik Komunitas & Bot\n" +
             `• \`Total Member:\` **${interaction.guild?.memberCount ?? 0}** member\n` +
             `• \`Ticket Aktif:\` **${openTickets}** ticket\n` +
             `• \`Laporan Bug:\` **${reports}** laporan\n` +
@@ -1652,9 +1660,10 @@ Format balasan:
             .setColor(0xffffff)
             .setTitle("🚫 Daftar Blacklist LeonX Hub")
             .setDescription(
+              "# 🚫 Daftar Target Blacklist\n" +
               `Total target ter-blacklist: **${list.length}**\n\n` +
-              "---\n\n" +
-              "### 🛡️ List Target Blacklist\n\n" +
+              "───────────────────────────────\n\n" +
+              "## 🛡️ List Target Blacklist\n\n" +
               list.map((item, idx) => {
                 let detail = "";
                 if (item.discord_id) detail += `Discord: <@${item.discord_id}> (\`${item.discord_id}\`) `;
@@ -1803,17 +1812,18 @@ Format balasan:
             .setTitle(`👤 Roblox Profile - ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}`)
             .setURL(`https://www.roblox.com/users/${userId}/profile`)
             .setDescription(
+              `# 👤 ${details.displayName}${details.hasVerifiedBadge ? " ☑️" : ""}\n` +
               `@${details.name} • \`ID:\` \`${userId}\` • Status: ${details.isBanned ? "🔴 **Banned**" : "🟢 **Aktif**"}\n\n` +
-              (details.description ? `*${details.description.slice(0, 300)}*\n\n` : "") +
-              "---\n\n" +
-              "### 📊 Statistik Akun\n" +
+              (details.description ? `> *${details.description.slice(0, 300)}*\n\n` : "") +
+              "───────────────────────────────\n\n" +
+              "## 📊 Statistik Akun\n" +
               `• \`Teman:\` **${friendsCount}**\n` +
               `• \`Pengikut:\` **${followersCount}**\n` +
               `• \`Mengikuti:\` **${followingCount}**\n` +
               `• \`RAP Collectibles:\` **${rapText}**\n` +
               `• \`Tanggal Dibuat:\` **${creationDate.toLocaleDateString("id-ID")}**\n\n` +
-              "---\n\n" +
-              "### 🏷️ Riwayat Nama\n" +
+              "───────────────────────────────\n\n" +
+              "## 🏷️ Riwayat Nama\n" +
               historyText
             )
             .setFooter({ text: "LeonX Hub • Roblox Lookup" })
@@ -1916,15 +1926,16 @@ Format balasan:
             .setTitle(`🎮 Game Monitor - ${gameName}`)
             .setURL(`https://www.roblox.com/games/${placeId}`)
             .setDescription(
+              `# 🎮 ${gameName}\n` +
               `Developer / Creator: **${creatorName}**\n` +
               `Place ID: \`${placeId}\` | Universe ID: \`${universeId}\`\n\n` +
-              "---\n\n" +
-              "### 🟢 Statistik Pemain & Performa\n" +
+              "───────────────────────────────\n\n" +
+              "## 🟢 Pemain & Performa\n" +
               `• \`Playing:\` **${playing.toLocaleString("id-ID")}** pemain\n` +
               `• \`Total Visits:\` **${visits.toLocaleString("id-ID")}**\n` +
               `• \`Favorites:\` **${favoritedCount.toLocaleString("id-ID")}**\n\n` +
-              "---\n\n" +
-              "### 👍 Rating & Suara\n" +
+              "───────────────────────────────\n\n" +
+              "## 👍 Rating & Suara\n" +
               `• \`Likes:\` **${likes.toLocaleString("id-ID")}**\n` +
               `• \`Dislikes:\` **${dislikes.toLocaleString("id-ID")}**\n` +
               `• \`Like Ratio:\` **${likeRatio}**`
@@ -1993,9 +2004,10 @@ Format balasan:
             .setColor(0xffffff)
             .setTitle(`📈 Server Aktif — Place ID ${placeId}`)
             .setDescription(
+              `# 📈 Server Aktif — Place ID ${placeId}\n` +
               "Salin link di bawah ini, lalu buka di browser/Windows Run (Win + R) untuk langsung bergabung ke server:\n\n" +
-              "---\n\n" +
-              "### 🖥️ List Server Aktif\n\n" +
+              "───────────────────────────────\n\n" +
+              "## 🖥️ List Server Aktif\n\n" +
               serversList.map(srv =>
                 `• \`Server #${srv.num}:\` (${srv.playing}/${srv.max} Players | FPS: ${srv.fps} | Ping: ${srv.ping})\n` +
                 `\`\`\`text\n${srv.joinUrl}\n\`\`\``
@@ -2038,29 +2050,29 @@ Format balasan:
             .setColor(0xffffff)
             .setTitle("📖 LeonX Hub - Server Rules & Guidelines")
             .setDescription(
-              "✨ **Welcome to LeonX Hub Server** ✨\n" +
-              "Selamat datang di server resmi LeonX Hub. Server ini adalah wadah diskusi, pembaruan script, laporan bug, serta layanan bantuan bagi seluruh pengguna LeonX Hub.\n\n" +
-              "Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama di dalam server ini.\n\n" +
-              "---\n\n" +
-              "📜 **SERVER RULES & GUIDELINES**\n" +
+              "# 📖 LeonX Hub - Server Rules & Guidelines\n" +
+              "> ✨ **Selamat datang di server resmi LeonX Hub.** Server ini adalah wadah diskusi, pembaruan script, laporan bug, serta layanan bantuan bagi seluruh pengguna LeonX Hub.\n" +
+              "> Harap luangkan waktu sejenak untuk membaca dan mematuhi peraturan kami demi menjaga kenyamanan bersama.\n\n" +
+              "───────────────────────────────\n\n" +
+              "## 📜 ATURAN UTAMA SERVER\n" +
               "Dengan bergabung di server ini, Anda dianggap telah membaca dan menyetujui seluruh ketentuan di bawah ini:\n\n" +
-              "🚫 **Larangan Keras Crack, Leak, & Bypass**\n" +
+              "🚫 **1. Larangan Keras Crack, Leak, & Bypass**\n" +
               "Dilarang keras mencoba melakukan cracking/dekripsi loader, membagikan/leaking script LeonX ke luar server, atau menggunakan bypass ilegal. Pelanggaran berat ini akan berakibat pada **Blacklist HWID + Roblox ID + Discord ID secara permanen** dari seluruh layanan kami.\n\n" +
-              "🤝 **Saling Menghormati & Jaga Etika**\n" +
+              "🤝 **2. Saling Menghormati & Jaga Etika**\n" +
               "Gunakan bahasa yang sopan. Dilarang melakukan cyberbullying, harassment, memicu drama/debat kusir, toxic berlebih, SARA, atau mengirim konten NSFW/pornografi.\n\n" +
-              "🛡️ **Saluran Chat Sesuai Fungsi**\n" +
+              "🛡️ **3. Saluran Chat Sesuai Fungsi**\n" +
               "Gunakan channel sesuai dengan tujuannya. Jangan melakukan spam chat, spam tag staf/developer tanpa alasan mendesak, atau membagikan iklan/link promosi server lain (Anti-Link aktif).\n\n" +
-              "🎫 **Penggunaan Sistem Ticket & Bug Report**\n" +
+              "🎫 **4. Penggunaan Sistem Ticket & Bug Report**\n" +
               "Buka ticket support hanya untuk masalah teknis/transaksi yang mendesak. Kirim laporan bug nyata via `/bug-report`. Menyalahgunakan sistem tiket/laporan bug untuk spam atau bercanda akan dikenakan sanksi.\n\n" +
-              "🔒 **Keamanan Akun & Transaksi Resmi**\n" +
+              "🔒 **5. Keamanan Akun & Transaksi Resmi**\n" +
               "Staf LeonX Hub **TIDAK PERNAH** meminta password akun Roblox atau token Discord Anda. Segala bentuk transaksi resmi hanya dilakukan melalui bot resmi atau langsung dengan Admin.\n\n" +
-              "---\n\n" +
-              "⚖️ **SISTEM SANKSI & KONSEKUENSI**\n" +
+              "───────────────────────────────\n\n" +
+              "## ⚖️ SISTEM SANKSI & KONSEKUENSI\n" +
               "Moderator berhak mengambil keputusan mutlak berdasarkan pelanggaran yang Anda lakukan:\n" +
               "• `/warn` - Pelanggaran Ringan: Peringatan tertulis (Warning) via database bot.\n" +
               "• `/timeout` - Pelanggaran Sedang: Timeout (Mute otomatis) mulai dari 10 menit hingga 7 hari.\n" +
               "• `/blacklist` - Pelanggaran Berat: Kick, Banned permanen dari Discord, serta Blacklist HWID & Roblox ID di server database game.\n\n" +
-              "---\n\n" +
+              "───────────────────────────────\n\n" +
               "> 📌 *Jika Anda belum terverifikasi, silakan selesaikan proses verifikasi dengan menekan tombol **Verify** di channel verifikasi.*"
             )
             .setFooter({ text: "LeonX Hub • Official Guidelines" })
@@ -2172,9 +2184,10 @@ Format balasan:
               .setColor(0xffffff)
               .setTitle("🔍 Game Update Monitoring List")
               .setDescription(
+                "# 🔍 Game Monitoring List\n" +
                 "Daftar game yang saat ini dipantau secara otomatis:\n\n" +
-                "---\n\n" +
-                "### 🎮 Game Dipantau\n\n" +
+                "───────────────────────────────\n\n" +
+                "## 🎮 Game Dipantau\n\n" +
                 list.map((item, idx) =>
                   `• \`${idx + 1}. ${item.name}:\` Place ID: \`${item.place_id}\` | Update: \`${new Date(item.last_updated).toLocaleString("id-ID")}\``
                 ).join("\n")
@@ -2502,12 +2515,13 @@ Format balasan:
         .setColor(0xffffff)
         .setTitle(`🐛 Laporan Bug #${result.lastInsertRowid}: ${title}`)
         .setDescription(
+          `# 🐛 Laporan Bug #${result.lastInsertRowid}\n` +
           `Dilaporkan oleh: <@${interaction.user.id}> (\`${interaction.user.id}\`)\n\n` +
-          "---\n\n" +
-          "### 📋 Deskripsi Masalah\n" +
+          "───────────────────────────────\n\n" +
+          "## 📋 Deskripsi Masalah\n" +
           `${description}\n\n` +
-          "---\n\n" +
-          "### 🔄 Langkah Mengulang Bug\n" +
+          "───────────────────────────────\n\n" +
+          "## 🔄 Langkah Mengulang Bug\n" +
           `${steps}`
         )
         .setFooter({ text: "LeonX Hub • Bug Report System" })
@@ -2664,8 +2678,9 @@ Tugas Anda:
         .setColor(0xffffff)
         .setTitle("🤖 AI Support Assistant (Solusi Awal)")
         .setDescription(
+          "# 🤖 AI Support Assistant\n" +
           `${finalReply}\n\n` +
-          "---\n\n" +
+          "───────────────────────────────\n\n" +
           "> 📌 *Tim support manusia akan segera membantu secara langsung jika masalah belum teratasi.*"
         )
         .setFooter({ text: "LeonX Hub • AI Support Assistant" });
