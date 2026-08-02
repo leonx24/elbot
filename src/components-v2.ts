@@ -3,27 +3,27 @@ import { MessageFlags } from "discord.js";
 export interface V2Section {
   title?: string;
   content: string;
-  thumbnailUrl?: string; // kalau diisi, section jadi punya accessory thumbnail di kanan
+  thumbnailUrl?: string; // opsional, kalau section itu sendiri butuh accessory thumbnail
 }
 
 export interface V2ContainerParams {
   title?: string;
   description?: string;
   accentColor?: number | null;
-  thumbnailUrl?: string; // thumbnail global di pojok kanan atas (dempet ke title)
+  thumbnailUrl?: string; // thumbnail global, nempel di title
   sections?: V2Section[];
   footer?: string;
   actionRows?: any[];
 }
 
 /**
- * Creates a Discord Components V2 Container payload object.
- * accentColor: null -> gak ada garis warna kiri sama sekali.
+ * Membuat payload Discord Components V2 Container.
+ * accentColor: null (default) -> tidak ada garis warna aksen di kiri sama sekali.
  */
 export function buildV2Container(params: V2ContainerParams) {
   const containerComponents: any[] = [];
 
-  // Title + optional thumbnail (pakai Section+Thumbnail biar avatar nempel di kanan)
+  // Title (+ thumbnail opsional nempel di kanan judul via Section+Thumbnail)
   if (params.title) {
     const titleContent = {
       type: 10, // TextDisplay
@@ -44,13 +44,15 @@ export function buildV2Container(params: V2ContainerParams) {
     }
   }
 
+  // Description
   if (params.description) {
     if (params.title) {
-      containerComponents.push({ type: 14, divider: true, spacing: 1 });
+      containerComponents.push({ type: 14, divider: true, spacing: 1 }); // Separator
     }
     containerComponents.push({ type: 10, content: params.description });
   }
 
+  // Sections
   if (params.sections && params.sections.length > 0) {
     for (const sec of params.sections) {
       containerComponents.push({ type: 14, divider: true, spacing: 1 });
@@ -66,10 +68,10 @@ export function buildV2Container(params: V2ContainerParams) {
 
       if (sec.thumbnailUrl) {
         containerComponents.push({
-          type: 9, // Section
+          type: 9,
           components: textParts,
           accessory: {
-            type: 11, // Thumbnail
+            type: 11,
             media: { url: sec.thumbnailUrl },
           },
         });
@@ -79,14 +81,16 @@ export function buildV2Container(params: V2ContainerParams) {
     }
   }
 
+  // Footer
   if (params.footer) {
     containerComponents.push({ type: 14, divider: true, spacing: 1 });
     containerComponents.push({
       type: 10,
-      content: `-# ${params.footer}`, // -# = small/subtext style di Discord markdown
+      content: `-# ${params.footer}`, // -# = subtext style Discord markdown
     });
   }
 
+  // Action rows (button/select menu dari discord.js builder)
   if (params.actionRows) {
     for (const row of params.actionRows) {
       const rowJSON = typeof row.toJSON === "function" ? row.toJSON() : row;
@@ -102,6 +106,6 @@ export function buildV2Container(params: V2ContainerParams) {
 
   return {
     components: [container],
-    flags: MessageFlags.IsComponentsV2,
+    flags: MessageFlags.IsComponentsV2 as const,
   };
 }

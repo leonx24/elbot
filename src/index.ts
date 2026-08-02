@@ -17,11 +17,11 @@ import {
   TextInputBuilder,
   TextInputStyle
 } from "discord.js";
+import { buildV2Container } from "./components-v2.js";
+import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { config } from "./config.js";
-import { buildV2Container } from "./components-v2.js";
 import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, forceGenerateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
 import {
   createTicketPanel,
