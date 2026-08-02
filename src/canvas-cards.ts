@@ -560,7 +560,7 @@ export async function renderRobloxProfileCard(data: {
   drawGlowText(ctx, `${data.displayName}${data.hasVerifiedBadge ? " ☑️" : ""}`, nameX, 70, COLORS.textPrimary, TITLE_FONT_SIZE);
   drawText(ctx, `@${data.username}  •  ID: ${data.userId}`, nameX, 92, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE });
 
-  // Status badge
+  // Status badgee
   const badgeColor = data.isBanned ? COLORS.danger : COLORS.success;
   const badgeText = data.isBanned ? "Banned" : "Aktif";
   drawStatusBadge(ctx, badgeText, nameX, 100, badgeColor);
