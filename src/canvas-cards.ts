@@ -7,11 +7,11 @@ import { join } from "node:path";
 const fontsDir = join(process.cwd(), "assets", "fonts");
 try {
   GlobalFonts.registerFromPath(join(fontsDir, "Inter-Regular.ttf"), "Inter");
-  GlobalFonts.registerFromPath(join(fontsDir, "Inter-Bold.ttf"), "Inter Bold");
-  GlobalFonts.registerFromPath(join(fontsDir, "Inter-SemiBold.ttf"), "Inter SemiBold");
-  GlobalFonts.registerFromPath(join(fontsDir, "Inter-Medium.ttf"), "Inter Medium");
-} catch {
-  console.warn("[Canvas] Font registration failed – falling back to system fonts");
+  GlobalFonts.registerFromPath(join(fontsDir, "Inter-Bold.ttf"), "Inter");
+  GlobalFonts.registerFromPath(join(fontsDir, "Inter-SemiBold.ttf"), "Inter");
+  GlobalFonts.registerFromPath(join(fontsDir, "Inter-Medium.ttf"), "Inter");
+} catch (e) {
+  console.warn("[Canvas] Font registration failed – falling back to system fonts", e);
 }
 
 // ──────────────────────────────────────────────────────
@@ -139,6 +139,16 @@ function drawDivider(ctx: SKRSContext2D, y: number, w: number) {
   ctx.stroke();
 }
 
+function getFontString(fontSize: number, fontWeight = ""): string {
+  const fw = fontWeight.toLowerCase();
+  let weight = "";
+  if (fw === "bold") weight = "bold ";
+  else if (fw === "semibold") weight = "600 ";
+  else if (fw === "medium") weight = "500 ";
+
+  return `${weight}${fontSize}px Inter, sans-serif`;
+}
+
 function drawGlowText(
   ctx: SKRSContext2D,
   text: string,
@@ -147,7 +157,7 @@ function drawGlowText(
   fontSize: number,
   fontWeight = "Bold"
 ) {
-  ctx.font = `${fontSize}px "Inter ${fontWeight}", "Inter", sans-serif`;
+  ctx.font = getFontString(fontSize, fontWeight);
   ctx.shadowColor = color;
   ctx.shadowBlur = 12;
   ctx.fillStyle = color;
@@ -175,8 +185,7 @@ function drawText(
     align = "left",
   } = options;
 
-  const fontFamily = fontWeight ? `"Inter ${fontWeight}", "Inter", sans-serif` : `"Inter", sans-serif`;
-  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.font = getFontString(fontSize, fontWeight);
   ctx.fillStyle = color;
   ctx.textAlign = align;
   if (maxWidth) {
@@ -217,7 +226,7 @@ function drawStatusBadge(
   text: string, x: number, y: number,
   color: string
 ) {
-  ctx.font = `${SMALL_FONT_SIZE}px "Inter SemiBold", "Inter", sans-serif`;
+  ctx.font = getFontString(SMALL_FONT_SIZE, "SemiBold");
   const textWidth = ctx.measureText(text).width;
   const badgeW = textWidth + 24;
   const badgeH = 22;
@@ -271,8 +280,7 @@ function wrapText(
   fontSize: number,
   fontWeight = ""
 ): string[] {
-  const fontFamily = fontWeight ? `"Inter ${fontWeight}", "Inter", sans-serif` : `"Inter", sans-serif`;
-  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.font = getFontString(fontSize, fontWeight);
   const words = text.split(" ");
   const lines: string[] = [];
   let currentLine = "";
