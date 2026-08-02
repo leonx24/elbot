@@ -1427,31 +1427,6 @@ Format balasan:
             }
           }
 
-          const authorIcon = guildIcon || botAvatar;
-
-          const changelogEmbed = new EmbedBuilder()
-            .setAuthor({
-              name: `${interaction.guild?.name || "LeonX Hub"} • Official Update`,
-              iconURL: authorIcon
-            })
-            .setTitle(`🚀 ${changelogTitle}`)
-            .setDescription(
-              `\`Target Game:\` **${gameName}**\n` +
-              `\`Jenis Update:\` **${type.emoji} ${type.label}**\n\n` +
-              `> ${summary}\n\n` +
-              `---\n\n` +
-              `### 📋 Change Details\n` +
-              formattedContent
-            )
-            .setFooter({ text: `LeonX Hub ${version} • ${statusFooterText}` })
-            .setTimestamp();
-
-          if (gameThumbnailUrl) {
-            changelogEmbed.setThumbnail(gameThumbnailUrl);
-          } else if (guildIcon) {
-            changelogEmbed.setThumbnail(guildIcon);
-          }
-
           const buttonsList: ButtonBuilder[] = [];
 
           if (config.VERIFY_CHANNEL_ID) {
@@ -1485,22 +1460,37 @@ Format balasan:
 
           const links = new ActionRowBuilder<ButtonBuilder>().addComponents(buttonsList);
 
+          const v2Payload = buildV2Container({
+            title: `🚀 ${changelogTitle}`,
+            thumbnailUrl: gameThumbnailUrl || guildIcon || botAvatar,
+            description:
+              `\`Target Game:\` **${gameName}**\n` +
+              `\`Jenis Update:\` **${type.emoji} ${type.label}**\n\n` +
+              `> ${summary}`,
+            sections: [
+              {
+                title: "📋 Change Details",
+                content: formattedContent
+              }
+            ],
+            footer: `LeonX Hub ${version} • ${statusFooterText}`,
+            actionRows: [links]
+          });
+
           const channel = await client.channels.fetch(config.CHANGELOG_CHANNEL_ID).catch(() => null);
           if (channel?.type === ChannelType.GuildForum) {
             await channel.threads.create({
               name: `${version} — ${title}`.slice(0, 100),
               message: {
                 content: `@everyone  ${type.emoji} **${type.label}**`,
-                embeds: [changelogEmbed],
-                components: [links]
+                ...v2Payload
               },
               reason: `Changelog ${version}`
             });
           } else if (channel?.isSendable()) {
             await channel.send({
               content: `@everyone  ${type.emoji} **${type.label}**`,
-              embeds: [changelogEmbed],
-              components: [links]
+              ...v2Payload
             });
           } else {
             throw new Error("CHANGELOG_CHANNEL_ID bukan channel teks atau forum yang dapat digunakan.");
