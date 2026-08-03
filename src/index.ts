@@ -277,39 +277,34 @@ async function ensureVerificationPanel(): Promise<void> {
   const saved = db.prepare("SELECT value FROM bot_settings WHERE key = ?")
     .get(settingKey) as { value: string } | undefined;
 
+  // Delete old message if it exists (can't edit non-V2 to V2)
   if (saved) {
     const existing = await channel.messages.fetch(saved.value).catch(() => null);
     if (existing) {
-      await existing.edit(verificationPanel()).catch(() => null);
-      return;
+      await existing.delete().catch(() => null);
     }
   }
 
-  // Scan channel history for existing panel to handle database wipes on Railway redeployment
+  // Also scan and delete any old panels from channel history
   const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   if (messages) {
-    const existingPanel = messages.find(
+    const oldPanels = messages.filter(
       (m) =>
         m.author.id === client.user?.id &&
         m.components.some((row: any) => row.components?.some((c: any) => c.customId === "verify:accept"))
     );
-    if (existingPanel) {
-      await existingPanel.edit(verificationPanel()).catch(() => null);
-      db.prepare(`
-        INSERT INTO bot_settings (key, value) VALUES (?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `).run(settingKey, existingPanel.id);
-      console.log(`Panel verifikasi diperbarui (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
-      return;
+    for (const [, panel] of oldPanels) {
+      await panel.delete().catch(() => null);
     }
   }
 
+  // Create fresh V2 panel
   const message = await channel.send(verificationPanel());
   db.prepare(`
     INSERT INTO bot_settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(settingKey, message.id);
-  console.log(`Panel verifikasi dibuat di #${channel.id}`);
+  console.log(`Panel verifikasi (V2) dibuat di #${channel.id}`);
 }
 
 async function ensureTicketPanel(): Promise<void> {
@@ -3899,7 +3894,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
         memberCount: member.guild.memberCount,
         verifyChannelId: config.VERIFY_CHANNEL_ID
       });
-      const { embed, attachment } = cardEmbed(welcomeBuf, undefined, "welcome.png");
+      const attachment = new AttachmentBuilder(welcomeBuf, { name: "welcome.png" });
 
       const verifyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -3911,7 +3906,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
       await channel.send({
         content: `Selamat datang <@${member.id}>!`,
-        embeds: [embed],
         files: [attachment],
         components: [verifyRow]
       });
@@ -3932,9 +3926,9 @@ client.on(Events.GuildMemberRemove, async (member) => {
         guildName: member.guild.name,
         memberCount: member.guild.memberCount
       });
-      const { embed, attachment } = cardEmbed(goodbyeBuf, undefined, "goodbye.png");
+      const attachment = new AttachmentBuilder(goodbyeBuf, { name: "goodbye.png" });
 
-      await channel.send({ embeds: [embed], files: [attachment] });
+      await channel.send({ files: [attachment] });
     }
   } catch (error) {
     console.error("Gagal mengirim pesan selamat tinggal:", error);

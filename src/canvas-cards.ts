@@ -1326,45 +1326,38 @@ export async function renderWelcomeCard(data: {
   // Draw background image
   ctx.drawImage(bgImg, 0, 0, W, H);
 
-  // Draw circular user avatar in the center circle area
-  // The background has a circle centered roughly at (W/2, 460) with ~150px radius
-  const avatarSize = 260;
-  const avatarX = W / 2 - avatarSize / 2;
-  const avatarY = 340;
+  // Draw circular user avatar centered in the background circle
+  // Background circle center: ~(836, 490), radius: ~155px
+  const centerX = Math.round(W / 2);
+  const centerY = 490;
+  const avatarRadius = 148;
 
   try {
     const avatarImg = await loadImage(data.avatarUrl);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
+    ctx.drawImage(avatarImg, centerX - avatarRadius, centerY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
     ctx.restore();
-
-    // Draw a purple glow ring around the avatar
-    ctx.strokeStyle = "rgba(139, 92, 246, 0.6)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 2, 0, Math.PI * 2);
-    ctx.stroke();
   } catch {
     // Fallback if avatar can't be loaded
   }
 
-  // Draw user display name below "GLAD TO HAVE YOU HERE." area
-  ctx.font = getFontString(38, "Bold");
+  // Draw user display name
+  ctx.font = getFontString(40, "Bold");
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 12;
-  ctx.fillText(data.username, W / 2, H - 60);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+  ctx.shadowBlur = 14;
+  ctx.fillText(data.username, centerX, 810);
   ctx.shadowBlur = 0;
 
   // Draw member count
-  ctx.font = getFontString(22, "Medium");
-  ctx.fillStyle = "rgba(200, 200, 220, 0.7)";
-  ctx.fillText(`Member #${data.memberCount}`, W / 2, H - 28);
+  ctx.font = getFontString(24, "Medium");
+  ctx.fillStyle = "rgba(200, 200, 220, 0.6)";
+  ctx.fillText(`Member #${data.memberCount}`, centerX, 845);
   ctx.textAlign = "left";
 
   return Buffer.from(await canvas.encode("png"));
@@ -1388,44 +1381,38 @@ export async function renderGoodbyeCard(data: {
   // Draw background image
   ctx.drawImage(bgImg, 0, 0, W, H);
 
-  // Draw circular user avatar in the center circle area
-  const avatarSize = 260;
-  const avatarX = W / 2 - avatarSize / 2;
-  const avatarY = 340;
+  // Draw circular user avatar centered in the background circle
+  // Background circle center: ~(836, 490), radius: ~155px
+  const centerX = Math.round(W / 2);
+  const centerY = 490;
+  const avatarRadius = 148;
 
   try {
     const avatarImg = await loadImage(data.avatarUrl);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
+    ctx.drawImage(avatarImg, centerX - avatarRadius, centerY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
     ctx.restore();
-
-    // Draw a purple glow ring around the avatar
-    ctx.strokeStyle = "rgba(139, 92, 246, 0.6)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 2, 0, Math.PI * 2);
-    ctx.stroke();
   } catch {
     // Fallback if avatar can't be loaded
   }
 
-  // Draw user tag below "THANK YOU FOR BEING HERE." area
-  ctx.font = getFontString(38, "Bold");
+  // Draw user tag
+  ctx.font = getFontString(40, "Bold");
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 12;
-  ctx.fillText(data.userTag, W / 2, H - 60);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+  ctx.shadowBlur = 14;
+  ctx.fillText(data.userTag, centerX, 810);
   ctx.shadowBlur = 0;
 
   // Draw member count
-  ctx.font = getFontString(22, "Medium");
-  ctx.fillStyle = "rgba(200, 200, 220, 0.7)";
-  ctx.fillText(`Member #${data.memberCount}`, W / 2, H - 28);
+  ctx.font = getFontString(24, "Medium");
+  ctx.fillStyle = "rgba(200, 200, 220, 0.6)";
+  ctx.fillText(`Member #${data.memberCount}`, centerX, 845);
   ctx.textAlign = "left";
 
   return Buffer.from(await canvas.encode("png"));
