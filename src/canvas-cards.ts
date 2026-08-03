@@ -1328,7 +1328,7 @@ export async function renderWelcomeCard(data: {
 
   // Draw circular user avatar centered in the background circle
   const centerX = Math.round(W / 2);
-  const centerY = 541;
+  const centerY = 542;
   const avatarRadius = 170;
 
   try {
