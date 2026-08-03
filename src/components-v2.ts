@@ -14,14 +14,12 @@ export interface V2ContainerParams {
   sections?: V2Section[];
   footer?: string;
   actionRows?: any[];
+  dividers?: boolean; // toggle dividers inside container (default: true)
 }
 
-/**
- * Membuat payload Discord Components V2 Container.
- * accentColor: null (default) -> tidak ada garis warna aksen di kiri sama sekali.
- */
-export function buildV2Container(params: V2ContainerParams) {
+function buildSingleContainer(params: V2ContainerParams) {
   const containerComponents: any[] = [];
+  const useDividers = params.dividers ?? true;
 
   // Title (+ thumbnail opsional nempel di kanan judul via Section+Thumbnail)
   if (params.title) {
@@ -46,7 +44,7 @@ export function buildV2Container(params: V2ContainerParams) {
 
   // Description
   if (params.description) {
-    if (params.title) {
+    if (params.title && useDividers) {
       containerComponents.push({ type: 14, divider: true, spacing: 1 }); // Separator
     }
     containerComponents.push({ type: 10, content: params.description });
@@ -55,7 +53,9 @@ export function buildV2Container(params: V2ContainerParams) {
   // Sections
   if (params.sections && params.sections.length > 0) {
     for (const sec of params.sections) {
-      containerComponents.push({ type: 14, divider: true, spacing: 1 });
+      if (useDividers) {
+        containerComponents.push({ type: 14, divider: true, spacing: 1 });
+      }
 
       const textParts: any[] = [];
       if (sec.title) {
@@ -83,7 +83,9 @@ export function buildV2Container(params: V2ContainerParams) {
 
   // Footer
   if (params.footer) {
-    containerComponents.push({ type: 14, divider: true, spacing: 1 });
+    if (useDividers) {
+      containerComponents.push({ type: 14, divider: true, spacing: 1 });
+    }
     containerComponents.push({
       type: 10,
       content: `-# ${params.footer}`, // -# = subtext style Discord markdown
@@ -98,14 +100,29 @@ export function buildV2Container(params: V2ContainerParams) {
     }
   }
 
-  const container: any = {
+  return {
     type: 17, // Container
     accent_color: params.accentColor ?? null,
     components: containerComponents,
   };
+}
 
+/**
+ * Membuat payload Discord Components V2 Container tunggal.
+ */
+export function buildV2Container(params: V2ContainerParams) {
   return {
-    components: [container],
+    components: [buildSingleContainer(params)],
+    flags: MessageFlags.IsComponentsV2 as const,
+  };
+}
+
+/**
+ * Membuat payload Discord Components V2 dengan banyak Container (multicard).
+ */
+export function buildMultiV2Containers(containers: V2ContainerParams[]) {
+  return {
+    components: containers.map(buildSingleContainer),
     flags: MessageFlags.IsComponentsV2 as const,
   };
 }

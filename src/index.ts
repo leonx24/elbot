@@ -17,7 +17,7 @@ import {
   TextInputBuilder,
   TextInputStyle
 } from "discord.js";
-import { buildV2Container } from "./components-v2.js";
+import { buildV2Container, buildMultiV2Containers } from "./components-v2.js";
 import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
@@ -191,7 +191,8 @@ function buildEnhancedChanges(content: string): string {
     lines.push(`${prefix} ${text}`);
   }
 
-  return lines.join("\n").slice(0, 4000);
+  const codeContent = lines.join("\n").slice(0, 3800);
+  return `\`\`\`\n${codeContent}\n\`\`\``;
 }
 
 type TicketRecord = {
@@ -1467,22 +1468,30 @@ Format balasan:
 
           const links = new ActionRowBuilder<ButtonBuilder>().addComponents(buttonsList);
 
-          const v2Payload = buildV2Container({
-            title: `New update`,
-            thumbnailUrl: gameThumbnailUrl || guildIcon || botAvatar,
-            description:
-              `Game: ${gameName}\n` +
-              `Version: ${version}\n` +
-              `Note: ${summary}`,
-            sections: [
-              {
-                title: `Change Details`,
-                content: formattedContent
-              }
-            ],
-            footer: `LeonX Hub • ${statusFooterText}`,
-            actionRows: [links]
-          });
+          const v2Payload = buildMultiV2Containers([
+            {
+              title: "New Update Released!",
+              thumbnailUrl: gameThumbnailUrl || guildIcon || botAvatar,
+              description:
+                `• **Role Type :** ${type.label}\n` +
+                `• **Version :** ${version}\n` +
+                `• **Tag :** ${title}` +
+                (gameName && gameName !== "Universal" ? `\n• **Game :** ${gameName}` : "") +
+                (summary ? `\n• **Note :** ${summary}` : ""),
+              dividers: false
+            },
+            {
+              title: "Changelogs",
+              sections: [
+                {
+                  title: type.label,
+                  content: formattedContent
+                }
+              ],
+              actionRows: [links],
+              dividers: false
+            }
+          ]);
 
           const channel = await client.channels.fetch(config.CHANGELOG_CHANNEL_ID).catch(() => null);
           if (!channel || (!channel.isSendable() && channel.type !== ChannelType.GuildForum)) {
