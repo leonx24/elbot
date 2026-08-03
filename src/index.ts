@@ -277,29 +277,47 @@ async function ensureVerificationPanel(): Promise<void> {
   const saved = db.prepare("SELECT value FROM bot_settings WHERE key = ?")
     .get(settingKey) as { value: string } | undefined;
 
-  // Delete old message if it exists (can't edit non-V2 to V2)
+  const panel = verificationPanel();
+
+  // Try to edit existing saved message
   if (saved) {
     const existing = await channel.messages.fetch(saved.value).catch(() => null);
     if (existing) {
+      const edited = await existing.edit(panel).catch(() => null);
+      if (edited) {
+        console.log(`Panel verifikasi diperbarui di #${channel.id}, ID: ${existing.id}`);
+        return;
+      }
+      // Edit failed (e.g. old non-V2 message), delete it
       await existing.delete().catch(() => null);
     }
   }
 
-  // Also scan and delete any old panels from channel history
+  // Scan channel history for any existing panels
   const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   if (messages) {
-    const oldPanels = messages.filter(
+    const existingPanel = messages.find(
       (m) =>
         m.author.id === client.user?.id &&
         m.components.some((row: any) => row.components?.some((c: any) => c.customId === "verify:accept"))
     );
-    for (const [, panel] of oldPanels) {
-      await panel.delete().catch(() => null);
+    if (existingPanel) {
+      const edited = await existingPanel.edit(panel).catch(() => null);
+      if (edited) {
+        db.prepare(`
+          INSERT INTO bot_settings (key, value) VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run(settingKey, existingPanel.id);
+        console.log(`Panel verifikasi diperbarui (self-healing) di #${channel.id}, ID: ${existingPanel.id}`);
+        return;
+      }
+      // Edit failed, delete old one
+      await existingPanel.delete().catch(() => null);
     }
   }
 
-  // Create fresh V2 panel
-  const message = await channel.send(verificationPanel());
+  // No existing panel found or edit failed, create new one
+  const message = await channel.send(panel);
   db.prepare(`
     INSERT INTO bot_settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value

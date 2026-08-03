@@ -1328,7 +1328,7 @@ export async function renderWelcomeCard(data: {
 
   // Draw circular user avatar centered in the background circle
   const centerX = Math.round(W / 2);
-  const centerY = 530;
+  const centerY = 555;
   const avatarRadius = 170;
 
   try {
@@ -1350,13 +1350,13 @@ export async function renderWelcomeCard(data: {
   ctx.textAlign = "center";
   ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
   ctx.shadowBlur = 16;
-  ctx.fillText(data.username, centerX, 860);
+  ctx.fillText(data.username, centerX, 910);
   ctx.shadowBlur = 0;
 
   // Draw member count
-  ctx.font = getFontString(22, "Medium");
-  ctx.fillStyle = "rgba(180, 180, 200, 0.55)";
-  ctx.fillText(`Member #${data.memberCount}`, centerX, 895);
+  ctx.font = getFontString(20, "Medium");
+  ctx.fillStyle = "rgba(180, 180, 200, 0.5)";
+  ctx.fillText(`Member #${data.memberCount}`, centerX, 938);
   ctx.textAlign = "left";
 
   return Buffer.from(await canvas.encode("png"));
@@ -1382,7 +1382,7 @@ export async function renderGoodbyeCard(data: {
 
   // Draw circular user avatar centered in the background circle
   const centerX = Math.round(W / 2);
-  const centerY = 530;
+  const centerY = 555;
   const avatarRadius = 170;
 
   try {
@@ -1404,13 +1404,13 @@ export async function renderGoodbyeCard(data: {
   ctx.textAlign = "center";
   ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
   ctx.shadowBlur = 16;
-  ctx.fillText(data.userTag, centerX, 860);
+  ctx.fillText(data.userTag, centerX, 910);
   ctx.shadowBlur = 0;
 
   // Draw member count
-  ctx.font = getFontString(22, "Medium");
-  ctx.fillStyle = "rgba(180, 180, 200, 0.55)";
-  ctx.fillText(`Member #${data.memberCount}`, centerX, 895);
+  ctx.font = getFontString(20, "Medium");
+  ctx.fillStyle = "rgba(180, 180, 200, 0.5)";
+  ctx.fillText(`Member #${data.memberCount}`, centerX, 938);
   ctx.textAlign = "left";
 
   return Buffer.from(await canvas.encode("png"));
