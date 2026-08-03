@@ -1327,10 +1327,9 @@ export async function renderWelcomeCard(data: {
   ctx.drawImage(bgImg, 0, 0, W, H);
 
   // Draw circular user avatar centered in the background circle
-  // Background circle center: ~(836, 490), radius: ~155px
   const centerX = Math.round(W / 2);
-  const centerY = 490;
-  const avatarRadius = 148;
+  const centerY = 530;
+  const avatarRadius = 170;
 
   try {
     const avatarImg = await loadImage(data.avatarUrl);
@@ -1345,19 +1344,19 @@ export async function renderWelcomeCard(data: {
     // Fallback if avatar can't be loaded
   }
 
-  // Draw user display name
-  ctx.font = getFontString(40, "Bold");
+  // Draw user display name below background text
+  ctx.font = getFontString(42, "Bold");
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-  ctx.shadowBlur = 14;
-  ctx.fillText(data.username, centerX, 810);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+  ctx.shadowBlur = 16;
+  ctx.fillText(data.username, centerX, 860);
   ctx.shadowBlur = 0;
 
   // Draw member count
-  ctx.font = getFontString(24, "Medium");
-  ctx.fillStyle = "rgba(200, 200, 220, 0.6)";
-  ctx.fillText(`Member #${data.memberCount}`, centerX, 845);
+  ctx.font = getFontString(22, "Medium");
+  ctx.fillStyle = "rgba(180, 180, 200, 0.55)";
+  ctx.fillText(`Member #${data.memberCount}`, centerX, 895);
   ctx.textAlign = "left";
 
   return Buffer.from(await canvas.encode("png"));
@@ -1382,10 +1381,9 @@ export async function renderGoodbyeCard(data: {
   ctx.drawImage(bgImg, 0, 0, W, H);
 
   // Draw circular user avatar centered in the background circle
-  // Background circle center: ~(836, 490), radius: ~155px
   const centerX = Math.round(W / 2);
-  const centerY = 490;
-  const avatarRadius = 148;
+  const centerY = 530;
+  const avatarRadius = 170;
 
   try {
     const avatarImg = await loadImage(data.avatarUrl);
@@ -1400,19 +1398,19 @@ export async function renderGoodbyeCard(data: {
     // Fallback if avatar can't be loaded
   }
 
-  // Draw user tag
-  ctx.font = getFontString(40, "Bold");
+  // Draw user tag below background text
+  ctx.font = getFontString(42, "Bold");
   ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-  ctx.shadowBlur = 14;
-  ctx.fillText(data.userTag, centerX, 810);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+  ctx.shadowBlur = 16;
+  ctx.fillText(data.userTag, centerX, 860);
   ctx.shadowBlur = 0;
 
   // Draw member count
-  ctx.font = getFontString(24, "Medium");
-  ctx.fillStyle = "rgba(200, 200, 220, 0.6)";
-  ctx.fillText(`Member #${data.memberCount}`, centerX, 845);
+  ctx.font = getFontString(22, "Medium");
+  ctx.fillStyle = "rgba(180, 180, 200, 0.55)";
+  ctx.fillText(`Member #${data.memberCount}`, centerX, 895);
   ctx.textAlign = "left";
 
   return Buffer.from(await canvas.encode("png"));

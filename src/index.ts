@@ -3898,8 +3898,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
       const verifyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setLabel("Verifikasi Akun")
-          .setEmoji("✅")
+          .setLabel("Verifikasi Sekarang")
+          .setEmoji("🔐")
           .setStyle(ButtonStyle.Link)
           .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.VERIFY_CHANNEL_ID}`)
       );
