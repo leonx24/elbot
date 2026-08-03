@@ -1314,25 +1314,60 @@ export async function renderWelcomeCard(data: {
   memberCount: number;
   verifyChannelId: string;
 }): Promise<Buffer> {
-  const H = 290;
-  const { canvas, ctx } = createBaseCanvas(H);
+  // Load background image
+  const bgPath = join(process.cwd(), "assets", "welcome.png");
+  const bgImg = await loadImage(bgPath);
+  const W = bgImg.width;
+  const H = bgImg.height;
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#071224", "#0e1e38");
-  drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.secondary);
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext("2d");
 
-  await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH / 2 - 48, 36, 96);
+  // Draw background image
+  ctx.drawImage(bgImg, 0, 0, W, H);
 
-  drawText(ctx, "Selamat Datang!", CARD_WIDTH / 2, 160, { color: COLORS.secondaryLight, fontSize: TITLE_FONT_SIZE + 4, fontWeight: "Bold", align: "center" });
-  drawText(ctx, `${data.username} di ${data.guildName}`, CARD_WIDTH / 2, 188, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE + 1, align: "center" });
+  // Draw circular user avatar in the center circle area
+  // The background has a circle centered roughly at (W/2, 460) with ~150px radius
+  const avatarSize = 260;
+  const avatarX = W / 2 - avatarSize / 2;
+  const avatarY = 340;
 
-  const innerW = CARD_WIDTH - CARD_PADDING * 4;
-  drawInnerCard(ctx, CARD_PADDING * 2, 206, innerW, 36);
-  drawText(ctx, "1. Baca peraturan server  •  2. Verifikasi di channel verifikasi", CARD_WIDTH / 2, 229, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, align: "center" });
+  try {
+    const avatarImg = await loadImage(data.avatarUrl);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
+    ctx.restore();
 
-  drawFooter(ctx, `Member #${data.memberCount}`, H - 16, CARD_WIDTH);
+    // Draw a purple glow ring around the avatar
+    ctx.strokeStyle = "rgba(139, 92, 246, 0.6)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 2, 0, Math.PI * 2);
+    ctx.stroke();
+  } catch {
+    // Fallback if avatar can't be loaded
+  }
 
-  return finalizeCard(canvas);
+  // Draw user display name below "GLAD TO HAVE YOU HERE." area
+  ctx.font = getFontString(38, "Bold");
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+  ctx.shadowBlur = 12;
+  ctx.fillText(data.username, W / 2, H - 60);
+  ctx.shadowBlur = 0;
+
+  // Draw member count
+  ctx.font = getFontString(22, "Medium");
+  ctx.fillStyle = "rgba(200, 200, 220, 0.7)";
+  ctx.fillText(`Member #${data.memberCount}`, W / 2, H - 28);
+  ctx.textAlign = "left";
+
+  return Buffer.from(await canvas.encode("png"));
 }
 
 export async function renderGoodbyeCard(data: {
@@ -1341,22 +1376,59 @@ export async function renderGoodbyeCard(data: {
   guildName: string;
   memberCount: number;
 }): Promise<Buffer> {
-  const H = 250;
-  const { canvas, ctx } = createBaseCanvas(H);
+  // Load background image
+  const bgPath = join(process.cwd(), "assets", "goodbye.png");
+  const bgImg = await loadImage(bgPath);
+  const W = bgImg.width;
+  const H = bgImg.height;
 
-  fillGradientBackground(ctx, CARD_WIDTH, H, "#1c0909", "#2b0f16");
-  drawOuterBorder(ctx, CARD_WIDTH, H);
-  drawAccentBar(ctx, 20, CARD_WIDTH, COLORS.danger);
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext("2d");
 
-  await drawCircularAvatar(ctx, data.avatarUrl, CARD_WIDTH / 2 - 40, 32, 80);
+  // Draw background image
+  ctx.drawImage(bgImg, 0, 0, W, H);
 
-  drawText(ctx, "Sampai Jumpa!", CARD_WIDTH / 2, 140, { color: COLORS.dangerLight, fontSize: TITLE_FONT_SIZE + 2, fontWeight: "Bold", align: "center" });
-  drawText(ctx, `${data.userTag} telah meninggalkan ${data.guildName}`, CARD_WIDTH / 2, 168, { color: COLORS.textSecondary, fontSize: BODY_FONT_SIZE, align: "center" });
-  drawText(ctx, "Terima kasih sudah pernah bergabung bersama kami! ✨", CARD_WIDTH / 2, 192, { color: COLORS.textMuted, fontSize: SMALL_FONT_SIZE + 1, align: "center" });
+  // Draw circular user avatar in the center circle area
+  const avatarSize = 260;
+  const avatarX = W / 2 - avatarSize / 2;
+  const avatarY = 340;
 
-  drawFooter(ctx, `Member #${data.memberCount}`, H - 16, CARD_WIDTH);
+  try {
+    const avatarImg = await loadImage(data.avatarUrl);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
+    ctx.restore();
 
-  return finalizeCard(canvas);
+    // Draw a purple glow ring around the avatar
+    ctx.strokeStyle = "rgba(139, 92, 246, 0.6)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 2, 0, Math.PI * 2);
+    ctx.stroke();
+  } catch {
+    // Fallback if avatar can't be loaded
+  }
+
+  // Draw user tag below "THANK YOU FOR BEING HERE." area
+  ctx.font = getFontString(38, "Bold");
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+  ctx.shadowBlur = 12;
+  ctx.fillText(data.userTag, W / 2, H - 60);
+  ctx.shadowBlur = 0;
+
+  // Draw member count
+  ctx.font = getFontString(22, "Medium");
+  ctx.fillStyle = "rgba(200, 200, 220, 0.7)";
+  ctx.fillText(`Member #${data.memberCount}`, W / 2, H - 28);
+  ctx.textAlign = "left";
+
+  return Buffer.from(await canvas.encode("png"));
 }
 
 /**
