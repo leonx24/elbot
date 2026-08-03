@@ -174,34 +174,24 @@ const changeSections = {
 } as const;
 
 function buildEnhancedChanges(content: string): string {
-  const grouped: Record<keyof typeof changeSections, string[]> = {
-    NEW: [],
-    FIX: [],
-    IMPR: [],
-    REM: []
-  };
+  const lines: string[] = [];
 
   for (const rawItem of content.split(/\n|\|/)) {
     const item = rawItem.trim().replace(/^[-•]\s*/, "");
     if (!item) continue;
 
     const match = item.match(/^(NEW|IMPR|FIX|REM)\s*:\s*(.+)$/i);
-    const key = (match?.[1]?.toUpperCase() ?? "NEW") as keyof typeof changeSections;
+    const key = match?.[1]?.toUpperCase() ?? "NEW";
     const text = match?.[2]?.trim() ?? item;
-    grouped[key].push(text);
+
+    let prefix = "[+]";
+    if (key === "REM") prefix = "[-]";
+    else if (key === "FIX" || key === "IMPR") prefix = "[/]";
+
+    lines.push(`${prefix} ${text}`);
   }
 
-  const sections = Object.entries(changeSections)
-    .filter(([key]) => grouped[key as keyof typeof changeSections].length > 0)
-    .map(([key, section]) => {
-      const itemsList = grouped[key as keyof typeof changeSections];
-      const items = itemsList
-        .map((item) => `• ${item}`)
-        .join("\n");
-      return `${section.emoji} **${section.title}**\n${items}`;
-    });
-
-  return sections.join("\n\n").slice(0, 4000);
+  return lines.join("\n").slice(0, 4000);
 }
 
 type TicketRecord = {
@@ -1453,7 +1443,6 @@ Format balasan:
             buttonsList.push(
               new ButtonBuilder()
                 .setLabel("Verify")
-                .setEmoji("✅")
                 .setStyle(ButtonStyle.Link)
                 .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.VERIFY_CHANNEL_ID}`)
             );
@@ -1463,7 +1452,6 @@ Format balasan:
           buttonsList.push(
             new ButtonBuilder()
               .setLabel("Support")
-              .setEmoji("💬")
               .setStyle(ButtonStyle.Link)
               .setURL(`https://discord.com/channels/${config.GUILD_ID}/${ticketChannelId}`)
           );
@@ -1472,7 +1460,6 @@ Format balasan:
             buttonsList.push(
               new ButtonBuilder()
                 .setLabel("Bug Report")
-                .setEmoji("🐛")
                 .setStyle(ButtonStyle.Link)
                 .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.BUG_REPORT_CHANNEL_ID}`)
             );
@@ -1481,20 +1468,19 @@ Format balasan:
           const links = new ActionRowBuilder<ButtonBuilder>().addComponents(buttonsList);
 
           const v2Payload = buildV2Container({
-            title: `🚀 ${changelogTitle}`,
+            title: `New update`,
             thumbnailUrl: gameThumbnailUrl || guildIcon || botAvatar,
             description:
-              `@everyone  ${type.emoji} **${type.label}**\n\n` +
-              `\`Target Game:\` **${gameName}**\n` +
-              `\`Jenis Update:\` **${type.emoji} ${type.label}**\n\n` +
-              `> ${summary}`,
+              `Game: ${gameName}\n` +
+              `Version: ${version}\n` +
+              `Note: ${summary}`,
             sections: [
               {
-                title: "📋 Change Details",
+                title: `Change Details`,
                 content: formattedContent
               }
             ],
-            footer: `LeonX Hub ${version} • ${statusFooterText}`,
+            footer: `LeonX Hub • ${statusFooterText}`,
             actionRows: [links]
           });
 
