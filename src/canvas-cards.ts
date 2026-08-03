@@ -1328,7 +1328,7 @@ export async function renderWelcomeCard(data: {
 
   // Draw circular user avatar centered in the background circle
   const centerX = Math.round(W / 2);
-  const centerY = 545;
+  const centerY = 546;
   const avatarRadius = 170;
 
   try {
@@ -1382,7 +1382,7 @@ export async function renderGoodbyeCard(data: {
 
   // Draw circular user avatar centered in the background circle
   const centerX = Math.round(W / 2);
-  const centerY = 545;
+  const centerY = 540;
   const avatarRadius = 170;
 
   try {
