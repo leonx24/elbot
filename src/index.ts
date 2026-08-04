@@ -166,33 +166,16 @@ function extractPlaceId(input: string): string {
   return cleanInput.replace(/\D/g, "");
 }
 
-const changeSections = {
-  NEW: { title: "Added", emoji: "✨" },
-  FIX: { title: "Fixed", emoji: "🔧" },
-  IMPR: { title: "Improved", emoji: "⚡" },
-  REM: { title: "Removed", emoji: "🗑️" }
-} as const;
-
-function buildEnhancedChanges(content: string): string {
+function buildSimpleChanges(content: string): string {
   const lines: string[] = [];
 
   for (const rawItem of content.split(/\n|\|/)) {
     const item = rawItem.trim().replace(/^[-•]\s*/, "");
     if (!item) continue;
-
-    const match = item.match(/^(NEW|IMPR|FIX|REM)\s*:\s*(.+)$/i);
-    const key = match?.[1]?.toUpperCase() ?? "NEW";
-    const text = match?.[2]?.trim() ?? item;
-
-    let prefix = "[+]";
-    if (key === "REM") prefix = "[-]";
-    else if (key === "FIX" || key === "IMPR") prefix = "[/]";
-
-    lines.push(`${prefix} ${text}`);
+    lines.push(`• ${item}`);
   }
 
-  const codeContent = lines.join("\n").slice(0, 3800);
-  return `\`\`\`\n${codeContent}\n\`\`\``;
+  return lines.join("\n").slice(0, 3800);
 }
 
 type TicketRecord = {
@@ -1380,64 +1363,49 @@ Format balasan:
           const title = interaction.options.getString("judul", true);
           const typeKey = interaction.options.getString("jenis", true) as keyof typeof changelogTypes;
           const content = interaction.options.getString("isi", true);
-          const summary = interaction.options.getString("ringkasan") ??
-            "Pembaruan baru telah hadir! Nikmati fitur terbaru, peningkatan performa, dan berbagai perbaikan untuk pengalaman yang lebih baik.";
+          const summary = interaction.options.getString("ringkasan") ?? null;
+          const mapName = interaction.options.getString("map") ?? null;
+          const tagEveryone = interaction.options.getBoolean("tag_everyone") ?? false;
           const type = changelogTypes[typeKey];
-          const formattedContent = buildEnhancedChanges(content);
+          const formattedContent = buildSimpleChanges(content);
           const changelogTitle = `${version} — ${title}`;
-          const botAvatar = client.user?.displayAvatarURL();
-          const guildIcon = interaction.guild?.iconURL() ?? botAvatar;
+          const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
           const dbStatus = db.prepare("SELECT value FROM bot_settings WHERE key = 'script_status'").get() as { value: string } | undefined;
           const statusVal = dbStatus?.value || "operational";
-          let statusText = "🟢 **Operational**";
-          let statusFooterText = "All systems operational";
-          if (statusVal === "testing") {
-            statusText = "🟡 **Testing / Updating**";
-            statusFooterText = "Systems updating";
-          } else if (statusVal === "maintenance") {
-            statusText = "🔴 **Maintenance / Patched**";
-            statusFooterText = "Systems under maintenance";
+          let statusEmoji = "🟢";
+          if (statusVal === "testing") statusEmoji = "🟡";
+          else if (statusVal === "maintenance") statusEmoji = "🔴";
+
+          // Format timestamp
+          const now = new Date();
+          const timeStr = now.toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+          }) + " at " + now.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true
+          });
+
+          // Build info section
+          let infoText =
+            `**Status:** ${statusEmoji}\n` +
+            `**Time:** \`${timeStr}\`\n` +
+            `**Version:** \`${version}\``;
+          if (mapName) {
+            infoText += `\n**Map:** \`${mapName}\``;
           }
 
-          const gameName = interaction.options.getString("game") || "Universal";
-
-          // Fetch Roblox Game Thumbnail if game is specified
-          let gameThumbnailUrl: string | null = null;
-          if (gameName !== "Universal") {
-            const placeId = extractPlaceId(gameName);
-            let universeId: number | null = null;
-
-            if (placeId) {
-              const row = db.prepare("SELECT universe_id FROM monitored_places WHERE place_id = ?").get(placeId) as { universe_id: number } | undefined;
-              if (row) {
-                universeId = row.universe_id;
-              } else {
-                try {
-                  const res = await fetch(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`);
-                  if (res.ok) {
-                    const data = await res.json() as { universeId?: number };
-                    if (data.universeId) universeId = data.universeId;
-                  }
-                } catch {}
-              }
-            } else {
-              const row = db.prepare("SELECT universe_id FROM monitored_places WHERE name LIKE ? LIMIT 1").get(`%${gameName}%`) as { universe_id: number } | undefined;
-              if (row) universeId = row.universe_id;
-            }
-
-            if (universeId) {
-              try {
-                const iconRes = await fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=150x150&format=Png&isCircular=false`);
-                if (iconRes.ok) {
-                  const iconData = await iconRes.json() as { data: Array<{ imageUrl: string }> };
-                  if (iconData.data?.[0]?.imageUrl) {
-                    gameThumbnailUrl = iconData.data[0].imageUrl;
-                  }
-                }
-              } catch {}
-            }
+          // Build changelog section content
+          let changelogBody = "";
+          if (summary) {
+            changelogBody += `${summary}\n\n`;
           }
+          changelogBody += `**Changelog:**\n${formattedContent}`;
 
+          // Build buttons (text-only, no emoji)
           const buttonsList: ButtonBuilder[] = [];
 
           if (config.VERIFY_CHANNEL_ID) {
@@ -1468,30 +1436,25 @@ Format balasan:
 
           const links = new ActionRowBuilder<ButtonBuilder>().addComponents(buttonsList);
 
-          const v2Payload = buildMultiV2Containers([
-            {
-              title: "New Update Released!",
-              thumbnailUrl: gameThumbnailUrl || guildIcon || botAvatar,
-              description:
-                `• **Role Type :** ${type.label}\n` +
-                `• **Version :** ${version}\n` +
-                `• **Tag :** ${title}` +
-                (gameName && gameName !== "Universal" ? `\n• **Game :** ${gameName}` : "") +
-                (summary ? `\n• **Note :** ${summary}` : ""),
-              dividers: false
-            },
-            {
-              title: "Changelogs",
-              sections: [
-                {
-                  title: type.label,
-                  content: formattedContent
-                }
-              ],
-              actionRows: [links],
-              dividers: false
-            }
-          ]);
+          const v2Payload = buildV2Container({
+            title: `# U P D A T E`,
+            thumbnailUrl: guildIcon,
+            description: infoText,
+            sections: [
+              {
+                content: changelogBody
+              }
+            ],
+            footer: `${type.label} • ${version}`,
+            actionRows: [links],
+            accentColor: type.color,
+            dividers: true
+          });
+
+          // Add @everyone content if toggled
+          if (tagEveryone) {
+            (v2Payload as any).content = "@everyone";
+          }
 
           const channel = await client.channels.fetch(config.CHANGELOG_CHANNEL_ID).catch(() => null);
           if (!channel || (!channel.isSendable() && channel.type !== ChannelType.GuildForum)) {
@@ -1522,7 +1485,8 @@ Format balasan:
           db.prepare("INSERT INTO changelogs (title, content, author_id) VALUES (?, ?, ?)")
             .run(changelogTitle, formattedContent, interaction.user.id);
           await interaction.editReply({
-            content: `✅ Changelog **${version}** berhasil diterbitkan di <#${config.CHANGELOG_CHANNEL_ID}>.`
+            content: `✅ Changelog **${version}** berhasil diterbitkan di <#${config.CHANGELOG_CHANNEL_ID}>.` +
+              (tagEveryone ? " (dengan tag @everyone)" : "")
           });
         } else {
           const row = db.prepare("SELECT title, content, created_at FROM changelogs ORDER BY id DESC LIMIT 1")

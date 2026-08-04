@@ -40,7 +40,7 @@ export const commands = [
         )
         .addStringOption((o) =>
           o.setName("isi")
-            .setDescription("Contoh: NEW: fitur A | IMPR: lebih cepat | FIX: crash")
+            .setDescription("Isi changelog, pisah pakai | contoh: Tambah fitur A | Fix bug B")
             .setRequired(true)
         )
         .addStringOption((o) =>
@@ -48,8 +48,12 @@ export const commands = [
             .setDescription("Kalimat pembuka update (opsional)")
         )
         .addStringOption((o) =>
-          o.setName("game")
-            .setDescription("Nama game/place, contoh: Universal, Fish It (opsional)")
+          o.setName("map")
+            .setDescription("Nama map server, contoh: Erangel, Miramar (opsional)")
+        )
+        .addBooleanOption((o) =>
+          o.setName("tag_everyone")
+            .setDescription("Tag @everyone saat publish? (default: tidak)")
         )
     ),
   new SlashCommandBuilder()
