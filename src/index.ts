@@ -169,10 +169,10 @@ function extractPlaceId(input: string): string {
 function buildSimpleChanges(content: string): string {
   const lines: string[] = [];
 
-  for (const rawItem of content.split(/\n|\|/)) {
-    const item = rawItem.trim().replace(/^[-•]\s*/, "");
+  for (const rawItem of content.split(/\n|-/)) {
+    const item = rawItem.trim();
     if (!item) continue;
-    lines.push(`• ${item}`);
+    lines.push(item);
   }
 
   return lines.join("\n").slice(0, 3800);
@@ -1403,7 +1403,7 @@ Format balasan:
           if (summary) {
             changelogBody += `${summary}\n\n`;
           }
-          changelogBody += `**Changelog:**\n${formattedContent}`;
+          changelogBody += formattedContent;
 
           // Build buttons (text-only, no emoji)
           const buttonsList: ButtonBuilder[] = [];

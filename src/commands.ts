@@ -40,7 +40,7 @@ export const commands = [
         )
         .addStringOption((o) =>
           o.setName("isi")
-            .setDescription("Isi changelog, pisah pakai | contoh: Tambah fitur A | Fix bug B")
+            .setDescription("Isi changelog, pisah baris pakai - contoh: Fix lag - Tambah map baru")
             .setRequired(true)
         )
         .addStringOption((o) =>
