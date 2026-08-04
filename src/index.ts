@@ -1447,7 +1447,7 @@ Format balasan:
             ],
             footer: `${type.label} • ${version}`,
             actionRows: [links],
-            accentColor: type.color,
+            accentColor: null,
             dividers: true
           });
 
