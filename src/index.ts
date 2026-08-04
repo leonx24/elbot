@@ -1382,11 +1382,13 @@ Format balasan:
             weekday: "long",
             year: "numeric",
             month: "long",
-            day: "numeric"
+            day: "numeric",
+            timeZone: "Asia/Jakarta"
           }) + " at " + now.toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit",
-            hour12: true
+            hour12: true,
+            timeZone: "Asia/Jakarta"
           });
 
           // Build info section
@@ -1403,7 +1405,7 @@ Format balasan:
           if (summary) {
             changelogBody += `${summary}\n\n`;
           }
-          changelogBody += formattedContent;
+          changelogBody += `**Changelog:**\n${formattedContent}`;
 
           // Build buttons (Secondary style, no external link icon)
           const buttonsList: ButtonBuilder[] = [];
