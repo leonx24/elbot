@@ -492,7 +492,7 @@ export async function renderWebsiteCard(): Promise<Buffer> {
   drawText(ctx, "https://leonthings.my.id", CARD_PADDING + 20, 138, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
 
   drawText(ctx, "🤖  Bot Console", CARD_PADDING + CARD_WIDTH / 2 - 10, 114, { color: COLORS.textSecondary, fontSize: FIELD_LABEL_SIZE, fontWeight: "SemiBold" });
-  drawText(ctx, "https://leonthings.my.id/bot", CARD_PADDING + CARD_WIDTH / 2 - 10, 138, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
+  drawText(ctx, "https://script.leonthings.my.id", CARD_PADDING + CARD_WIDTH / 2 - 10, 138, { color: COLORS.secondaryLight, fontSize: BODY_FONT_SIZE, fontWeight: "Bold" });
 
   drawFooter(ctx, "LeonX Hub  •  Official Links", H - 16, CARD_WIDTH);
 

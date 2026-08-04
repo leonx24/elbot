@@ -88,55 +88,64 @@ const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
   ticket: "Gunakan `/ticket`, kemudian tekan tombol **Buka Ticket**.",
-  website: "Silakan kunjungi website kami di https://leonthings.my.id. Untuk mengelola key dan reset HWID, silakan buka halaman console bot di https://leonthings.my.id/bot."
+  website: "Silakan kunjungi website kami di https://leonthings.my.id. Untuk mengelola key dan reset HWID, silakan buka halaman console bot di https://script.leonthings.my.id."
 };
 
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
-const GEMINI_MAX_RETRIES = 3;
-const GEMINI_TIMEOUT_MS = 25_000;
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "llama-3.1-8b-instant";
+const GROQ_MAX_RETRIES = 3;
+const GROQ_TIMEOUT_MS = 25_000;
 
-async function callGeminiAPI(contents: Array<{ role: string; parts: Array<{ text: string }> }>): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+async function callGroqAPI(messages: Array<{ role: string; content: string }>): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  for (let attempt = 1; attempt <= GROQ_MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${config.GEMINI_API_KEY}`, {
+      const response = await fetch(GROQ_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents }),
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS)
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }),
+        signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
       });
 
       if (response.ok) {
         const data = await response.json() as any;
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const text = data.choices?.[0]?.message?.content || "";
         return { ok: true, text };
       }
 
       // Retry on 503 (overloaded) or 429 (rate limit)
-      if ((response.status === 503 || response.status === 429) && attempt < GEMINI_MAX_RETRIES) {
+      if ((response.status === 503 || response.status === 429) && attempt < GROQ_MAX_RETRIES) {
         const backoffMs = Math.min(
           30000,
           Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
         );
-        console.warn(`[Gemini] ${response.status} on attempt ${attempt}/${GEMINI_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+        console.warn(`[Groq] ${response.status} on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }
 
       const errText = await response.text().catch(() => "(unreadable)");
-      console.error(`[Gemini] API error ${response.status}:`, errText);
+      console.error(`[Groq] API error ${response.status}:`, errText);
       return { ok: false, error: `API error ${response.status}` };
     } catch (err: any) {
       const isTimeout = err?.name === "TimeoutError" || err?.code === "UND_ERR_HEADERS_TIMEOUT" || err?.cause?.code === "UND_ERR_HEADERS_TIMEOUT";
-      if (isTimeout && attempt < GEMINI_MAX_RETRIES) {
+      if (isTimeout && attempt < GROQ_MAX_RETRIES) {
         const backoffMs = Math.min(
-    30000,
-    Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
-);
-        console.warn(`[Gemini] Timeout on attempt ${attempt}/${GEMINI_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+          30000,
+          Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+        );
+        console.warn(`[Groq] Timeout on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }
-      console.error(`[Gemini] Fetch failed (attempt ${attempt}):`, err);
+      console.error(`[Groq] Fetch failed (attempt ${attempt}):`, err);
       return { ok: false, error: isTimeout ? "timeout" : "fetch_failed" };
     }
   }
@@ -499,7 +508,7 @@ client.once(Events.ClientReady, async (readyClient) => {
                 `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script khusus dan key lisensi Anda:\n` +
                 `\`\`\`lua\n` +
                 `_G.Key = "${userKey}"\n` +
-                `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
                 `\`\`\`\n` +
                 `Jangan bagikan key ini kepada siapapun!`;
                 
@@ -577,7 +586,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
           `\`\`\`lua\n` +
           `_G.Key = "${userKey}"\n` +
-          `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+          `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
           `\`\`\`;`;
         await interaction.user.send(dmContent);
         await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
@@ -798,9 +807,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "ai") {
-        if (!config.GEMINI_API_KEY) {
+        if (!config.GROQ_API_KEY) {
           await interaction.reply({
-            content: "Fitur AI belum dikonfigurasi oleh owner bot (GEMINI_API_KEY kosong).",
+            content: "Fitur AI belum dikonfigurasi oleh owner bot (GROQ_API_KEY kosong).",
             flags: MessageFlags.Ephemeral
           });
           return;
@@ -812,7 +821,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
           const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
 Website Resmi: https://leonthings.my.id
-Halaman Dashboard/Bot Console: https://leonthings.my.id/bot
+Halaman Dashboard/Bot Console: https://script.leonthings.my.id
 Perintah Discord yang tersedia:
 - /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
 - /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
@@ -846,12 +855,13 @@ Format balasan:
 - Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
 - Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
 
-          const geminiResult = await callGeminiAPI([
-            { role: "user", parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${query}"` }] }
+          const groqResult = await callGroqAPI([
+            { role: "system", content: systemPrompt },
+            { role: "user", content: query }
           ]);
 
-          if (geminiResult.ok) {
-            const replyText = geminiResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+          if (groqResult.ok) {
+            const replyText = groqResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
             let finalReply = replyText.trim();
 
             const member = interaction.member instanceof GuildMember ? interaction.member : null;
@@ -873,7 +883,7 @@ Format balasan:
                       `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
                       `\`\`\`lua\n` +
                       `_G.Key = "${userKey}"\n` +
-                      `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                      `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
                       `\`\`\`;`;
                     await interaction.user.send(dmContent);
                     finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
@@ -1000,7 +1010,7 @@ Format balasan:
               await interaction.editReply(finalReply);
             }
           } else {
-            const errMsg = geminiResult.error === "timeout"
+            const errMsg = groqResult.error === "timeout"
               ? "AI sedang lambat merespons (timeout). Silakan coba lagi nanti."
               : "Gagal menghubungi AI. Silakan coba lagi nanti.";
             await interaction.editReply(errMsg);
@@ -1151,7 +1161,7 @@ Format balasan:
             "Silakan gunakan tautan resmi di bawah ini untuk mengakses layanan kami:\n\n" +
             "**🔗 Link Resmi**\n" +
             "• `/website` - **Website Utama:** https://leonthings.my.id\n" +
-            "• `/console` - **Bot Console & HWID Reset:** https://leonthings.my.id/bot"
+            "• `/console` - **Bot Console & HWID Reset:** https://script.leonthings.my.id"
           )
           .setFooter({ text: "LeonX Hub • Official Links" })
           .setTimestamp();
@@ -2596,12 +2606,12 @@ const FAQ_RULES = [
     ],
     response: `Silakan kunjungi website resmi kami di:\n` +
               `🌐 Website Utama: https://leonthings.my.id\n` +
-              `🤖 Bot Console / Kelola Key & Reset HWID: https://leonthings.my.id/bot`
+              `🤖 Bot Console / Kelola Key & Reset HWID: https://script.leonthings.my.id`
   }
 ];
 
 async function handleTicketAiResponse(message: Message, ticket: TicketRecord) {
-  if (!config.GEMINI_API_KEY) return;
+  if (!config.GROQ_API_KEY) return;
 
   if ("sendTyping" in message.channel) {
     await (message.channel as TextChannel).sendTyping().catch(() => null);
@@ -2625,17 +2635,18 @@ Tugas Anda:
 2. Jika mereka memiliki kendala teknis (script error/tidak jalan), ingatkan mereka untuk:
    - Menaruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama script sebelum baris loadstring.
    - Menggunakan executor Roblox yang ter-update dan kompatibel.
-3. Jika masalah berkaitan dengan HWID Error / Key Terikat Perangkat Lain, jelaskan cara mereset HWID mereka menggunakan perintah /resethwid di Discord atau melalui panel Bot Console di website resmi kami (https://leonthings.my.id/bot).
+3. Jika masalah berkaitan dengan HWID Error / Key Terikat Perangkat Lain, jelaskan cara mereset HWID mereka menggunakan perintah /resethwid di Discord atau melalui panel Bot Console di website resmi kami (https://script.leonthings.my.id).
 4. Beri tahu mereka dengan ramah bahwa tim staff support manusia tetap akan datang untuk membantu secara langsung jika solusi otomatis ini tidak menyelesaikan masalah mereka.
 5. Jawab secara singkat, padat, profesional, dan gunakan format markdown Discord (seperti bullet points, bold text, dll) agar mudah dibaca.
 6. Berbahasa Indonesia secara sopan dan membantu.`;
 
-    const geminiResult = await callGeminiAPI([
-      { role: "user", parts: [{ text: systemPrompt }] }
+    const groqResult = await callGroqAPI([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage }
     ]);
 
-    if (geminiResult.ok) {
-      const finalReply = (geminiResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
+    if (groqResult.ok) {
+      const finalReply = (groqResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
 
       const v2Ai = buildV2Container({
         title: "🤖 AI Support Assistant",
@@ -2654,7 +2665,7 @@ Tugas Anda:
       // Update database agar tidak merespons lagi di tiket ini
       db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
     } else {
-      console.error("Gemini API Error in Ticket Assistant:", geminiResult.error);
+      console.error("Groq API Error in Ticket Assistant:", groqResult.error);
     }
   } catch (err) {
     console.error("Error in handleTicketAiResponse:", err);
@@ -2948,7 +2959,7 @@ client.on(Events.MessageCreate, async (message) => {
             title: "🔗 Link Resmi",
             content:
               "• **Website Utama:** https://leonthings.my.id\n" +
-              "• **Bot Console & HWID Reset:** https://leonthings.my.id/bot"
+              "• **Bot Console & HWID Reset:** https://script.leonthings.my.id"
           }
         ],
         footer: "LeonX Hub • Official Links"
@@ -3012,7 +3023,7 @@ client.on(Events.MessageCreate, async (message) => {
   // AI Chatbot Integration - Only trigger in the specified AI channel without requiring tag/prefix
   const isAiChannel = config.AI_CHANNEL_ID && message.channel.id === config.AI_CHANNEL_ID;
 
-  if (isAiChannel && config.GEMINI_API_KEY) {
+  if (isAiChannel && config.GROQ_API_KEY) {
     if (onCooldown(message.author.id, "ai_chat", 5000)) {
       await message.react("⏳").catch(() => null);
       return;
@@ -3026,7 +3037,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
 Website Resmi: https://leonthings.my.id
-Halaman Dashboard/Bot Console: https://leonthings.my.id/bot
+Halaman Dashboard/Bot Console: https://script.leonthings.my.id
 Perintah Discord yang tersedia:
 - /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
 - /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
@@ -3060,12 +3071,13 @@ Format balasan:
 - Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
 - Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
 
-      const geminiResult = await callGeminiAPI([
-        { role: "user", parts: [{ text: `${systemPrompt}\n\nPertanyaan User: "${userMessage}"` }] }
+      const groqResult = await callGroqAPI([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
       ]);
 
-      if (geminiResult.ok) {
-        const replyText = geminiResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+      if (groqResult.ok) {
+        const replyText = groqResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
         let finalReply = replyText.trim();
 
         // 1. Action: SEND_SCRIPT
@@ -3085,7 +3097,7 @@ Format balasan:
                   `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
                   `\`\`\`lua\n` +
                   `_G.Key = "${userKey}"\n` +
-                  `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                  `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
                   `\`\`\`;`;
                 await message.author.send(dmContent);
                 finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
@@ -3208,7 +3220,7 @@ Format balasan:
           await message.reply(finalReply);
         }
       } else {
-        const errMsg = geminiResult.error === "timeout"
+        const errMsg = groqResult.error === "timeout"
           ? "Maaf, AI sedang lambat merespons (timeout). Silakan coba lagi nanti."
           : "Maaf, terjadi kesalahan koneksi saat menghubungi modul AI saya. Silakan coba sesaat lagi.";
         await message.reply(errMsg);

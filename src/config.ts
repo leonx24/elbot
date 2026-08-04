@@ -17,7 +17,7 @@ const schema = z.object({
   LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   STATUS_VOICE_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   TICKET_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
-  GEMINI_API_KEY: z.string().optional().or(z.literal("")),
+  GROQ_API_KEY: z.string().optional().or(z.literal("")),
   AI_CHANNEL_ID: z.string().optional().or(z.literal(""))
 });
 
