@@ -172,7 +172,7 @@ function buildSimpleChanges(content: string): string {
   for (const rawItem of content.split(/\n|-/)) {
     const item = rawItem.trim();
     if (!item) continue;
-    lines.push(item);
+    lines.push(`• ${item}`);
   }
 
   return lines.join("\n").slice(0, 3800);
@@ -1405,15 +1405,15 @@ Format balasan:
           }
           changelogBody += formattedContent;
 
-          // Build buttons (text-only, no emoji)
+          // Build buttons (Secondary style, no external link icon)
           const buttonsList: ButtonBuilder[] = [];
 
           if (config.VERIFY_CHANNEL_ID) {
             buttonsList.push(
               new ButtonBuilder()
                 .setLabel("Verify")
-                .setStyle(ButtonStyle.Link)
-                .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.VERIFY_CHANNEL_ID}`)
+                .setStyle(ButtonStyle.Secondary)
+                .setCustomId(`changelog:verify:${config.VERIFY_CHANNEL_ID}`)
             );
           }
 
@@ -1421,16 +1421,16 @@ Format balasan:
           buttonsList.push(
             new ButtonBuilder()
               .setLabel("Support")
-              .setStyle(ButtonStyle.Link)
-              .setURL(`https://discord.com/channels/${config.GUILD_ID}/${ticketChannelId}`)
+              .setStyle(ButtonStyle.Secondary)
+              .setCustomId(`changelog:support:${ticketChannelId}`)
           );
 
           if (config.BUG_REPORT_CHANNEL_ID) {
             buttonsList.push(
               new ButtonBuilder()
                 .setLabel("Bug Report")
-                .setStyle(ButtonStyle.Link)
-                .setURL(`https://discord.com/channels/${config.GUILD_ID}/${config.BUG_REPORT_CHANNEL_ID}`)
+                .setStyle(ButtonStyle.Secondary)
+                .setCustomId(`changelog:bugreport:${config.BUG_REPORT_CHANNEL_ID}`)
             );
           }
 
@@ -2230,6 +2230,24 @@ Format balasan:
           await interaction.editReply(`❌ Gagal membuka kunci channel: ${err.message}`);
         }
       }
+    }
+
+    // Changelog button handler (Verify, Support, Bug Report)
+    if (interaction.isButton() && interaction.customId.startsWith("changelog:")) {
+      const [, action, channelId] = interaction.customId.split(":");
+      if (channelId) {
+        const labels: Record<string, string> = {
+          verify: "Verify",
+          support: "Support",
+          bugreport: "Bug Report"
+        };
+        const label = labels[action ?? ""] ?? "Channel";
+        await interaction.reply({
+          content: `➡️ **${label}:** <#${channelId}>`,
+          flags: MessageFlags.Ephemeral
+        });
+      }
+      return;
     }
 
     if (interaction.isButton() && interaction.customId === "verify:accept") {
