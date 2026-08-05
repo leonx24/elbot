@@ -1546,7 +1546,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           // Build info section
-          let infoText =
+          let infoText = "";
+          if (tagEveryone) {
+            infoText += "@everyone\n\n";
+          }
+          infoText +=
             `**Status:** ${statusEmoji}\n` +
             `**Time:** \`${timeStr}\`\n` +
             `**Version:** \`${version}\``;
@@ -1606,11 +1610,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             accentColor: null,
             dividers: true
           });
-
-          // Add @everyone content if toggled
-          if (tagEveryone) {
-            (v2Payload as any).content = "@everyone";
-          }
 
           const channel = await client.channels.fetch(config.CHANGELOG_CHANNEL_ID).catch(() => null);
           if (!channel || (!channel.isSendable() && channel.type !== ChannelType.GuildForum)) {
