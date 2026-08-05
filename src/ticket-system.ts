@@ -79,11 +79,11 @@ export async function createTicketChannel(
   guild: Guild,
   user: User,
   category: TicketCategory
-): Promise<TextChannel> {
+): Promise<{ channel: TextChannel; categoryNumber: number }> {
   const categoryInfo = TICKET_CATEGORIES[category];
 
-  const maxRow = db.prepare("SELECT MAX(id) as maxId FROM tickets").get() as { maxId: number | null } | undefined;
-  const ticketNumber = (maxRow?.maxId || 0) + 1;
+  const maxRow = db.prepare("SELECT MAX(category_number) as maxNum FROM tickets WHERE category = ?").get(category) as { maxNum: number | null } | undefined;
+  const ticketNumber = (maxRow?.maxNum || 0) + 1;
   const paddedNumber = String(ticketNumber).padStart(4, "0");
   const channelName = `${category}-${paddedNumber}`;
 
@@ -148,7 +148,7 @@ export async function createTicketChannel(
     components: [buttons]
   });
 
-  return channel;
+  return { channel, categoryNumber: ticketNumber };
 }
 
 function escapeHtml(text: string): string {

@@ -106,7 +106,8 @@ const ticketMigrations: Array<[string, string]> = [
   ["close_reason", "ALTER TABLE tickets ADD COLUMN close_reason TEXT"],
   ["rating", "ALTER TABLE tickets ADD COLUMN rating INTEGER"],
   ["rating_feedback", "ALTER TABLE tickets ADD COLUMN rating_feedback TEXT"],
-  ["ai_responded", "ALTER TABLE tickets ADD COLUMN ai_responded INTEGER DEFAULT 0"]
+  ["ai_responded", "ALTER TABLE tickets ADD COLUMN ai_responded INTEGER DEFAULT 0"],
+  ["category_number", "ALTER TABLE tickets ADD COLUMN category_number INTEGER"]
 ];
 
 for (const [column, sql] of ticketMigrations) {
@@ -114,6 +115,23 @@ for (const [column, sql] of ticketMigrations) {
     db.exec(sql);
     console.log(`Database migration: tickets.${column} ditambahkan`);
   }
+}
+
+// Backfill category_number for existing tickets if null
+const unnumberedTickets = db.prepare("SELECT id, category FROM tickets WHERE category_number IS NULL ORDER BY id ASC").all() as Array<{ id: number; category: string }>;
+if (unnumberedTickets.length > 0) {
+  const categoryCounters: Record<string, number> = {};
+  const updateStmt = db.prepare("UPDATE tickets SET category_number = ? WHERE id = ?");
+  for (const row of unnumberedTickets) {
+    const cat = row.category || "general";
+    if (categoryCounters[cat] === undefined) {
+      const maxRow = db.prepare("SELECT MAX(category_number) as maxNum FROM tickets WHERE category = ? AND id != ?").get(cat, row.id) as { maxNum: number | null } | undefined;
+      categoryCounters[cat] = maxRow?.maxNum || 0;
+    }
+    categoryCounters[cat]++;
+    updateStmt.run(categoryCounters[cat], row.id);
+  }
+  console.log(`Database migration: ${unnumberedTickets.length} tiket lama di-backfill category_number-nya.`);
 }
 
 const userKeyColumns = db.prepare("PRAGMA table_info(user_keys)").all() as Array<{ name: string }>;
