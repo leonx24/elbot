@@ -226,7 +226,9 @@ function hasExplicitScriptRequest(userText: string): boolean {
     "kirim key", "kirim script", "ambil key", "ambil script", "dapatkan key", "dapatkan script",
     "bagi key", "bagi script", "mana key", "mana script", "minta scriptku", "minta keyku",
     "kirimkan key", "kirimkan script", "ambilkan key", "ambilkan script", "kirim keyku", "kirim scriptku",
-    "ambil keyku", "ambil scriptku", "minta loader", "kirim loader", "get loader"
+    "ambil keyku", "ambil scriptku", "minta loader", "kirim loader", "get loader",
+    "kasi key", "kasih key", "kasi script", "kasih script", "kasi gw key", "kasih saya key",
+    "kasi aku key", "kasih aku key", "bagi key dong", "minta key dong", "kasi key ku", "kasih key ku"
   ];
 
   const hasDirectPhrase = directPhrases.some(phrase => text.includes(phrase));
@@ -239,8 +241,8 @@ function hasExplicitScriptRequest(userText: string): boolean {
     return true;
   }
 
-  const actionRegex = /\b(minta|kirim|kirimkan|get|send|ambil|ambilkan|dapatkan|bagi|mana)\b.*\b(script|key|loader|lisensi)\b/i;
-  const reverseRegex = /\b(script|key|loader|lisensi)\b.*\b(minta|kirim|kirimkan|get|send|ambil|ambilkan|dapatkan|bagi|mana)\b/i;
+  const actionRegex = /\b(minta|kirim|kirimkan|get|send|ambil|ambilkan|dapatkan|bagi|mana|kasi|kasih|beri|berikan)\b.*\b(script|key|loader|lisensi)\b/i;
+  const reverseRegex = /\b(script|key|loader|lisensi)\b.*\b(minta|kirim|kirimkan|get|send|ambil|ambilkan|dapatkan|bagi|mana|kasi|kasih|beri|berikan)\b/i;
 
   return !isQuestion && (actionRegex.test(text) || reverseRegex.test(text));
 }
@@ -262,7 +264,8 @@ function hasExplicitHwidResetRequest(userText: string): boolean {
   const directPhrases = [
     "reset hwid", "resetkan hwid", "resethwid", "reset hwidku", "reset hwid ku",
     "clear hwid", "reset roblox id", "reset robloxid", "reset id ku", "reset idku",
-    "tolong reset hwid", "minta reset hwid", "reset my hwid", "do reset hwid", "resetkan hwidku"
+    "tolong reset hwid", "minta reset hwid", "reset my hwid", "do reset hwid", "resetkan hwidku",
+    "resethwid ku", "resethwid dong", "reset hwid dong"
   ];
 
   const hasDirectPhrase = directPhrases.some(phrase => text.includes(phrase));
@@ -966,28 +969,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
             const replyText = groqResult.text || "Maaf, tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
             let finalReply = replyText.trim();
 
+            const actionSendScriptRegex = /\[\s*ACTION\s*:\s*SEND_SCRIPT\s*\]/i;
+            const actionResetHwidRegex = /\[\s*ACTION\s*:\s*RESET_HWID\s*\]/i;
+            const actionCheckKeyRegex = /\[\s*ACTION\s*:\s*CHECK_MY_KEY\s*\]/i;
+            const actionGetStatsRegex = /\[\s*ACTION\s*:\s*GET_STATS\s*\]/i;
+
             // Guardrail checks: Only allow actions if user explicitly requested them
-            if (finalReply.includes("[ACTION: SEND_SCRIPT]") && !hasExplicitScriptRequest(query)) {
-              finalReply = finalReply.replace(/\[ACTION:\s*SEND_SCRIPT\]/g, "").trim();
+            if (actionSendScriptRegex.test(finalReply) && !hasExplicitScriptRequest(query)) {
+              finalReply = finalReply.replace(actionSendScriptRegex, "").trim();
             }
-            if (finalReply.includes("[ACTION: RESET_HWID]") && !hasExplicitHwidResetRequest(query)) {
-              finalReply = finalReply.replace(/\[ACTION:\s*RESET_HWID\]/g, "").trim();
+            if (actionResetHwidRegex.test(finalReply) && !hasExplicitHwidResetRequest(query)) {
+              finalReply = finalReply.replace(actionResetHwidRegex, "").trim();
             }
-            if (finalReply.includes("[ACTION: CHECK_MY_KEY]") && !hasExplicitCheckKeyRequest(query)) {
-              finalReply = finalReply.replace(/\[ACTION:\s*CHECK_MY_KEY\]/g, "").trim();
+            if (actionCheckKeyRegex.test(finalReply) && !hasExplicitCheckKeyRequest(query)) {
+              finalReply = finalReply.replace(actionCheckKeyRegex, "").trim();
             }
 
             const member = interaction.member instanceof GuildMember ? interaction.member : null;
 
             // 1. Action: SEND_SCRIPT
-            if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {
+            if (actionSendScriptRegex.test(finalReply)) {
               const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
               if (blacklistCheck.blacklisted) {
-                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+                finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
               } else {
-                const hasRole = member && config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+                const hasRole = !config.VERIFIED_ROLE_ID || (member && member.roles.cache.has(config.VERIFIED_ROLE_ID));
                 if (!hasRole) {
-                  finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+                  finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
                 } else {
                   try {
                     const userKey = getOrCreateUserKey(interaction.user.id);
@@ -999,16 +1007,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
                       `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
                       `\`\`\`;`;
                     await interaction.user.send(dmContent);
-                    finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+                    finalReply = finalReply.replace(actionSendScriptRegex, `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
                   } catch (dmErr) {
-                    finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+                    finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
                   }
                 }
               }
             }
 
             // 2. Action: GET_STATS
-            if (finalReply.includes("[ACTION: GET_STATS]")) {
+            if (actionGetStatsRegex.test(finalReply)) {
               try {
                 const guildCount = client.guilds.cache.size;
                 const activeKeys = db.prepare("SELECT COUNT(*) as count FROM user_keys").get() as { count: number } | undefined;
@@ -1035,34 +1043,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
                   `• Uptime Sistem: \`${uptimeString}\`\n` +
                   `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
                   
-                finalReply = finalReply.replace("[ACTION: GET_STATS]", statsBlock);
+                finalReply = finalReply.replace(actionGetStatsRegex, statsBlock);
               } catch (statsErr) {
-                finalReply = finalReply.replace("[ACTION: GET_STATS]", `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+                finalReply = finalReply.replace(actionGetStatsRegex, `\n\n❌ Gagal mengambil data statistik server saat ini.`);
               }
             }
 
             // 3. Action: RESET_HWID
-            if (finalReply.includes("[ACTION: RESET_HWID]")) {
+            if (actionResetHwidRegex.test(finalReply)) {
               const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
               if (blacklistCheck.blacklisted) {
-                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+                finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
               } else {
-                const hasRole = member && config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+                const hasRole = !config.VERIFIED_ROLE_ID || (member && member.roles.cache.has(config.VERIFIED_ROLE_ID));
                 if (!hasRole) {
-                  finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+                  finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
                 } else {
                   const resetResult = resetUserKeyBinding(interaction.user.id);
                   if (resetResult.success) {
-                    finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+                    finalReply = finalReply.replace(actionResetHwidRegex, `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
                   } else {
-                    finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+                    finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
                   }
                 }
               }
             }
 
             // 4. Action: CHECK_MY_KEY
-            if (finalReply.includes("[ACTION: CHECK_MY_KEY]")) {
+            if (actionCheckKeyRegex.test(finalReply)) {
               try {
                 const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(interaction.user.id) as {
                   key: string;
@@ -1072,7 +1080,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 } | undefined;
 
                 if (!row) {
-                  finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
+                  finalReply = finalReply.replace(actionCheckKeyRegex, `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
                 } else {
                   let cooldownRemainingMinutes = 0;
                   if (row.last_reset_at) {
@@ -1091,7 +1099,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
                     `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
                     
-                  finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", infoBlock);
+                  finalReply = finalReply.replace(actionCheckKeyRegex, infoBlock);
 
                   try {
                     const dmContent = 
@@ -1106,9 +1114,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                   }
                 }
               } catch (keyErr) {
-                finalReply = finalReply.replace("[ACTION: CHECK_MY_KEY]", `\n\n❌ Gagal memuat info key Anda.`);
+                finalReply = finalReply.replace(actionCheckKeyRegex, `\n\n❌ Gagal memuat info key Anda.`);
               }
             }
+
 
             if (finalReply.length > 2000) {
               const chunks = finalReply.match(/[\s\S]{1,1950}/g) || [finalReply];
@@ -2424,7 +2433,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId === "ticket:claim") {
-      if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) return;
+      if (!interaction.guild || !interaction.channel || interaction.channel.type !== ChannelType.GuildText) return;
 
       const ticketData = getOrRecoverTicket(interaction.channel);
 
@@ -2446,6 +2455,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       db.prepare("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?")
         .run(interaction.user.id, interaction.channel.id);
+
+      // Restriction: Only claimed staff + ticket creator + Owner role + Support role can view
+      const permissions: any[] = [
+        { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: ticketData.user_id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
+        { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }
+      ];
+
+      if (config.OWNER_ROLE_ID) {
+        permissions.push({
+          id: config.OWNER_ROLE_ID,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+        });
+      }
+
+      if (config.SUPPORT_ROLE_ID) {
+        permissions.push({
+          id: config.SUPPORT_ROLE_ID,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+        });
+      }
+
+      await (interaction.channel as TextChannel).permissionOverwrites.set(permissions).catch(err => console.error("Gagal mengupdate izin channel ticket claim:", err));
 
       const v2Claim = buildV2Container({
         title: "✋ Ticket Diklaim",
@@ -2469,14 +2501,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      await interaction.reply("Menutup ticket dan menyimpan transcript...");
+      await interaction.reply({
+        content: "🔒 **Closing Ticket...** Channel akan ditutup dan transcript dikirim via DM.",
+        flags: MessageFlags.Ephemeral
+      });
 
       const { transcript, ticketData: ticket } = await closeTicket(
         interaction.channel as TextChannel,
         interaction.user
       );
 
-      // Kirim transcript ke user
+      // Send transcript & DM rating prompt to the ticket creator
       const user = await client.users.fetch(ticket.user_id).catch(() => null);
       if (user) {
         const transcriptAttachment = new AttachmentBuilder(
@@ -2484,53 +2519,53 @@ client.on(Events.InteractionCreate, async (interaction) => {
           { name: `ticket-${ticket.id}-transcript.html` }
         );
 
+        const ratingEmbed = new EmbedBuilder()
+          .setTitle(`🎫 Ticket #${ticket.id} Support Closed`)
+          .setDescription(
+            `Halo <@${user.id}>, ticket support Anda di **LeonX Hub** telah selesai dan ditutup.\n\n` +
+            `📄 **File transcript percakapan** telah dilampirkan pada pesan ini.\n\n` +
+            `⭐ **Bagaimana pelayanan support kami?**\n` +
+            `Mohon berikan ulasan & rating bintang untuk membantu kami meningkatkan kualitas pelayanan:`
+          )
+          .setColor(0x2563eb)
+          .setFooter({ text: "LeonX Hub • Ticket Support System" })
+          .setTimestamp();
+
         await user.send({
-          content: `Transcript untuk ticket **#${ticket.id}** (${TICKET_CATEGORIES[ticket.category as TicketCategory]?.label || ticket.category})`,
-          files: [transcriptAttachment]
-        }).catch(() => console.log(`Tidak bisa mengirim transcript ke ${user.tag}`));
+          embeds: [ratingEmbed],
+          files: [transcriptAttachment],
+          components: [createRatingButtons(ticket.id)]
+        }).catch(() => console.log(`Tidak dapat mengirim DM rating ke ${user.tag}`));
       }
 
-      // Kirim rating prompt
-      const ratingBuf = await renderTicketRatingCard();
-      const { embed: ratingEmbed, attachment: ratingAtt } = cardEmbed(ratingBuf, 0x2563eb, "ticket_rating.png");
-
-      await interaction.channel.send({
-        content: `<@${ticket.user_id}>`,
-        embeds: [ratingEmbed],
-        files: [ratingAtt],
-        components: [createRatingButtons()]
-      });
-
-      const channelId = interaction.channel.id;
-      const deleteTimer = setTimeout(() => {
-        ticketDeleteTimers.delete(channelId);
+      // Close & delete channel immediately after 3 seconds
+      setTimeout(() => {
         interaction.channel?.delete().catch(() => undefined);
-      }, 10 * 60_000);
-      ticketDeleteTimers.set(channelId, deleteTimer);
+      }, 3000);
     }
 
-    if (interaction.isButton() && interaction.customId.startsWith("rating:")) {
-      const ratingStr = interaction.customId.split(":")[1];
-      if (!ratingStr) return;
+    if (interaction.isButton() && (interaction.customId.startsWith("rating:") || interaction.customId.startsWith("ticket_rating:"))) {
+      const parts = interaction.customId.split(":");
+      let ticketId: number | null = null;
+      let rating: number = 0;
 
-      const rating = parseInt(ratingStr);
+      if (parts[0] === "ticket_rating") {
+        ticketId = parseInt(parts[1] || "0");
+        rating = parseInt(parts[2] || "0");
+      } else {
+        rating = parseInt(parts[1] || "0");
+      }
 
-      if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) return;
-
-      const ticketData = db.prepare("SELECT * FROM tickets WHERE channel_id = ?")
-        .get(interaction.channel.id) as any;
+      let ticketData: any = null;
+      if (ticketId) {
+        ticketData = db.prepare("SELECT * FROM tickets WHERE id = ?").get(ticketId);
+      } else if (interaction.channel) {
+        ticketData = db.prepare("SELECT * FROM tickets WHERE channel_id = ?").get(interaction.channel.id);
+      }
 
       if (!ticketData) {
         await interaction.reply({
-          content: "Ticket data tidak ditemukan.",
-          flags: MessageFlags.Ephemeral
-        });
-        return;
-      }
-
-      if (interaction.user.id !== ticketData.user_id) {
-        await interaction.reply({
-          content: "Hanya pembuat ticket yang dapat memberikan rating.",
+          content: "Data ticket tidak ditemukan.",
           flags: MessageFlags.Ephemeral
         });
         return;
@@ -2538,35 +2573,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (ticketData.rating !== null) {
         await interaction.reply({
-          content: "Kamu sudah memberikan rating untuk ticket ini.",
+          content: "Anda sudah memberikan rating untuk ticket ini. Terima kasih!",
           flags: MessageFlags.Ephemeral
         });
         return;
       }
 
-      db.prepare("UPDATE tickets SET rating = ? WHERE channel_id = ?")
-        .run(rating, interaction.channel.id);
+      db.prepare("UPDATE tickets SET rating = ? WHERE id = ?").run(rating, ticketData.id);
 
       const thanksEmbed = new EmbedBuilder()
-        .setTitle("✅ Terima Kasih atas Rating Anda!")
-        .setDescription(`Rating Anda: ${"⭐".repeat(rating)} (${rating}/5)\nKami akan terus berusaha meningkatkan kualitas pelayanan support kami.`)
+        .setTitle("✅ Terima Kasih atas Penilaian Anda!")
+        .setDescription(`Rating Anda: **${"⭐".repeat(rating)} (${rating}/5)**\nUlasan Anda sangat berharga bagi tim LeonX Hub.`)
+        .setColor(0x16a34a)
         .setFooter({ text: "LeonX Hub • Support Feedback" });
 
       await interaction.reply({
-        embeds: [thanksEmbed],
-        flags: MessageFlags.Ephemeral
+        embeds: [thanksEmbed]
       });
 
-      // Log rating jika ada LOG_CHANNEL_ID
-      if (config.LOG_CHANNEL_ID) {
-        const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
+      // Send Review Log to TICKET_REVIEW_CHANNEL_ID or LOG_CHANNEL_ID
+      const targetChannelId = config.TICKET_REVIEW_CHANNEL_ID || config.LOG_CHANNEL_ID;
+      if (targetChannelId) {
+        const logChannel = await client.channels.fetch(targetChannelId).catch(() => null);
         if (logChannel?.isSendable()) {
           const v2RatingLog = buildV2Container({
-            title: "📊 Log Rating Ticket Baru",
-            description: `Ulasan baru diterima untuk Ticket **#${ticketData.id}**!`,
+            title: "⭐ Ulasan Ticket Baru Received",
+            description: `Ulasan baru diterima dari <@${ticketData.user_id}> untuk Ticket **#${ticketData.id}**!`,
             sections: [
               {
-                title: "📜 Detail Ulasan",
+                title: "📜 Detail Ulasan Support",
                 content:
                   `• \`Ticket ID:\` **#${ticketData.id}**\n` +
                   `• \`Kategori:\` **${TICKET_CATEGORIES[ticketData.category as TicketCategory]?.label || ticketData.category}**\n` +
@@ -2575,21 +2610,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
                   `• \`Staff Claim:\` ${ticketData.claimed_by ? `<@${ticketData.claimed_by}>` : "Unclaimed"}`
               }
             ],
-            footer: "LeonX Hub • Support Feedback"
+            footer: "LeonX Hub • Review Log"
           });
 
           await logChannel.send(v2RatingLog);
         }
       }
-
-      const pendingTimer = ticketDeleteTimers.get(interaction.channel.id);
-      if (pendingTimer) clearTimeout(pendingTimer);
-      ticketDeleteTimers.delete(interaction.channel.id);
-
-      await interaction.channel.send(
-        "✅ Rating diterima. Channel ticket akan dihapus dalam **15 detik**."
-      );
-      setTimeout(() => interaction.channel?.delete().catch(() => undefined), 15_000);
     }
 
     if (interaction.isModalSubmit() && interaction.customId === "bug:submit") {
@@ -3163,26 +3189,31 @@ client.on(Events.MessageCreate, async (message) => {
         const replyText = groqResult.text || "Maaf, tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
         let finalReply = replyText.trim();
 
+        const actionSendScriptRegex = /\[\s*ACTION\s*:\s*SEND_SCRIPT\s*\]/i;
+        const actionResetHwidRegex = /\[\s*ACTION\s*:\s*RESET_HWID\s*\]/i;
+        const actionCheckKeyRegex = /\[\s*ACTION\s*:\s*CHECK_MY_KEY\s*\]/i;
+        const actionGetStatsRegex = /\[\s*ACTION\s*:\s*GET_STATS\s*\]/i;
+
         // Guardrail checks: Only allow actions if user explicitly requested them
-        if (finalReply.includes("[ACTION: SEND_SCRIPT]") && !hasExplicitScriptRequest(userMessage)) {
-          finalReply = finalReply.replace(/\[ACTION:\s*SEND_SCRIPT\]/g, "").trim();
+        if (actionSendScriptRegex.test(finalReply) && !hasExplicitScriptRequest(userMessage)) {
+          finalReply = finalReply.replace(actionSendScriptRegex, "").trim();
         }
-        if (finalReply.includes("[ACTION: RESET_HWID]") && !hasExplicitHwidResetRequest(userMessage)) {
-          finalReply = finalReply.replace(/\[ACTION:\s*RESET_HWID\]/g, "").trim();
+        if (actionResetHwidRegex.test(finalReply) && !hasExplicitHwidResetRequest(userMessage)) {
+          finalReply = finalReply.replace(actionResetHwidRegex, "").trim();
         }
-        if (finalReply.includes("[ACTION: CHECK_MY_KEY]") && !hasExplicitCheckKeyRequest(userMessage)) {
-          finalReply = finalReply.replace(/\[ACTION:\s*CHECK_MY_KEY\]/g, "").trim();
+        if (actionCheckKeyRegex.test(finalReply) && !hasExplicitCheckKeyRequest(userMessage)) {
+          finalReply = finalReply.replace(actionCheckKeyRegex, "").trim();
         }
 
         // 1. Action: SEND_SCRIPT
-        if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {
+        if (actionSendScriptRegex.test(finalReply)) {
           const blacklistCheck = isBlacklisted({ discordId: message.author.id });
           if (blacklistCheck.blacklisted) {
-            finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+            finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
           } else {
-            const hasRole = config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+            const hasRole = !config.VERIFIED_ROLE_ID || (member && member.roles.cache.has(config.VERIFIED_ROLE_ID));
             if (!hasRole) {
-              finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+              finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
             } else {
               try {
                 const userKey = getOrCreateUserKey(message.author.id);
@@ -3194,16 +3225,16 @@ client.on(Events.MessageCreate, async (message) => {
                   `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
                   `\`\`\`;`;
                 await message.author.send(dmContent);
-                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+                finalReply = finalReply.replace(actionSendScriptRegex, `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
               } catch (dmErr) {
-                finalReply = finalReply.replace("[ACTION: SEND_SCRIPT]", `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+                finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
               }
             }
           }
         }
 
         // 2. Action: GET_STATS
-        if (finalReply.includes("[ACTION: GET_STATS]")) {
+        if (actionGetStatsRegex.test(finalReply)) {
           try {
             const guildCount = client.guilds.cache.size;
             const activeKeys = db.prepare("SELECT COUNT(*) as count FROM user_keys").get() as { count: number } | undefined;
@@ -3230,34 +3261,34 @@ client.on(Events.MessageCreate, async (message) => {
               `• Uptime Sistem: \`${uptimeString}\`\n` +
               `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
               
-            finalReply = finalReply.replace("[ACTION: GET_STATS]", statsBlock);
+            finalReply = finalReply.replace(actionGetStatsRegex, statsBlock);
           } catch (statsErr) {
-            finalReply = finalReply.replace("[ACTION: GET_STATS]", `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+            finalReply = finalReply.replace(actionGetStatsRegex, `\n\n❌ Gagal mengambil data statistik server saat ini.`);
           }
         }
 
         // 3. Action: RESET_HWID
-        if (finalReply.includes("[ACTION: RESET_HWID]")) {
+        if (actionResetHwidRegex.test(finalReply)) {
           const blacklistCheck = isBlacklisted({ discordId: message.author.id });
           if (blacklistCheck.blacklisted) {
-            finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+            finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
           } else {
-            const hasRole = config.VERIFIED_ROLE_ID && member.roles.cache.has(config.VERIFIED_ROLE_ID);
+            const hasRole = !config.VERIFIED_ROLE_ID || (member && member.roles.cache.has(config.VERIFIED_ROLE_ID));
             if (!hasRole) {
-              finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+              finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
             } else {
               const resetResult = resetUserKeyBinding(message.author.id);
               if (resetResult.success) {
-                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+                finalReply = finalReply.replace(actionResetHwidRegex, `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
               } else {
-                finalReply = finalReply.replace("[ACTION: RESET_HWID]", `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+                finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
               }
             }
           }
         }
 
         // 4. Action: CHECK_MY_KEY
-        if (finalReply.includes("[ACTION: CHECK_MY_KEY]")) {
+        if (actionCheckKeyRegex.test(finalReply)) {
           try {
             const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(message.author.id) as {
               key: string;

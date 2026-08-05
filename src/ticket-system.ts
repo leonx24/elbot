@@ -100,6 +100,12 @@ export async function createTicketChannel(
             id: config.SUPPORT_ROLE_ID,
             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
           }]
+        : []),
+      ...(config.OWNER_ROLE_ID
+        ? [{
+            id: config.OWNER_ROLE_ID,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+          }]
         : [])
     ]
   });
@@ -383,28 +389,29 @@ export async function generateTranscript(channel: TextChannel): Promise<string> 
   return htmlTemplate;
 }
 
-export function createRatingButtons() {
+export function createRatingButtons(ticketId?: number | string) {
+  const prefix = ticketId ? `ticket_rating:${ticketId}` : "rating";
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId("rating:1")
-      .setLabel("⭐")
+      .setCustomId(`${prefix}:1`)
+      .setLabel("⭐ 1")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("rating:2")
-      .setLabel("⭐⭐")
+      .setCustomId(`${prefix}:2`)
+      .setLabel("⭐ 2")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("rating:3")
-      .setLabel("⭐⭐⭐")
+      .setCustomId(`${prefix}:3`)
+      .setLabel("⭐ 3")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("rating:4")
-      .setLabel("⭐⭐⭐⭐")
+      .setCustomId(`${prefix}:4`)
+      .setLabel("⭐ 4")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId("rating:5")
-      .setLabel("⭐⭐⭐⭐⭐")
-      .setStyle(ButtonStyle.Primary)
+      .setCustomId(`${prefix}:5`)
+      .setLabel("⭐ 5")
+      .setStyle(ButtonStyle.Success)
   );
 }
 
