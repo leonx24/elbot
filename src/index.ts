@@ -195,12 +195,9 @@ Bot dapat mengeksekusi aksi otomatis jika Anda menyertakan salah satu tag ini di
 - [ACTION: GET_STATS]
 
 ⚠️ SYARAT PENGGUNAAN ACTION TAGS:
-1. JANGAN PERNAH MENYERTAKAN ACTION TAGS jika pengguna HANYA bertanya, berdiskusi, minta penjelasan, atau sekadar menyebut kata "script", "key", "hwid", dll. (Contoh pertanyaan yang JANGAN dikasi action tag: "apa itu key?", "gimana cara dapat script?", "script loader support mobile gak?", "kenapa hwid error?"). Untuk jenis pertanyaan ini, JAWAB DENGAN TEKS BIASA TANPA ACTION TAG!
-2. HANYA SERTAKAN ACTION TAG jika pengguna memberikan PERINTAH EKSPLISIT / INSTRUKSI LANGSUNG untuk mengeksekusi tindakan tersebut saat ini:
-   - [ACTION: SEND_SCRIPT] -> Sertakan HANYA jika ada perintah langsung seperti: "kirim script ku", "minta script", "get key", "ambilkan script", "send key", "mana key", "minta key script", dll.
-   - [ACTION: RESET_HWID] -> Sertakan HANYA jika ada perintah langsung seperti: "reset hwid ku", "resetkan hwid", "tolong reset hwid", "reset roblox id", "do reset hwid", dll.
-   - [ACTION: CHECK_MY_KEY] -> Sertakan HANYA jika ada perintah langsung seperti: "cek key ku", "status key saya", "check my key", "lihat key saya", dll.
-   - [ACTION: GET_STATS] -> Sertakan HANYA jika pengguna meminta statistik bot/server.`;
+1. JIKA PENGGUNA MEMINTA EKSPLISIT / MEMERINTAHKAN dikirimkan script / key lisensi (misal: "minta key", "kirim script", "get key", "kasi gw key", "kasih key", "mana script", "butuh key"), KAMU HARUS SERTAKAN TAG [ACTION: SEND_SCRIPT] DI PALING AKHIR BALASAN agar bot otomatis mengirimkan key & loader ke DM mereka! JANGAN HANYA MENYURUH MEREKA MENGETIK COMMAND /script!
+2. JIKA PENGGUNA MEMINTA EKSPLISIT untuk mereset HWID (misal: "reset hwid ku", "resetkan hwid", "resethwid dong", "reset hwid"), KAMU HARUS SERTAKAN TAG [ACTION: RESET_HWID] DI PALING AKHIR BALASAN agar bot otomatis mereset HWID mereka! JANGAN HANYA MENYURUH MEREKA KE WEBSITE!
+3. JANGAN PERNAH MENYERTAKAN ACTION TAGS jika pengguna HANYA bertanya penjelasan konsep / berdiskusi tanpa meminta eksekusi (Contoh: "apa itu key?", "script loader support mobile gak?", "kenapa hwid error?"). Untuk jenis pertanyaan ini, JAWAB DENGAN TEKS BIASA TANPA ACTION TAG!`;
 }
 
 function hasExplicitScriptRequest(userText: string): boolean {
@@ -228,7 +225,8 @@ function hasExplicitScriptRequest(userText: string): boolean {
     "kirimkan key", "kirimkan script", "ambilkan key", "ambilkan script", "kirim keyku", "kirim scriptku",
     "ambil keyku", "ambil scriptku", "minta loader", "kirim loader", "get loader",
     "kasi key", "kasih key", "kasi script", "kasih script", "kasi gw key", "kasih saya key",
-    "kasi aku key", "kasih aku key", "bagi key dong", "minta key dong", "kasi key ku", "kasih key ku"
+    "kasi aku key", "kasih aku key", "bagi key dong", "minta key dong", "kasi key ku", "kasih key ku",
+    "susah dapet key", "susah dapat key", "susah dapatkan key", "susah dapet script", "gimana dapet key"
   ];
 
   const hasDirectPhrase = directPhrases.some(phrase => text.includes(phrase));
@@ -720,14 +718,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userKey = getOrCreateUserKey(interaction.user.id);
-        const dmContent = 
-          `**LeonX Hub Loader**\n` +
-          `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
-          `\`\`\`lua\n` +
-          `_G.Key = "${userKey}"\n` +
-          `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
-          `\`\`\`;`;
-        await interaction.user.send(dmContent);
+        const v2DmScript = buildV2Container({
+          title: "🔑 LeonX Hub Loader & Key",
+          description: "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
+          sections: [
+            {
+              title: "📜 Script Loader (Lua)",
+              content:
+                "```lua\n" +
+                `_G.Key = "${userKey}"\n` +
+                'loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n' +
+                "```"
+            }
+          ],
+          footer: "LeonX Hub • License System"
+        });
+        await interaction.user.send(v2DmScript);
         await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
       }
 
@@ -999,14 +1005,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 } else {
                   try {
                     const userKey = getOrCreateUserKey(interaction.user.id);
-                    const dmContent = 
-                      `**LeonX Hub Loader**\n` +
-                      `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
-                      `\`\`\`lua\n` +
-                      `_G.Key = "${userKey}"\n` +
-                      `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
-                      `\`\`\`;`;
-                    await interaction.user.send(dmContent);
+                    const v2DmScript = buildV2Container({
+                      title: "🔑 LeonX Hub Loader & Key",
+                      description: "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
+                      sections: [
+                        {
+                          title: "📜 Script Loader (Lua)",
+                          content:
+                            "```lua\n" +
+                            `_G.Key = "${userKey}"\n` +
+                            'loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n' +
+                            "```"
+                        }
+                      ],
+                      footer: "LeonX Hub • License System"
+                    });
+                    await interaction.user.send(v2DmScript);
                     finalReply = finalReply.replace(actionSendScriptRegex, `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
                   } catch (dmErr) {
                     finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
@@ -1102,13 +1116,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
                   finalReply = finalReply.replace(actionCheckKeyRegex, infoBlock);
 
                   try {
-                    const dmContent = 
-                      `🔑 **Informasi Lisensi Key Anda (Detail Privasi):**\n` +
-                      `• **Key**: \`${row.key}\` (Jangan bagikan key ini kepada siapapun!)\n` +
-                      `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
-                      `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
-                      `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
-                    await interaction.user.send(dmContent);
+                    const v2DmKeyInfo = buildV2Container({
+                      title: "🔑 Informasi Lisensi Key Anda",
+                      description: "Berikut adalah detail lisensi aktif Anda di LeonX Hub (Detail Privasi):",
+                      sections: [
+                        {
+                          content:
+                            `• \`Key:\` \`${row.key}\` *(Jangan bagikan key ini!)*\n` +
+                            `• \`Roblox ID:\` \`${row.roblox_id || "Belum Terikat"}\`\n` +
+                            `• \`HWID:\` \`${row.hwid || "Belum Terikat"}\`\n` +
+                            `• \`Cooldown Reset:\` \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``
+                        }
+                      ],
+                      footer: "LeonX Hub • License Privacy"
+                    });
+                    await interaction.user.send(v2DmKeyInfo);
                   } catch (dmErr) {
                     console.log(`Failed to DM key info to ${interaction.user.tag}:`, dmErr);
                   }
@@ -2765,8 +2787,8 @@ async function handleTicketAiResponse(message: Message, ticket: TicketRecord) {
     const categoryLabel = categoryInfo.label;
 
     const systemPrompt = `Anda adalah asisten support resmi untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
-Pengguna baru saja membuka tiket bantuan dengan kategori: "${categoryLabel}".
-Deskripsi masalah awal dari pengguna:
+Pengguna sedang membuka tiket bantuan dengan kategori: "${categoryLabel}".
+Pesan terbaru dari pengguna:
 "${userMessage}"
 
 GAYA BAHASA & TONE (NATURAL & HUMAN-LIKE):
@@ -2776,12 +2798,13 @@ GAYA BAHASA & TONE (NATURAL & HUMAN-LIKE):
 - JANGAN berlebihan memakai bold/heading atau list kaku. Buat balasan ringkas dan enak dibaca.
 
 PANDUAN TROUBLESHOOTING:
-1. Jika kendala script error / tidak jalan:
+1. Jika pengguna bertanya cara dapat key / script: Jelaskan bahwa mereka bisa verifikasi dengan /verify lalu ketik /script untuk dikirimi key & loader via DM.
+2. Jika kendala script error / tidak jalan:
    - Ingatkan taruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling atas sebelum loadstring.
    - Pastikan executor Roblox mendukung loadstring & ter-update.
-2. Jika kendala HWID Error / Key Terikat Device Lain:
+3. Jika kendala HWID Error / Key Terikat Device Lain:
    - Jelaskan cara reset HWID pake perintah /resethwid di Discord atau via panel Bot Console di website resmi (https://script.leonthings.my.id).
-3. Di akhir balasan, ingatkan secara santai bahwa tim staff manusia juga akan segera datang membantu jika masalah belum kelar.`;
+4. Di akhir balasan, ingatkan secara santai bahwa tim staff manusia juga akan segera datang membantu jika masalah belum kelar.`;
 
     const groqResult = await callGroqAPI([
       { role: "system", content: systemPrompt },
@@ -2789,7 +2812,7 @@ PANDUAN TROUBLESHOOTING:
     ]);
 
     if (groqResult.ok) {
-      const finalReply = (groqResult.text || "Maaf, saya tidak dapat merespons secara otomatis saat ini.").trim();
+      const finalReply = (groqResult.text || "Maaf, saya tidak dapat merespons saat ini.").trim();
 
       const v2Ai = buildV2Container({
         title: "🤖 AI Support Assistant",
@@ -2804,9 +2827,6 @@ PANDUAN TROUBLESHOOTING:
       });
 
       await message.reply(v2Ai);
-
-      // Update database agar tidak merespons lagi di tiket ini
-      db.prepare("UPDATE tickets SET ai_responded = 1 WHERE channel_id = ?").run(ticket.channel_id);
     } else {
       console.error("Groq API Error in Ticket Assistant:", groqResult.error);
     }
@@ -3155,9 +3175,11 @@ client.on(Events.MessageCreate, async (message) => {
   // Check if message is in a ticket channel
   if (message.channel.type === ChannelType.GuildText) {
     const ticketData = getOrRecoverTicket(message.channel as TextChannel);
-    if (ticketData && ticketData.status === "open" && !ticketData.claimed_by && !ticketData.ai_responded) {
+    if (ticketData && ticketData.status === "open" && !ticketData.claimed_by) {
       if (message.author.id === ticketData.user_id) {
-        await handleTicketAiResponse(message, ticketData);
+        if (!onCooldown(message.author.id, "ticket_ai", 3000)) {
+          await handleTicketAiResponse(message, ticketData);
+        }
         return;
       }
     }
@@ -3217,14 +3239,22 @@ client.on(Events.MessageCreate, async (message) => {
             } else {
               try {
                 const userKey = getOrCreateUserKey(message.author.id);
-                const dmContent = 
-                  `**LeonX Hub Loader**\n` +
-                  `Berikut adalah loader script khusus untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
-                  `\`\`\`lua\n` +
-                  `_G.Key = "${userKey}"\n` +
-                  `loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n` +
-                  `\`\`\`;`;
-                await message.author.send(dmContent);
+                const v2DmScript = buildV2Container({
+                  title: "🔑 LeonX Hub Loader & Key",
+                  description: "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
+                  sections: [
+                    {
+                      title: "📜 Script Loader (Lua)",
+                      content:
+                        "```lua\n" +
+                        `_G.Key = "${userKey}"\n` +
+                        'loadstring(game:HttpGet("https://api.leonthings.my.id/loader.lua"))()\n' +
+                        "```"
+                    }
+                  ],
+                  footer: "LeonX Hub • License System"
+                });
+                await message.author.send(v2DmScript);
                 finalReply = finalReply.replace(actionSendScriptRegex, `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
               } catch (dmErr) {
                 finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
