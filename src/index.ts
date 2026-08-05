@@ -152,6 +152,142 @@ async function callGroqAPI(messages: Array<{ role: string; content: string }>): 
   return { ok: false, error: "max_retries_exceeded" };
 }
 
+function buildAiSystemPrompt(): string {
+  return `Anda adalah asisten resmi dan sahabat member di server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+
+GAYA BAHASA & KEPRIBADIAN (SANGAT PENTING - NATURAL & HUMAN-LIKE):
+- Bicara dengan gaya bahasa Indonesia yang santai, kasual, ramah, dan natural (seperti senior admin/moderator Discord yang ngobrol dengan teman server).
+- DILARANG KERAS menggunakan kalimat pembuka / penutup klise khas AI seperti:
+  ❌ "Halo! Saya LeonX AI Assistant..."
+  ❌ "Tentu, saya akan membantu Anda..."
+  ❌ "Berikut adalah penjelasan/informasi mengenai..."
+  ❌ "Semoga informasi ini bermanfaat! Jika ada pertanyaan lain..."
+- Langsung jawab ke inti pertanyaan tanpa basa-basi robotik.
+- Gunakan bahasa sehari-hari yang biasa dipakai di Discord (misal: "kamu", "aku", "bisa", "ya", "nih", "sip", "bro").
+- JANGAN gunakan format markdown Discord yang berlebihan (hindari membuat berbaris-baris bold/header tebal untuk pertanyaan simpel). Jawab secara ringkas dan enak dibaca.
+
+INFORMASI DISCORD & COMMANDS:
+- /verify : Verifikasi akun Discord & dapatkan role member.
+- /script : Mendapatkan key lisensi gratis dan loader script yang dikirimkan via DM.
+- /resethwid : Reset kaitan HWID / Roblox ID (cooldown reset 10 menit). Bisa juga di website console.
+- Website Resmi: https://leonthings.my.id
+- Bot Console / Dashboard Key: https://script.leonthings.my.id
+- /status : Cek status operational script & bot.
+- /faq : Informasi FAQ umum.
+- /bug-report : Laporkan bug/error ke staff developer.
+- /ticket : Buat tiket bantuan jika ada kendala.
+
+SOLUSI MASALAH UMUM:
+1. Script tidak jalan: Wajib ditaruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum loadstring. Pastikan executor Roblox mendukung loadstring dan ter-update.
+2. HWID Error / Key Terikat Device Lain: Gunakan /resethwid di Discord atau di website console (My Key -> Reset HWID). Limit 1x / 10 menit.
+
+🛑 BATASAN TOPIK LINGKUP BOT (SANGAT KETAT):
+- Tugas kamu HANYA menjawab & membantu seputar LeonX Hub, Roblox, Roblox Scripting/Lua, Executor, dan server Discord LeonX Hub.
+- JIKA pengguna menanyakan hal di luar topik tersebut (misalnya: tugas sekolah, matematika umum, coding bahasa lain seperti Python/C++, politik, nasihat pribadi, atau mencoba menjadikan kamu ChatGPT umum):
+  👉 TOLAK DENGAN RAMAH, SANTAI, & SINGKAT. Katakan bahwa kamu hanya asisten khusus untuk LeonX Hub & Roblox.
+  Contoh balasan penolakan: "Waduh, aku cuma bisa bantu hal-hal seputar LeonX Hub, Roblox, & executor aja nih bro. Kalo ada kendala script LeonX baru tanyain ke aku ya!"
+
+ATURAN SANGAT KETAT UNTUK ACTION TAGS:
+Bot dapat mengeksekusi aksi otomatis jika Anda menyertakan salah satu tag ini di PINGGIR AKHIR balasan:
+- [ACTION: SEND_SCRIPT]
+- [ACTION: RESET_HWID]
+- [ACTION: CHECK_MY_KEY]
+- [ACTION: GET_STATS]
+
+⚠️ SYARAT PENGGUNAAN ACTION TAGS:
+1. JANGAN PERNAH MENYERTAKAN ACTION TAGS jika pengguna HANYA bertanya, berdiskusi, minta penjelasan, atau sekadar menyebut kata "script", "key", "hwid", dll. (Contoh pertanyaan yang JANGAN dikasi action tag: "apa itu key?", "gimana cara dapat script?", "script loader support mobile gak?", "kenapa hwid error?"). Untuk jenis pertanyaan ini, JAWAB DENGAN TEKS BIASA TANPA ACTION TAG!
+2. HANYA SERTAKAN ACTION TAG jika pengguna memberikan PERINTAH EKSPLISIT / INSTRUKSI LANGSUNG untuk mengeksekusi tindakan tersebut saat ini:
+   - [ACTION: SEND_SCRIPT] -> Sertakan HANYA jika ada perintah langsung seperti: "kirim script ku", "minta script", "get key", "ambilkan script", "send key", "mana key", "minta key script", dll.
+   - [ACTION: RESET_HWID] -> Sertakan HANYA jika ada perintah langsung seperti: "reset hwid ku", "resetkan hwid", "tolong reset hwid", "reset roblox id", "do reset hwid", dll.
+   - [ACTION: CHECK_MY_KEY] -> Sertakan HANYA jika ada perintah langsung seperti: "cek key ku", "status key saya", "check my key", "lihat key saya", dll.
+   - [ACTION: GET_STATS] -> Sertakan HANYA jika pengguna meminta statistik bot/server.`;
+}
+
+function hasExplicitScriptRequest(userText: string): boolean {
+  const text = userText.toLowerCase().trim();
+
+  const isQuestion = 
+    text.startsWith("apa") || 
+    text.startsWith("kenapa") || 
+    text.startsWith("mengapa") || 
+    text.startsWith("apakah") || 
+    text.startsWith("bagaimana") || 
+    text.includes("gimana cara") || 
+    text.includes("bagaimana cara") || 
+    text.includes("cara dapat") || 
+    text.includes("cara dapet") ||
+    text.includes("cara ambil") ||
+    text.includes("cara buat") ||
+    text.includes("apa itu") ||
+    text.includes("apa fungsi");
+
+  const directPhrases = [
+    "get key", "get script", "send key", "send script", "minta key", "minta script",
+    "kirim key", "kirim script", "ambil key", "ambil script", "dapatkan key", "dapatkan script",
+    "bagi key", "bagi script", "mana key", "mana script", "minta scriptku", "minta keyku",
+    "kirimkan key", "kirimkan script", "ambilkan key", "ambilkan script", "kirim keyku", "kirim scriptku",
+    "ambil keyku", "ambil scriptku", "minta loader", "kirim loader", "get loader"
+  ];
+
+  const hasDirectPhrase = directPhrases.some(phrase => text.includes(phrase));
+
+  if (isQuestion && !hasDirectPhrase) {
+    return false;
+  }
+
+  if (hasDirectPhrase) {
+    return true;
+  }
+
+  const actionRegex = /\b(minta|kirim|kirimkan|get|send|ambil|ambilkan|dapatkan|bagi|mana)\b.*\b(script|key|loader|lisensi)\b/i;
+  const reverseRegex = /\b(script|key|loader|lisensi)\b.*\b(minta|kirim|kirimkan|get|send|ambil|ambilkan|dapatkan|bagi|mana)\b/i;
+
+  return !isQuestion && (actionRegex.test(text) || reverseRegex.test(text));
+}
+
+function hasExplicitHwidResetRequest(userText: string): boolean {
+  const text = userText.toLowerCase().trim();
+
+  const isQuestion = 
+    text.startsWith("apa") || 
+    text.startsWith("kenapa") || 
+    text.startsWith("mengapa") || 
+    text.startsWith("apakah") || 
+    text.startsWith("bagaimana") || 
+    text.includes("gimana cara") || 
+    text.includes("bagaimana cara") || 
+    text.includes("cara reset") || 
+    text.includes("apa itu");
+
+  const directPhrases = [
+    "reset hwid", "resetkan hwid", "resethwid", "reset hwidku", "reset hwid ku",
+    "clear hwid", "reset roblox id", "reset robloxid", "reset id ku", "reset idku",
+    "tolong reset hwid", "minta reset hwid", "reset my hwid", "do reset hwid", "resetkan hwidku"
+  ];
+
+  const hasDirectPhrase = directPhrases.some(phrase => text.includes(phrase));
+
+  if (isQuestion && !hasDirectPhrase) {
+    return false;
+  }
+
+  if (hasDirectPhrase) {
+    return true;
+  }
+
+  const resetRegex = /\b(reset|clear|hapus)\b.*\b(hwid|roblox\s*id|device|perangkat)\b/i;
+  return !isQuestion && resetRegex.test(text);
+}
+
+function hasExplicitCheckKeyRequest(userText: string): boolean {
+  const text = userText.toLowerCase().trim();
+  const directPhrases = [
+    "cek key", "cek status key", "status key", "check key", "check my key",
+    "lihat key", "key saya", "key ku", "status lisensi"
+  ];
+  return directPhrases.some(phrase => text.includes(phrase));
+}
+
 const changelogTypes = {
   major: { label: "MAJOR UPDATE", emoji: "🚀", color: 0x7c3aed },
   feature: { label: "NEW FEATURES", emoji: "✨", color: 0x2563eb },
@@ -819,41 +955,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply();
 
         try {
-          const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
-Website Resmi: https://leonthings.my.id
-Halaman Dashboard/Bot Console: https://script.leonthings.my.id
-Perintah Discord yang tersedia:
-- /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
-- /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
-- /resethwid : Mereset kaitan perangkat/Roblox ID (cooldown reset adalah 10 menit sekali). Bisa juga dilakukan mandiri di website console.
-- /website : Mendapatkan link website utama dan halaman bot console.
-- /status : Cek status operational script LeonX Hub.
-- /faq : Tanya jawab seputar permasalahan umum.
-- /bug-report : Melaporkan bug/error langsung ke staff developer.
-- /ticket : Membuat tiket keluhan bantuan jika ada masalah yang tidak terselesaikan.
-
-Panduan penyelesaian masalah umum:
-1. Script tidak berjalan atau gagal eksekusi:
-   - Pastikan meletakkan \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum baris loadstring.
-   - Pastikan executor Roblox yang digunakan mendukung loadstring dan versi paling ter-update.
-2. Key terdaftar di perangkat lain / HWID Error:
-   - Gunakan command /resethwid di Discord atau buka website LeonThings bagian Bot Console -> My Key, lalu klik tombol "Reset HWID & Roblox ID". Ingat batas reset adalah 1x per 10 menit.
-3. Mendapatkan Role Member:
-   - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
-   - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
-
-TINDAKAN KELUARAN KHUSUS (ACTION TAGS):
-Anda dapat mengontrol tindakan bot secara langsung dengan menyertakan tag khusus ini tepat di akhir balasan Anda jika user memintanya (bot akan memprosesnya dan menggantinya dengan hasil nyata):
-1. Jika pengguna meminta dikirimi script loader, key lisensi mereka, atau menyuruh "ambilin script", sertakan tag: [ACTION: SEND_SCRIPT]
-2. Jika pengguna menanyakan statistik server bot, kapasitas, memori, atau performa bot, sertakan tag: [ACTION: GET_STATS]
-3. Jika pengguna meminta untuk mereset HWID atau Roblox ID mereka, sertakan tag: [ACTION: RESET_HWID]
-4. Jika pengguna menanyakan detail status key lisensi aktif mereka saat ini, sertakan tag: [ACTION: CHECK_MY_KEY]
-
-Format balasan:
-- Jawab secara singkat, padat, ramah, dan solutif.
-- Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
-- Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
-- Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
+          const systemPrompt = buildAiSystemPrompt();
 
           const groqResult = await callGroqAPI([
             { role: "system", content: systemPrompt },
@@ -861,8 +963,19 @@ Format balasan:
           ]);
 
           if (groqResult.ok) {
-            const replyText = groqResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+            const replyText = groqResult.text || "Maaf, tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
             let finalReply = replyText.trim();
+
+            // Guardrail checks: Only allow actions if user explicitly requested them
+            if (finalReply.includes("[ACTION: SEND_SCRIPT]") && !hasExplicitScriptRequest(query)) {
+              finalReply = finalReply.replace(/\[ACTION:\s*SEND_SCRIPT\]/g, "").trim();
+            }
+            if (finalReply.includes("[ACTION: RESET_HWID]") && !hasExplicitHwidResetRequest(query)) {
+              finalReply = finalReply.replace(/\[ACTION:\s*RESET_HWID\]/g, "").trim();
+            }
+            if (finalReply.includes("[ACTION: CHECK_MY_KEY]") && !hasExplicitCheckKeyRequest(query)) {
+              finalReply = finalReply.replace(/\[ACTION:\s*CHECK_MY_KEY\]/g, "").trim();
+            }
 
             const member = interaction.member instanceof GuildMember ? interaction.member : null;
 
@@ -2625,20 +2738,24 @@ async function handleTicketAiResponse(message: Message, ticket: TicketRecord) {
     const categoryInfo = TICKET_CATEGORIES[catKey] || TICKET_CATEGORIES.general;
     const categoryLabel = categoryInfo.label;
 
-    const systemPrompt = `Anda adalah LeonX AI Ticket Assistant, agen support otomatis cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
+    const systemPrompt = `Anda adalah asisten support resmi untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
 Pengguna baru saja membuka tiket bantuan dengan kategori: "${categoryLabel}".
-Berikut adalah deskripsi masalah/pertanyaan awal dari user:
+Deskripsi masalah awal dari pengguna:
 "${userMessage}"
 
-Tugas Anda:
-1. Berikan analisis awal dan saran troubleshooting yang praktis, jelas, dan ramah sesuai kategori tiket.
-2. Jika mereka memiliki kendala teknis (script error/tidak jalan), ingatkan mereka untuk:
-   - Menaruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama script sebelum baris loadstring.
-   - Menggunakan executor Roblox yang ter-update dan kompatibel.
-3. Jika masalah berkaitan dengan HWID Error / Key Terikat Perangkat Lain, jelaskan cara mereset HWID mereka menggunakan perintah /resethwid di Discord atau melalui panel Bot Console di website resmi kami (https://script.leonthings.my.id).
-4. Beri tahu mereka dengan ramah bahwa tim staff support manusia tetap akan datang untuk membantu secara langsung jika solusi otomatis ini tidak menyelesaikan masalah mereka.
-5. Jawab secara singkat, padat, profesional, dan gunakan format markdown Discord (seperti bullet points, bold text, dll) agar mudah dibaca.
-6. Berbahasa Indonesia secara sopan dan membantu.`;
+GAYA BAHASA & TONE (NATURAL & HUMAN-LIKE):
+- Gunakan bahasa Indonesia yang santai, ramah, dan membantu (seperti senior support staff yang ramah).
+- DILARANG KERAS menggunakan kata-kata pembuka AI yang kaku (seperti "Halo! Saya LeonX AI Ticket Assistant...", "Tentu, saya akan membantu...", dll).
+- Langsung berikan saran atau panduan troubleshooting ke inti masalahnya tanpa basa-basi robotik.
+- JANGAN berlebihan memakai bold/heading atau list kaku. Buat balasan ringkas dan enak dibaca.
+
+PANDUAN TROUBLESHOOTING:
+1. Jika kendala script error / tidak jalan:
+   - Ingatkan taruh \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling atas sebelum loadstring.
+   - Pastikan executor Roblox mendukung loadstring & ter-update.
+2. Jika kendala HWID Error / Key Terikat Device Lain:
+   - Jelaskan cara reset HWID pake perintah /resethwid di Discord atau via panel Bot Console di website resmi (https://script.leonthings.my.id).
+3. Di akhir balasan, ingatkan secara santai bahwa tim staff manusia juga akan segera datang membantu jika masalah belum kelar.`;
 
     const groqResult = await callGroqAPI([
       { role: "system", content: systemPrompt },
@@ -3035,41 +3152,7 @@ client.on(Events.MessageCreate, async (message) => {
       const userMessage = message.content.replace(new RegExp(`<@!?${client.user?.id}>`, 'g'), "").trim();
       if (!userMessage) return; // Ignore empty messages in AI channel
 
-      const systemPrompt = `Anda adalah LeonX AI Assistant, sebuah bot pembantu cerdas untuk server Discord LeonX Hub (sebuah Roblox Script Hub premium).
-Website Resmi: https://leonthings.my.id
-Halaman Dashboard/Bot Console: https://script.leonthings.my.id
-Perintah Discord yang tersedia:
-- /verify : Verifikasi akun Discord dan dapatkan role member terverifikasi.
-- /script nama:LeonX Hub Loader : Mendapatkan key lisensi gratis dan loader script khusus yang dikirimkan lewat DM.
-- /resethwid : Mereset kaitan perangkat/Roblox ID (cooldown reset adalah 10 menit sekali). Bisa juga dilakukan mandiri di website console.
-- /website : Mendapatkan link website utama dan halaman bot console.
-- /status : Cek status operational script LeonX Hub.
-- /faq : Tanya jawab seputar permasalahan umum.
-- /bug-report : Melaporkan bug/error langsung ke staff developer.
-- /ticket : Membuat tiket keluhan bantuan jika ada masalah yang tidak terselesaikan.
-
-Panduan penyelesaian masalah umum:
-1. Script tidak berjalan atau gagal eksekusi:
-   - Pastikan meletakkan \`_G.Key = "KEY_LISENSI_ANDA"\` di baris paling pertama sebelum baris loadstring.
-   - Pastikan executor Roblox yang digunakan mendukung loadstring dan versi paling ter-update.
-2. Key terdaftar di perangkat lain / HWID Error:
-   - Gunakan command /resethwid di Discord atau buka website LeonThings bagian Bot Console -> My Key, lalu klik tombol "Reset HWID & Roblox ID". Ingat batas reset adalah 1x per 10 menit.
-3. Mendapatkan Role Member:
-   - Klik tombol verifikasi di channel verifikasi atau gunakan command /verify.
-   - Member wajib mematuhi aturan server Discord (dilarang keras cracking loader, membagikan/leaking script LeonX, atau bypass ilegal dengan sanksi BANNED & BLACKLIST PERMANEN).
-
-TINDAKAN KELUARAN KHUSUS (ACTION TAGS):
-Anda dapat mengontrol tindakan bot secara langsung dengan menyertakan tag khusus ini tepat di akhir balasan Anda jika user memintanya (bot akan memprosesnya dan menggantinya dengan hasil nyata):
-1. Jika pengguna meminta dikirimi script loader, key lisensi mereka, atau menyuruh "ambilin script", sertakan tag: [ACTION: SEND_SCRIPT]
-2. Jika pengguna menanyakan statistik server bot, kapasitas, memori, atau performa bot, sertakan tag: [ACTION: GET_STATS]
-3. Jika pengguna meminta untuk mereset HWID atau Roblox ID mereka, sertakan tag: [ACTION: RESET_HWID]
-4. Jika pengguna menanyakan detail status key lisensi aktif mereka saat ini, sertakan tag: [ACTION: CHECK_MY_KEY]
-
-Format balasan:
-- Jawab secara singkat, padat, ramah, dan solutif.
-- Gunakan bahasa Indonesia yang santai tapi sopan (sesuaikan bahasa jika ditanya dalam bahasa Inggris).
-- Gunakan format markdown Discord (seperti cetak tebal, daftar, dll.) agar mudah dibaca.
-- Jika ada pertanyaan di luar topik LeonX Hub, Roblox, scripting, executor, atau server Discord ini, jawab dengan ramah bahwa Anda hanya dapat membantu hal-hal terkait LeonX Hub.`;
+      const systemPrompt = buildAiSystemPrompt();
 
       const groqResult = await callGroqAPI([
         { role: "system", content: systemPrompt },
@@ -3077,8 +3160,19 @@ Format balasan:
       ]);
 
       if (groqResult.ok) {
-        const replyText = groqResult.text || "Maaf, saya tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+        const replyText = groqResult.text || "Maaf, tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
         let finalReply = replyText.trim();
+
+        // Guardrail checks: Only allow actions if user explicitly requested them
+        if (finalReply.includes("[ACTION: SEND_SCRIPT]") && !hasExplicitScriptRequest(userMessage)) {
+          finalReply = finalReply.replace(/\[ACTION:\s*SEND_SCRIPT\]/g, "").trim();
+        }
+        if (finalReply.includes("[ACTION: RESET_HWID]") && !hasExplicitHwidResetRequest(userMessage)) {
+          finalReply = finalReply.replace(/\[ACTION:\s*RESET_HWID\]/g, "").trim();
+        }
+        if (finalReply.includes("[ACTION: CHECK_MY_KEY]") && !hasExplicitCheckKeyRequest(userMessage)) {
+          finalReply = finalReply.replace(/\[ACTION:\s*CHECK_MY_KEY\]/g, "").trim();
+        }
 
         // 1. Action: SEND_SCRIPT
         if (finalReply.includes("[ACTION: SEND_SCRIPT]")) {

@@ -81,13 +81,17 @@ export async function createTicketChannel(
   category: TicketCategory
 ): Promise<TextChannel> {
   const categoryInfo = TICKET_CATEGORIES[category];
-  const channelName = `${categoryInfo.emoji.replace(/[^\w]/g, "")}-${user.username}-${Date.now().toString().slice(-6)}`.slice(0, 100);
+
+  const maxRow = db.prepare("SELECT MAX(id) as maxId FROM tickets").get() as { maxId: number | null } | undefined;
+  const ticketNumber = (maxRow?.maxId || 0) + 1;
+  const paddedNumber = String(ticketNumber).padStart(4, "0");
+  const channelName = `${category}-${paddedNumber}`;
 
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
     parent: config.TICKET_CATEGORY_ID || undefined,
-    topic: `Ticket by ${user.tag} (${user.id}) | Category: ${category} | Created: ${new Date().toISOString()}`,
+    topic: `Ticket #${paddedNumber} by ${user.tag} (${user.id}) | Category: ${categoryInfo.label} | Created: ${new Date().toISOString()}`,
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
@@ -101,10 +105,11 @@ export async function createTicketChannel(
   });
 
   const welcomeEmbed = new EmbedBuilder()
-    .setTitle(`${categoryInfo.emoji} ${categoryInfo.label}`)
+    .setTitle(`${categoryInfo.emoji} ${categoryInfo.label} (#${paddedNumber})`)
     .setDescription(
       `# ${categoryInfo.emoji} ${categoryInfo.label}\n` +
       `Halo <@${user.id}>, terima kasih sudah membuka ticket!\n\n` +
+      `• \`Ticket ID:\` **#${paddedNumber}**\n` +
       `• \`Kategori:\` **${categoryInfo.label}**\n` +
       `• \`Status:\` 🟢 **Open**\n\n` +
       "───────────────────────────────\n\n" +
@@ -115,7 +120,7 @@ export async function createTicketChannel(
       "───────────────────────────────\n\n" +
       "> 💬 *Tim support akan segera merespons pesan Anda.*"
     )
-    .setFooter({ text: `Ticket ID: #${channel.id.slice(-6)}` })
+    .setFooter({ text: `Ticket ID: #${paddedNumber}` })
     .setTimestamp();
 
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
