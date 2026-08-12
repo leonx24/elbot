@@ -3018,27 +3018,22 @@ end)
 end -- END: Universal mode (else branch of ActiveGameModule check)
 
 -- Debug: component count per tab
--- Debug info removed
-for i, t in ipairs(Window._tabs) do
-    -- Tab debug removed
-end
-local tabCounts = {}
-local nilCount = 0
-for idx, entry in ipairs(Window._allComps) do
-    local tName = "nil#" .. tostring(idx)
-    if entry._tab and entry._tab.Name then
-        tName = entry._tab.Name
-        tabCounts[tName] = (tabCounts[tName] or 0) + 1
-    else
-        nilCount = nilCount + 1
-    end
-end
-for tName, count in pairs(tabCounts) do
-    -- Component count debug removed
-end
-if nilCount > 0 then
-    -- Nil count debug removed
-end
+pcall(function()
+	for i, t in ipairs(Window._tabs) do
+		-- Tab debug removed
+	end
+	local tabCounts = {}
+	local nilCount = 0
+	for idx, entry in ipairs(Window._allComps) do
+		local tName = "nil#" .. tostring(idx)
+		if entry._tab and entry._tab.Name then
+			tName = entry._tab.Name
+			tabCounts[tName] = (tabCounts[tName] or 0) + 1
+		else
+			nilCount = nilCount + 1
+		end
+	end
+end)
 -- End debug info
 
 -- Smooth splash exit
@@ -3069,6 +3064,14 @@ task.spawn(function()
         if SplashGui and SplashGui.Parent then SplashGui:Destroy() end
     end)
     splashDestroyed = true
+end)
+
+-- Guaranteed fallback: force-destroy splash after 5s no matter what
+task.delay(5, function()
+    if not splashDestroyed then
+        pcall(function() if SplashGui and SplashGui.Parent then SplashGui:Destroy() end end)
+        splashDestroyed = true
+    end
 end)
 
 task.delay(2, function()
