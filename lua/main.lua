@@ -564,6 +564,7 @@ local _winH   = isMobile and math.min(560, math.floor(_vp.Y * 0.88)) or 560
 local Window = Library:CreateWindow({
     Title      = windowTitle,
     Author     = windowAuthor,
+    Version    = CURRENT_VERSION,
     Size       = UDim2.new(0, _winW, 0, _winH),
     ToggleKey  = Enum.KeyCode.U,
     Theme      = "Default",
@@ -581,15 +582,45 @@ local function N(title, state, duration)
 end
 
 
+local function showDebugError(title, err)
+    pcall(function()
+        warn("[LeonX ERROR in " .. tostring(title) .. "] " .. tostring(err))
+        local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or lp:WaitForChild("PlayerGui"))
+        sg.Name = "LeonXInitErrorBanner"
+        sg.DisplayOrder = 999999
+        local f = Instance.new("Frame", sg)
+        f.Size = UDim2.new(0.9, 0, 0, 110)
+        f.Position = UDim2.new(0.05, 0, 0, 10)
+        f.BackgroundColor3 = Color3.fromRGB(180, 20, 20)
+        f.BorderSizePixel = 0
+        f.ZIndex = 1000000
+        local c = Instance.new("UICorner", f); c.CornerRadius = UDim.new(0, 8)
+        local t = Instance.new("TextLabel", f)
+        t.Size = UDim2.new(1, -20, 1, -10)
+        t.Position = UDim2.fromOffset(10, 5)
+        t.BackgroundTransparency = 1
+        t.TextColor3 = Color3.fromRGB(255, 255, 255)
+        t.TextSize = 12
+        t.Font = Enum.Font.SourceSansBold
+        t.TextWrapped = true
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.TextYAlignment = Enum.TextYAlignment.Top
+        t.ZIndex = 1000001
+        t.Text = "[Leon X ERROR in " .. tostring(title) .. "]\n" .. tostring(err)
+    end)
+end
+
 -- ── Tabs ──────────────────────────────────────────────────────────────────────
 setSplashProgress(0.96)
 
 -- Anti-AFK: always active on ALL maps
 if ConfigMgr then
-    ConfigMgr:Init(Window)
-    ConfigMgr._notify = function(title, msg)
-        N(title, msg)
-    end
+    pcall(function()
+        ConfigMgr:Init(Window)
+        ConfigMgr._notify = function(title, msg)
+            N(title, msg)
+        end
+    end)
 end
 
 -- ══ GAME MODULE vs UNIVERSAL MODE ═════════════════════════════════════
@@ -618,19 +649,7 @@ if ActiveGameModule then
         })
     end)
     if not wireSuccess then
-        warn("[Leon X Debug] WireUI Error: " .. tostring(wireErr))
-        pcall(function()
-            local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or lp:WaitForChild("PlayerGui"))
-            sg.Name = "LeonXWireError"
-            local txt = Instance.new("TextLabel", sg)
-            txt.Size = UDim2.new(1, 0, 0, 80)
-            txt.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-            txt.TextColor3 = Color3.fromRGB(255, 255, 255)
-            txt.Text = "WireUI Error: " .. tostring(wireErr)
-            txt.TextSize = 14
-            txt.TextWrapped = true
-            txt.Font = Enum.Font.SourceSansBold
-        end)
+        showDebugError("WireUI (" .. tostring(ActiveGameModule.Name) .. ")", wireErr)
     end
     N("Game Detected", ActiveGameModule.Name)
 
@@ -651,6 +670,7 @@ if ActiveGameModule then
 
 else
 -- Universal mode: create all standard tabs
+local uniOk, uniErr = xpcall(function()
 
 local FavTab = Window:Tab({ Title = "Favorites", Icon = "star" })
 local MovTab = Window:Tab({ Title = "Movement", Icon = "person-standing" })
@@ -668,8 +688,9 @@ FavTab:Paragraph({
     Content = "Instant 1-tap shortcuts for your most used script features!"
 })
 
-if AntiAFK then AntiAFK:Enable() end
-if PerfStats then PerfStats:Enable() end
+print("[LeonX Debug] Initializing core modules...")
+if AntiAFK then pcall(function() AntiAFK:Enable() end) end
+if PerfStats then pcall(function() PerfStats:Enable() end) end
 
 -- ── Macro Recorder UI ────────────────────────────────────────────────────────
 -- Keybind variables (used by InputBegan handlers below)
@@ -821,9 +842,10 @@ antiRagdollToggle = MovTab:Toggle({
 })
 ConfigMgr:Register("AntiRagdoll", antiRagdollToggle)
 invisToggle = MovTab:Toggle({
-    Title    = "Invisible (local)",
+    Title    = "Invisible (Ghost Mode)",
+    Flag     = "Invisible",
     Value    = false,
-    Tooltip  = "Become invisible to other players",
+    Tooltip  = "Safe invisibility with ghost visual feedback",
     Callback = function(v)
         if v then Invisible:Enable() else Invisible:Disable() end
         N("Invisible", v and "Enabled" or "Disabled")
@@ -2831,11 +2853,24 @@ SetTab:Paragraph({
     Content = "Press to disable ALL features and hide the UI"
 })
 
-setSplashProgress(0.96)
+pcall(function()
+    print("[LeonX] Universal mode UI tabs built successfully.")
+    if Window and Window.SelectTab then
+        Window:SelectTab(1)
+    end
+end)
 
--- ══════════════════════════════════════════════════════════════════════════════
--- HIDE SPLASH → REVEAL MAIN UI
--- ══════════════════════════════════════════════════════════════════════════════
+end, function(err)
+    return tostring(err) .. "\n" .. debug.traceback()
+end)
+
+if not uniOk then
+    warn("[LeonX CRITICAL] Universal Mode Setup Failed: " .. tostring(uniErr))
+    showDebugError("Universal Mode Setup", uniErr)
+else
+    print("[LeonX] All tabs initialized with 0 errors. Transitioning UI...")
+end
+
 setSplashProgress(1.0)
 
 -- PerfStats already enabled above (universal)

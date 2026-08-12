@@ -15,6 +15,7 @@
     "better-sqlite3": "^11.8.1",
     "discord.js": "^14.26.4",
     "dotenv": "^16.5.0",
+    "fengari": "^0.1.5",
     "zod": "^3.25.28"
   },
   "devDependencies": {
