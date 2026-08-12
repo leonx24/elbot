@@ -72,17 +72,18 @@ SplashGui.Parent           = gui
 
 local SplashBg = Instance.new("Frame")
 SplashBg.Size                = UDim2.fromScale(1, 1)
-SplashBg.BackgroundColor3    = Color3.fromRGB(6, 6, 6)
+SplashBg.BackgroundColor3    = Color3.fromRGB(6, 6, 10)
 SplashBg.BackgroundTransparency = 0.15
 SplashBg.BorderSizePixel     = 0
 SplashBg.ZIndex              = 200
 SplashBg.Parent              = SplashGui
 
+-- Main Card Container (340x200)
 local SplashCard = Instance.new("Frame")
-SplashCard.Size                = UDim2.new(0, 260, 0, 160)
+SplashCard.Size                = UDim2.new(0, 340, 0, 200)
 SplashCard.AnchorPoint         = Vector2.new(0.5, 0.5)
 SplashCard.Position            = UDim2.fromScale(0.5, 0.5)
-SplashCard.BackgroundColor3    = Color3.fromRGB(14, 14, 14)
+SplashCard.BackgroundColor3    = Color3.fromRGB(14, 14, 22)
 SplashCard.BorderSizePixel     = 0
 SplashCard.ZIndex              = 201
 SplashCard.Parent              = SplashGui
@@ -92,151 +93,225 @@ SplashCorner.CornerRadius = UDim.new(0, 16)
 SplashCorner.Parent       = SplashCard
 
 local SplashStroke = Instance.new("UIStroke")
-SplashStroke.Color     = Color3.fromRGB(36, 36, 36)
-SplashStroke.Thickness = 1
+SplashStroke.Color     = Color3.fromRGB(45, 45, 65)
+SplashStroke.Thickness = 1.2
 SplashStroke.Parent    = SplashCard
 
--- Animated accent glow on card border
+-- Pulsing Ambient Border Glow
 task.spawn(function()
     while SplashCard and SplashCard.Parent do
-        TweenService:Create(SplashStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine),
-            {Color = Color3.fromRGB(80, 160, 255)}):Play()
+        TweenService:Create(SplashStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+            {Color = Color3.fromRGB(100, 140, 255)}):Play()
         task.wait(1.5)
-        TweenService:Create(SplashStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine),
-            {Color = Color3.fromRGB(36, 36, 36)}):Play()
+        TweenService:Create(SplashStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+            {Color = Color3.fromRGB(45, 45, 65)}):Play()
         task.wait(1.5)
     end
 end)
 
--- Logo dot
-local SplashDot = Instance.new("Frame")
-SplashDot.Size             = UDim2.new(0, 10, 0, 10)
-SplashDot.Position         = UDim2.new(0, 22, 0, 30)
-SplashDot.BackgroundColor3 = Color3.fromRGB(80, 160, 255)
-SplashDot.BorderSizePixel  = 0
-SplashDot.ZIndex           = 202
-SplashDot.Parent           = SplashCard
+local LOGO_URL = "https://raw.githubusercontent.com/leonx24/Leon-x/main/assets/logo.jpg"
+local cachedLogoAsset = nil
+local function getCustomLogoAsset()
+    if cachedLogoAsset then return cachedLogoAsset end
+    pcall(function()
+        local path = "Leon X/assets/logo.jpg"
+        if isfile and isfile(path) and getcustomasset then
+            cachedLogoAsset = getcustomasset(path)
+            return
+        end
+        if makefolder and not isfolder("Leon X") then makefolder("Leon X") end
+        if makefolder and not isfolder("Leon X/assets") then makefolder("Leon X/assets") end
+        if writefile and game and getcustomasset then
+            local data = game:HttpGet(LOGO_URL .. "?t=" .. tostring(os.time()), true)
+            if data and #data > 100 then
+                writefile(path, data)
+                cachedLogoAsset = getcustomasset(path)
+            end
+        end
+    end)
+    return cachedLogoAsset
+end
 
-local DotCorner = Instance.new("UICorner")
-DotCorner.CornerRadius = UDim.new(0, 5)
-DotCorner.Parent       = SplashDot
+-- Logo Icon Tile Box (38x38)
+local LogoTile = Instance.new("Frame")
+LogoTile.Size             = UDim2.fromOffset(38, 38)
+LogoTile.Position         = UDim2.fromOffset(20, 20)
+LogoTile.BackgroundTransparency = 1
+LogoTile.BorderSizePixel  = 0
+LogoTile.ClipsDescendants = true
+LogoTile.ZIndex           = 202
+LogoTile.Parent           = SplashCard
 
--- Pulsing dot animation
+local TileCorner = Instance.new("UICorner")
+TileCorner.CornerRadius = UDim.new(0, 10)
+TileCorner.Parent       = LogoTile
+
+local TileStroke = Instance.new("UIStroke")
+TileStroke.Color        = Color3.fromRGB(45, 45, 65)
+TileStroke.Thickness    = 1
+TileStroke.Transparency = 0.6
+TileStroke.Parent       = LogoTile
+
+-- Logo Icon Image (Custom Metallic LX Logo)
+local LogoImg = Instance.new("ImageLabel")
+LogoImg.Name                   = "LogoIcon"
+LogoImg.Size                   = UDim2.fromScale(1, 1)
+LogoImg.AnchorPoint            = Vector2.new(0.5, 0.5)
+LogoImg.Position               = UDim2.fromScale(0.5, 0.5)
+LogoImg.BackgroundTransparency = 1
+LogoImg.BorderSizePixel        = 0
+LogoImg.ScaleType              = Enum.ScaleType.Fit
+LogoImg.ZIndex                 = 203
+LogoImg.Parent                 = LogoTile
+
 task.spawn(function()
-    while SplashDot and SplashDot.Parent do
-        TweenService:Create(SplashDot, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-            {Size = UDim2.new(0, 13, 0, 13)}):Play()
-        task.wait(0.6)
-        TweenService:Create(SplashDot, TweenInfo.new(0.6, Enum.EasingStyle.Quint),
-            {Size = UDim2.new(0, 10, 0, 10)}):Play()
-        task.wait(0.6)
+    local asset = getCustomLogoAsset()
+    if asset then
+        LogoImg.Image = asset
     end
 end)
 
 -- Title
 local SplashTitle = Instance.new("TextLabel")
-SplashTitle.Size                = UDim2.new(1, -50, 0, 26)
-SplashTitle.Position            = UDim2.new(0, 40, 0, 20)
+SplashTitle.Size                = UDim2.new(1, -140, 0, 22)
+SplashTitle.Position            = UDim2.fromOffset(68, 20)
 SplashTitle.BackgroundTransparency = 1
 SplashTitle.Text                = "Leon X"
-SplashTitle.TextColor3          = Color3.fromRGB(240, 240, 240)
-SplashTitle.TextSize            = 20
+SplashTitle.TextColor3          = Color3.fromRGB(240, 242, 250)
+SplashTitle.TextSize            = 18
 SplashTitle.Font                = Enum.Font.GothamBold
 SplashTitle.TextXAlignment      = Enum.TextXAlignment.Left
 SplashTitle.ZIndex              = 202
 SplashTitle.Parent              = SplashCard
 
--- Version
+-- Subtitle / Version Pill
+local SplashVerPill = Instance.new("Frame")
+SplashVerPill.Size             = UDim2.fromOffset(56, 18)
+SplashVerPill.Position         = UDim2.new(1, -76, 0, 20)
+SplashVerPill.BackgroundColor3 = Color3.fromRGB(28, 28, 40)
+SplashVerPill.BorderSizePixel  = 0
+SplashVerPill.ZIndex           = 202
+SplashVerPill.Parent           = SplashCard
+
+local PillCorner = Instance.new("UICorner")
+PillCorner.CornerRadius = UDim.new(0, 6)
+PillCorner.Parent       = SplashVerPill
+
 local SplashVer = Instance.new("TextLabel")
-SplashVer.Size                = UDim2.new(0, 50, 0, 18)
-SplashVer.Position            = UDim2.new(0, 40, 0, 46)
+SplashVer.Size                = UDim2.fromScale(1, 1)
 SplashVer.BackgroundTransparency = 1
 SplashVer.Text                = "v" .. CURRENT_VERSION
-SplashVer.TextColor3          = Color3.fromRGB(90, 90, 90)
-SplashVer.TextSize            = 11
-SplashVer.Font                = Enum.Font.Gotham
-SplashVer.TextXAlignment      = Enum.TextXAlignment.Left
-SplashVer.ZIndex              = 202
-SplashVer.Parent              = SplashCard
+SplashVer.TextColor3          = Color3.fromRGB(100, 140, 255)
+SplashVer.TextSize            = 10
+SplashVer.Font                = Enum.Font.GothamBold
+SplashVer.TextXAlignment      = Enum.TextXAlignment.Center
+SplashVer.ZIndex              = 203
+SplashVer.Parent              = SplashVerPill
 
--- Status text
+-- Subtitle Tagline
+local SplashSub = Instance.new("TextLabel")
+SplashSub.Size                = UDim2.new(1, -140, 0, 14)
+SplashSub.Position            = UDim2.fromOffset(68, 42)
+SplashSub.BackgroundTransparency = 1
+SplashSub.Text                = "CyberNoir Boot Engine"
+SplashSub.TextColor3          = Color3.fromRGB(130, 135, 155)
+SplashSub.TextSize            = 10
+SplashSub.Font                = Enum.Font.GothamMedium
+SplashSub.TextXAlignment      = Enum.TextXAlignment.Left
+SplashSub.ZIndex              = 202
+SplashSub.Parent              = SplashCard
+
+-- Status Text Label
 local SplashStatus = Instance.new("TextLabel")
-SplashStatus.Size                = UDim2.new(1, -28, 0, 18)
-SplashStatus.Position            = UDim2.new(0, 14, 0, 80)
+SplashStatus.Size                = UDim2.new(1, -120, 0, 18)
+SplashStatus.Position            = UDim2.fromOffset(20, 110)
 SplashStatus.BackgroundTransparency = 1
-SplashStatus.Text                = "Initializing..."
-SplashStatus.TextColor3          = Color3.fromRGB(110, 110, 110)
+SplashStatus.Text                = "Initializing system engine..."
+SplashStatus.TextColor3          = Color3.fromRGB(180, 185, 205)
 SplashStatus.TextSize            = 11
-SplashStatus.Font                = Enum.Font.Gotham
+SplashStatus.Font                = Enum.Font.GothamMedium
 SplashStatus.TextXAlignment      = Enum.TextXAlignment.Left
 SplashStatus.ZIndex              = 202
 SplashStatus.Parent              = SplashCard
 
--- Progress bar background
+-- Percentage Label (Right Aligned)
+local SplashPct = Instance.new("TextLabel")
+SplashPct.Size                = UDim2.new(0, 50, 0, 18)
+SplashPct.Position            = UDim2.new(1, -70, 0, 110)
+SplashPct.BackgroundTransparency = 1
+SplashPct.Text                = "0%"
+SplashPct.TextColor3          = Color3.fromRGB(100, 140, 255)
+SplashPct.TextSize            = 11
+SplashPct.Font                = Enum.Font.GothamBold
+SplashPct.TextXAlignment      = Enum.TextXAlignment.Right
+SplashPct.ZIndex              = 202
+SplashPct.Parent              = SplashCard
+
+-- Progress Bar Background Track
 local SplashBarBg = Instance.new("Frame")
-SplashBarBg.Size             = UDim2.new(1, -28, 0, 4)
-SplashBarBg.Position         = UDim2.new(0, 14, 1, -28)
-SplashBarBg.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+SplashBarBg.Size             = UDim2.new(1, -40, 0, 6)
+SplashBarBg.Position         = UDim2.fromOffset(20, 140)
+SplashBarBg.BackgroundColor3 = Color3.fromRGB(24, 24, 36)
 SplashBarBg.BorderSizePixel  = 0
 SplashBarBg.ZIndex           = 202
 SplashBarBg.Parent           = SplashCard
 
 local BarBgCorner = Instance.new("UICorner")
-BarBgCorner.CornerRadius = UDim.new(0, 2)
+BarBgCorner.CornerRadius = UDim.new(0, 3)
 BarBgCorner.Parent       = SplashBarBg
 
--- Progress bar fill
+-- Progress Bar Fill
 local SplashBarFill = Instance.new("Frame")
 SplashBarFill.Size             = UDim2.new(0, 0, 1, 0)
-SplashBarFill.BackgroundColor3 = Color3.fromRGB(80, 160, 255)
+SplashBarFill.BackgroundColor3 = Color3.fromRGB(100, 140, 255)
 SplashBarFill.BorderSizePixel  = 0
 SplashBarFill.ZIndex           = 203
 SplashBarFill.Parent           = SplashBarBg
 
 local BarFillCorner = Instance.new("UICorner")
-BarFillCorner.CornerRadius = UDim.new(0, 2)
+BarFillCorner.CornerRadius = UDim.new(0, 3)
 BarFillCorner.Parent       = SplashBarFill
 
--- Animated dots
+-- Animated Loading Indicator (Pulsing dots)
 local SplashDots = Instance.new("TextLabel")
-SplashDots.Size                = UDim2.new(1, 0, 0, 16)
-SplashDots.Position            = UDim2.new(0, 0, 0, 106)
+SplashDots.Size                = UDim2.new(1, 0, 0, 14)
+SplashDots.Position            = UDim2.fromOffset(0, 160)
 SplashDots.BackgroundTransparency = 1
 SplashDots.Text                = "●  ○  ○"
-SplashDots.TextColor3          = Color3.fromRGB(80, 160, 255)
-SplashDots.TextSize            = 10
-SplashDots.Font                = Enum.Font.GothamMedium
+SplashDots.TextColor3          = Color3.fromRGB(100, 140, 255)
+SplashDots.TextSize            = 9
+SplashDots.Font                = Enum.Font.GothamBold
 SplashDots.TextXAlignment      = Enum.TextXAlignment.Center
 SplashDots.ZIndex              = 202
 SplashDots.Parent              = SplashCard
 
--- Splash entrance animation
+-- Entrance animation
 SplashCard.BackgroundTransparency = 1
-SplashCard.Size = UDim2.new(0, 210, 0, 130)
+SplashCard.Size = UDim2.new(0, 280, 0, 160)
 local function tw(o, t, p)
     TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), p):Play()
 end
-tw(SplashCard, 0.4, {BackgroundTransparency = 0, Size = UDim2.new(0, 260, 0, 160)})
-tw(SplashBg, 0.3, {BackgroundTransparency = 0.15})
+tw(SplashCard, 0.45, {BackgroundTransparency = 0, Size = UDim2.new(0, 340, 0, 200)})
+tw(SplashBg, 0.35, {BackgroundTransparency = 0.15})
 
 for _, child in ipairs(SplashCard:GetDescendants()) do
     if child:IsA("TextLabel") then
         child.TextTransparency = 1
-        TweenService:Create(child, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
+        TweenService:Create(child, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
     elseif child:IsA("Frame") then
         child.BackgroundTransparency = 1
-        TweenService:Create(child, TweenInfo.new(0.5), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(child, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
     end
 end
 
--- Animated dots cycle
+-- Animated dots & status step cycle
 local dotFrames = {"●  ○  ○", "○  ●  ○", "○  ○  ●"}
 local statusSteps = {
-    "Initializing...",
-    "Loading UI engine...",
-    "Fetching modules...",
-    "Wiring features...",
-    "Almost ready...",
+    "Initializing system engine...",
+    "Loading UI core & components...",
+    "Fetching modules from GitHub...",
+    "Configuring game features...",
+    "Finalizing initialization...",
 }
 local dotIdx, stepIdx = 1, 1
 
@@ -244,12 +319,12 @@ task.spawn(function()
     local lastDot, lastStep = tick(), tick()
     while SplashCard and SplashCard.Parent do
         local now = tick()
-        if now - lastDot >= 0.3 then
+        if now - lastDot >= 0.25 then
             lastDot = now
             dotIdx = (dotIdx % #dotFrames) + 1
             pcall(function() SplashDots.Text = dotFrames[dotIdx] end)
         end
-        if now - lastStep >= 0.9 then
+        if now - lastStep >= 1.0 then
             lastStep = now
             stepIdx = (stepIdx % #statusSteps) + 1
             pcall(function() SplashStatus.Text = statusSteps[stepIdx] end)
@@ -258,10 +333,12 @@ task.spawn(function()
     end
 end)
 
--- Splash progress API (used below during module loading)
+-- Splash progress API
 local function setSplashProgress(pct)
     pcall(function()
-        tw(SplashBarFill, 0.25, {Size = UDim2.new(math.clamp(pct, 0, 1), 0, 1, 0)})
+        local clamped = math.clamp(pct, 0, 1)
+        tw(SplashBarFill, 0.25, {Size = UDim2.new(clamped, 0, 1, 0)})
+        SplashPct.Text = tostring(math.floor(clamped * 100)) .. "%"
     end)
 end
 
@@ -575,14 +652,21 @@ if ActiveGameModule then
 else
 -- Universal mode: create all standard tabs
 
-local MovTab = Window:Tab({ Title = "Movement", Icon = "🏃" })
-local CombatTab = Window:Tab({ Title = "Combat", Icon = "⚔️" })
-local PlayerTab = Window:Tab({ Title = "Player", Icon = "🛡️" })
-local TeleTab = Window:Tab({ Title = "Teleport", Icon = "📍" })
-local VisTab = Window:Tab({ Title = "Visual", Icon = "👁️" })
-local AutoTab = Window:Tab({ Title = "Auto", Icon = "⚡" })
-local MacroTab = Window:Tab({ Title = "Macro", Icon = "🎬" })
-local SetTab = Window:Tab({ Title = "Settings", Icon = "⚙️" })
+local FavTab = Window:Tab({ Title = "Favorites", Icon = "star" })
+local MovTab = Window:Tab({ Title = "Movement", Icon = "person-standing" })
+local CombatTab = Window:Tab({ Title = "Combat", Icon = "swords" })
+local PlayerTab = Window:Tab({ Title = "Player", Icon = "shield" })
+local TeleTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
+local VisTab = Window:Tab({ Title = "Visual", Icon = "eye" })
+local AutoTab = Window:Tab({ Title = "Auto", Icon = "zap" })
+local MacroTab = Window:Tab({ Title = "Macro", Icon = "clapperboard" })
+local SetTab = Window:Tab({ Title = "Settings", Icon = "settings" })
+
+FavTab:Section({ Title = "Quick Access Features" })
+FavTab:Paragraph({
+    Title   = "Favorites & Quick Access",
+    Content = "Instant 1-tap shortcuts for your most used script features!"
+})
 
 if AntiAFK then AntiAFK:Enable() end
 if PerfStats then PerfStats:Enable() end
@@ -622,6 +706,7 @@ MovTab:Section({ Title = "Flight" })
 -- Fly toggle
 flyToggle = MovTab:Toggle({
     Title    = "Fly",
+    Flag     = "Fly",
     Value    = false,
     Tooltip  = "Free flight with adjustable speed",
     Callback = function(v)
@@ -659,6 +744,7 @@ MovTab:Section({ Title = "Speed" })
 
 speedToggle = MovTab:Toggle({
     Title    = "Speed Hack",
+    Flag     = "SpeedHack",
     Value    = false,
     Tooltip  = "Customizable walk speed and jump power",
     Callback = function(v)
@@ -706,6 +792,7 @@ infJumpToggle = MovTab:Toggle({
 ConfigMgr:Register("InfiniteJump", infJumpToggle)
 noclipToggle = MovTab:Toggle({
     Title    = "Noclip",
+    Flag     = "Noclip",
     Value    = false,
     Tooltip  = "Walk through walls and objects",
     Callback = function(v)
@@ -810,6 +897,7 @@ ConfigMgr:Register("WalkOnWater", wowToggle)
 -- ══════════════════════════════════════════════════════════════════════════════
 
 -- Macro name input
+MacroTab:Section({ Title = "Interface" })
 macroNameInput = MacroTab:Input({
     Title = "Macro Name",
     Placeholder = "e.g. route_to_peak",
@@ -827,7 +915,8 @@ macroStatusText = MacroTab:Paragraph({
 MacroTab:Section({ Title = "Recording" })
 
 MacroTab:Button({
-    Title = "⏺️ Start Recording",
+    Title = "Start Recording",
+    Icon  = "circle",
     Tooltip = "Begin recording your movement path",
     Callback = function()
         local name = macroNameInput.Value
@@ -841,7 +930,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "⏹️ Stop Recording",
+    Title = "Stop Recording",
+    Icon  = "square",
     Tooltip = "Stop and save the current recording",
     Callback = function()
         local macro = MacroRec:StopRecording()
@@ -854,7 +944,8 @@ MacroTab:Button({
 MacroTab:Section({ Title = "Playback" })
 
 MacroTab:Button({
-    Title = "▶️ Play Current Macro",
+    Title = "Play Current Macro",
+    Icon  = "play",
     Tooltip = "Play back the selected macro with smooth interpolation",
     Callback = function()
         local macro = MacroRec:GetCurrentMacro()
@@ -868,7 +959,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "⏸️ Pause / Resume",
+    Title = "Pause / Resume",
+    Icon  = "pause",
     Tooltip = "Pause or resume macro playback",
     Callback = function()
         MacroRec:PausePlayback()
@@ -876,7 +968,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "⏹️ Stop Playback",
+    Title = "Stop Playback",
+    Icon  = "square",
     Tooltip = "Stop macro playback immediately",
     Callback = function()
         MacroRec:StopPlayback()
@@ -919,7 +1012,8 @@ ConfigMgr:Register("MacroRecordInputs", recordInputsToggle)
 MacroTab:Section({ Title = "Save / Load" })
 
 MacroTab:Button({
-    Title = "💾 Save Current Macro",
+    Title = "Save Current Macro",
+    Icon  = "save",
     Tooltip = "Save the recorded macro to disk",
     Callback = function()
         local macro = MacroRec:GetCurrentMacro()
@@ -946,7 +1040,8 @@ macroDropdown = MacroTab:Dropdown({
 })
 
 MacroTab:Button({
-    Title = "🔄 Refresh List",
+    Title = "Refresh List",
+    Icon  = "refresh-cw",
     Tooltip = "Refresh the saved macros list",
     Callback = function()
         refreshMacroList()
@@ -955,7 +1050,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "📂 Load Selected",
+    Title = "Load Selected",
+    Icon  = "folder-open",
     Tooltip = "Load the selected macro for playback",
     Callback = function()
         if selectedMacroName and selectedMacroName ~= "(no macros)" then
@@ -970,7 +1066,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "🗑️ Delete Selected",
+    Title = "Delete Selected",
+    Icon  = "trash-2",
     Tooltip = "Permanently delete the selected macro",
     Callback = function()
         if selectedMacroName and selectedMacroName ~= "(no macros)" then
@@ -984,7 +1081,8 @@ MacroTab:Button({
 MacroTab:Section({ Title = "Import / Export" })
 
 MacroTab:Button({
-    Title = "📤 Export to Clipboard",
+    Title = "Export to Clipboard",
+    Icon  = "share",
     Tooltip = "Copy macro data as JSON to clipboard",
     Callback = function()
         if selectedMacroName and selectedMacroName ~= "(no macros)" then
@@ -1007,7 +1105,8 @@ importInput = MacroTab:Input({
 })
 
 MacroTab:Button({
-    Title = "📥 Import from Clipboard",
+    Title = "Import from Clipboard",
+    Icon  = "download",
     Tooltip = "Import macro from clipboard or text field",
     Callback = function()
         local clipboard = ""
@@ -1061,7 +1160,8 @@ local function refreshQueueDisplay()
 end
 
 MacroTab:Button({
-    Title = "➕ Add Selected to Queue",
+    Title = "Add Selected to Queue",
+    Icon  = "plus",
     Tooltip = "Add selected macro to the playback queue",
     Callback = function()
         if selectedMacroName and selectedMacroName ~= "(no macros)" then
@@ -1078,7 +1178,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "➖ Remove Selected from Queue",
+    Title = "Remove Selected from Queue",
+    Icon  = "minus",
     Tooltip = "Remove selected macro from queue",
     Callback = function()
         if selectedQueueItem and selectedQueueItem ~= "(empty queue)" then
@@ -1093,7 +1194,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "🗑 Clear Queue",
+    Title = "Clear Queue",
+    Icon  = "trash",
     Tooltip = "Remove all macros from the queue",
     Callback = function()
         MacroRec:ClearQueue()
@@ -1124,7 +1226,8 @@ ConfigMgr:Register("MacroQueueLoop", queueLoopToggle)
 MacroTab:Section({ Title = "Queue Playback" })
 
 MacroTab:Button({
-    Title = "▶️ Start Queue Playback",
+    Title = "Start Queue Playback",
+    Icon  = "play",
     Tooltip = "Start sequential macro queue playback",
     Callback = function()
         if #MacroRec:GetQueue() == 0 then
@@ -1140,7 +1243,8 @@ MacroTab:Button({
 })
 
 MacroTab:Button({
-    Title = "⏹️ Stop Queue Playback",
+    Title = "Stop Queue Playback",
+    Icon  = "square",
     Tooltip = "Stop the macro queue playback",
     Callback = function()
         MacroRec:StopQueuePlayback()
@@ -1197,6 +1301,7 @@ perfStatsToggle = VisTab:Toggle({
 ConfigMgr:Register("PerfStats", perfStatsToggle)
 espToggle = VisTab:Toggle({
     Title    = "ESP",
+    Flag     = "ESP",
     Tooltip = "See players through walls",
     Value    = false,
     Callback = function(v)
@@ -1312,6 +1417,18 @@ antiLagToggle = VisTab:Toggle({
     end
 })
 ConfigMgr:Register("AntiLagMode", antiLagToggle)
+
+superAntiLagToggle = VisTab:Toggle({
+    Title    = "Super Anti-Lag (Potato Map)",
+    Flag     = "SuperAntiLag",
+    Tooltip  = "Convert map to smooth plastic low-poly blocks & strip textures for maximum FPS",
+    Value    = false,
+    Callback = function(v)
+        if v then PerfBooster:EnablePotato() else PerfBooster:DisablePotato() end
+        N("Super Anti-Lag", v and "Potato Mode Enabled" or "Potato Mode Disabled")
+    end
+})
+ConfigMgr:Register("SuperAntiLag", superAntiLagToggle)
 
 fpsCapSlider = VisTab:Slider({
     Title    = "FPS Cap",
@@ -1828,7 +1945,26 @@ PlayerTab:Button({
 })
 
 PlayerTab:Button({
-    Title    = "👔 Wear All Saved",
+    Title    = "Wear Selected",
+    Icon     = "shirt",
+    Tooltip  = "Equip the accessory selected in the dropdown",
+    Callback = function()
+        if not AvatarSpoof.Enabled then
+            N("Avatar Customizer", "Enable Avatar Customizer first!")
+            return
+        end
+        if not selectedSavedAcc or selectedSavedAcc == "(no accessories saved)" then
+            N("Avatar Customizer", "No accessory selected!")
+            return
+        end
+        AvatarSpoof:WearAccessory(selectedSavedAcc)
+        N("Avatar Customizer", "Equipped: " .. selectedSavedAcc)
+    end
+})
+
+PlayerTab:Button({
+    Title    = "Wear All Saved",
+    Icon     = "shirt",
     Tooltip  = "Equip all saved accessories at once",
     Callback = function()
         if not AvatarSpoof.Enabled then
@@ -1846,7 +1982,8 @@ PlayerTab:Button({
 })
 
 PlayerTab:Button({
-    Title    = "🗑️ Remove Selected",
+    Title    = "Remove Selected",
+    Icon     = "trash-2",
     Tooltip  = "Unequip and delete the selected accessory from saved list",
     Callback = function()
         if not selectedSavedAcc or selectedSavedAcc == "(no accessories saved)" then
@@ -1864,7 +2001,8 @@ PlayerTab:Button({
 })
 
 PlayerTab:Button({
-    Title    = "🧹 Remove All",
+    Title    = "Remove All",
+    Icon     = "trash",
     Tooltip  = "Unequip and clear all saved accessories",
     Callback = function()
         AvatarSpoof:ClearAllSaved()
@@ -1879,6 +2017,7 @@ PlayerTab:Paragraph({ Title = "Username", Content = lp.Name })
 PlayerTab:Paragraph({ Title = "User ID",  Content = tostring(lp.UserId) })
 PlayerTab:Button({
     Title    = "Copy Player ID",
+    Icon     = "copy",
     Tooltip = "Copy your Roblox user ID to clipboard",
     Callback = function()
         pcall(function() setclipboard(tostring(lp.UserId)) end)
@@ -1887,8 +2026,21 @@ PlayerTab:Button({
 })
 
 PlayerTab:Section({ Title = "Server Utilities" })
+autoRejoinToggle = PlayerTab:Toggle({
+    Title    = "Auto Rejoin on Disconnect",
+    Flag     = "AutoRejoin",
+    Value    = false,
+    Tooltip  = "Automatically reconnect to server if disconnected or kicked",
+    Callback = function(v)
+        if v then Rejoin:EnableAutoRejoin() else Rejoin:DisableAutoRejoin() end
+        N("Auto Rejoin", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("AutoRejoin", autoRejoinToggle)
+
 PlayerTab:Button({
-    Title    = "🔄 Rejoin Current Server",
+    Title    = "Rejoin Current Server",
+    Icon     = "refresh-cw",
     Tooltip  = "Reconnect to this server instance",
     Callback = function()
         N("Server", "Rejoining...")
@@ -1896,7 +2048,8 @@ PlayerTab:Button({
     end
 })
 PlayerTab:Button({
-    Title    = "🔀 Server Hop",
+    Title    = "Server Hop",
+    Icon     = "shuffle",
     Tooltip  = "Join a different server of the same game",
     Callback = function()
         N("Server", "Finding new server...")
@@ -1904,7 +2057,8 @@ PlayerTab:Button({
     end
 })
 PlayerTab:Button({
-    Title    = "📋 Copy Server JobID",
+    Title    = "Copy Server JobID",
+    Icon     = "copy",
     Tooltip  = "Copy current server JobID to clipboard",
     Callback = function()
         local ok, id = ServerUtils:CopyJobID()
@@ -1923,6 +2077,7 @@ TeleTab:Section({ Title = "Position" })
 
 TeleTab:Button({
     Title    = "Copy My Position",
+    Icon     = "map-pin",
     Tooltip = "Save your current position",
     Callback = function()
         local p = Teleport:SavePosition()
@@ -1932,6 +2087,7 @@ TeleTab:Button({
 })
 TeleTab:Button({
     Title    = "Go to Saved Position",
+    Icon     = "navigation",
     Tooltip = "Teleport to your last saved position",
     Callback = function()
         if Teleport:GotoSaved(Fly) then N("Teleport", "Teleported")
@@ -1953,6 +2109,7 @@ do local list = Teleport:GetPlayerList(); selectedPlayer = list[1] end
 
 TeleTab:Button({
     Title    = "Refresh Players",
+    Icon     = "refresh-cw",
     Tooltip = "Refresh the player list",
     Callback = function()
         local list = Teleport:GetPlayerList()
@@ -1963,6 +2120,7 @@ TeleTab:Button({
 })
 TeleTab:Button({
     Title    = "Teleport to Player",
+    Icon     = "send",
     Tooltip = "Teleport to the selected player",
     Callback = function()
         local name = selectedPlayer
@@ -1987,6 +2145,7 @@ local wpDrop
 
 TeleTab:Button({
     Title    = "Create Waypoint",
+    Icon     = "plus-circle",
     Tooltip = "Save current position as a waypoint",
     Callback = function()
         local name = wpNameIn.Value or ""
@@ -2015,6 +2174,7 @@ do local list = Waypoint:GetList(); selectedWaypoint = list[1] end
 
 TeleTab:Button({
     Title    = "Refresh Waypoints",
+    Icon     = "refresh-cw",
     Tooltip = "Refresh the waypoint list",
     Callback = function()
         local list = Waypoint:GetList()
@@ -2025,6 +2185,7 @@ TeleTab:Button({
 })
 TeleTab:Button({
     Title    = "Teleport to Waypoint",
+    Icon     = "navigation",
     Tooltip = "Teleport to the selected waypoint",
     Callback = function()
         local name = selectedWaypoint
@@ -2037,6 +2198,7 @@ TeleTab:Button({
 })
 TeleTab:Button({
     Title    = "Delete Waypoint",
+    Icon     = "trash-2",
     Tooltip = "Delete the selected waypoint",
     Callback = function()
         local name = selectedWaypoint
@@ -2088,7 +2250,8 @@ local function refreshWpQueue()
 end
 
 TeleTab:Button({
-    Title = "➕ Add Selected to Queue",
+    Title = "Add Selected to Queue",
+    Icon  = "plus",
     Tooltip = "Add selected waypoint to the queue",
     Callback = function()
         local name = selectedWaypoint
@@ -2105,7 +2268,8 @@ TeleTab:Button({
 })
 
 TeleTab:Button({
-    Title = "➖ Remove Selected from Queue",
+    Title = "Remove Selected from Queue",
+    Icon  = "minus",
     Tooltip = "Remove selected waypoint from queue",
     Callback = function()
         if selectedWpQueueItem and selectedWpQueueItem ~= "(empty queue)" then
@@ -2119,7 +2283,8 @@ TeleTab:Button({
 })
 
 TeleTab:Button({
-    Title = "🗑 Clear Queue",
+    Title = "Clear Queue",
+    Icon  = "trash",
     Tooltip = "Clear the waypoint queue",
     Callback = function()
         Waypoint:ClearQueue()
@@ -2146,7 +2311,8 @@ queueDelaySlider = TeleTab:Slider({
 ConfigMgr:Register("WpQueueDelay", queueDelaySlider)
 
 TeleTab:Button({
-    Title = "▶️ Start Queue",
+    Title = "Start Queue",
+    Icon  = "play",
     Tooltip = "Start sequential waypoint teleport",
     Callback = function()
         if #Waypoint:GetQueue() == 0 then
@@ -2161,7 +2327,8 @@ TeleTab:Button({
 })
 
 TeleTab:Button({
-    Title = "⏹️ Stop Queue",
+    Title = "Stop Queue",
+    Icon  = "square",
     Tooltip = "Stop the waypoint queue",
     Callback = function()
         Waypoint:StopQueue()
@@ -2207,6 +2374,7 @@ AutoTab:Section({ Title = "Auto Clicker" })
 
 autoClickerToggle = AutoTab:Toggle({
     Title    = "Auto Clicker",
+    Flag     = "AutoClicker",
     Value    = false,
     Tooltip  = "Automatically click at configurable speed",
     Callback = function(v)
@@ -2269,6 +2437,79 @@ AutoTab:Keybind({
     end
 })
 
+-- Populate Favorites Quick Access Tab
+FavTab:Toggle({
+    Title      = "Fly",
+    Flag       = "Fly",
+    Icon       = "plane",
+    _isStarred = true,
+    Value      = false,
+    Tooltip    = "Quick toggle for Fly",
+    Callback   = function(v)
+        if v and Fly then Fly:Enable() elseif Fly then Fly:Disable() end
+    end
+})
+
+FavTab:Toggle({
+    Title      = "Speed Hack",
+    Flag       = "SpeedHack",
+    Icon       = "zap",
+    _isStarred = true,
+    Value      = false,
+    Tooltip    = "Quick toggle for Speed Hack",
+    Callback   = function(v)
+        if v and Speed then Speed:Enable() elseif Speed then Speed:Disable() end
+    end
+})
+
+FavTab:Toggle({
+    Title      = "Player ESP",
+    Flag       = "ESP",
+    Icon       = "eye",
+    _isStarred = true,
+    Value      = false,
+    Tooltip    = "Quick toggle for ESP",
+    Callback   = function(v)
+        if v and ESP then ESP:Enable() elseif ESP then ESP:Disable() end
+    end
+})
+
+FavTab:Toggle({
+    Title      = "Super Anti-Lag (Potato Map)",
+    Flag       = "SuperAntiLag",
+    Icon       = "shield",
+    _isStarred = true,
+    Value      = false,
+    Tooltip    = "Quick toggle for Super Anti-Lag Potato mode",
+    Callback   = function(v)
+        if v and PerfBooster then PerfBooster:EnablePotato() elseif PerfBooster then PerfBooster:DisablePotato() end
+    end
+})
+
+FavTab:Toggle({
+    Title      = "Noclip",
+    Flag       = "Noclip",
+    Icon       = "ghost",
+    _isStarred = true,
+    Value      = false,
+    Tooltip    = "Quick toggle for Noclip",
+    Callback   = function(v)
+        if v and Noclip then Noclip:Enable() elseif Noclip then Noclip:Disable() end
+    end
+})
+
+FavTab:Toggle({
+    Title      = "Auto Clicker",
+    Flag       = "AutoClicker",
+    Icon       = "mouse-pointer",
+    _isStarred = true,
+    Value      = false,
+    Tooltip    = "Quick toggle for Auto Clicker",
+    Callback   = function(v)
+        if v and AutoClicker then AutoClicker:Enable() elseif AutoClicker then AutoClicker:Disable() end
+    end
+})
+
 -- ══════════════════════════════════════════════════════════════════════════════
 -- SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -2285,7 +2526,7 @@ SetTab:Keybind({
 })
 themeDrop = SetTab:Dropdown({
     Title    = "Theme",
-    Values   = {"Default","Gold","Emerald","Rose","Violet","Amber","Neon"},
+    Values   = {"Default","Cyan","Gold","Emerald","Rose","Violet","Frost"},
     Value    = "Default",
     Tooltip  = "Change the UI color theme",
     Callback = function(v)
@@ -2306,7 +2547,8 @@ webhookUrlInput = SetTab:Input({
 ConfigMgr:Register("WebhookUrl", webhookUrlInput)
 
 SetTab:Button({
-    Title    = "🔔 Send Test Notification",
+    Title    = "Send Test Notification",
+    Icon     = "bell",
     Tooltip  = "Send test embed message to Discord Webhook",
     Callback = function()
         WebhookLogger:SetUrl(webhookUrlInput.Value)
@@ -2349,7 +2591,8 @@ cfgDrop = SetTab:Dropdown({
 do local list = getCfgList(); selectedConfig = list[1] end
 
 SetTab:Button({
-    Title    = "💾 Save",
+    Title    = "Save Config",
+    Icon     = "save",
     Style    = "Primary",
     Tooltip  = "Save current settings as a config",
     Callback = function()
@@ -2365,7 +2608,8 @@ SetTab:Button({
     end
 })
 SetTab:Button({
-    Title    = "📂 Load",
+    Title    = "Load Config",
+    Icon     = "folder-open",
     Style    = "Outline",
     Tooltip  = "Load the selected config",
     Callback = function()
@@ -2376,7 +2620,8 @@ SetTab:Button({
     end
 })
 SetTab:Button({
-    Title    = "🗑 Delete",
+    Title    = "Delete Config",
+    Icon     = "trash-2",
     Style    = "Danger",
     Tooltip  = "Delete the selected config permanently",
     Callback = function()
@@ -2390,7 +2635,8 @@ SetTab:Button({
     end
 })
 SetTab:Button({
-    Title    = "⭐ Set as Default",
+    Title    = "Set as Default",
+    Icon     = "star",
     Style    = "Outline",
     Tooltip  = "Auto-load this config on startup",
     Callback = function()
@@ -2398,6 +2644,47 @@ SetTab:Button({
         if not s or s == "(none)" then return end
         local ok = ConfigMgr:SetDefault(s)
         N("Config", ok and s.." is default" or "Failed")
+    end
+})
+
+SetTab:Section({ Title = "Config Share Code (Base64)" })
+
+shareCodeInput = SetTab:Input({
+    Title       = "Share Code",
+    Placeholder = "Paste LX1-... code here",
+    Value       = "",
+    Tooltip     = "Base64 config code for sharing settings",
+    Callback    = function() end
+})
+
+SetTab:Button({
+    Title    = "Export Config Share Code",
+    Icon     = "share",
+    Tooltip  = "Copy Base64 share code of current settings to clipboard",
+    Callback = function()
+        local code = ConfigMgr:ExportCode()
+        if setclipboard then
+            pcall(setclipboard, code)
+            N("Config Share Code", "Copied share code to clipboard!")
+        else
+            N("Config Share Code", "Exported code (check console)")
+            print("[LeonX Share Code] " .. tostring(code))
+        end
+    end
+})
+
+SetTab:Button({
+    Title    = "Import Config Share Code",
+    Icon     = "download",
+    Tooltip  = "Import and set all settings from typed share code",
+    Callback = function()
+        local code = shareCodeInput.Value
+        local ok, msg = ConfigMgr:ImportCode(code)
+        if ok then
+            N("Config Share Code", "Imported successfully!")
+        else
+            N("Config Share Code", "Failed: " .. tostring(msg))
+        end
     end
 })
 
