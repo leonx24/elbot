@@ -685,11 +685,13 @@ local SetTab = Window:Tab({ Title = "Settings", Icon = "settings" })
 FavTab:Section({ Title = "Quick Access Features" })
 FavTab:Paragraph({
     Title   = "Favorites & Quick Access",
-    Content = "Instant 1-tap shortcuts for your most used script features!"
+    Content = "Star (★) any toggle to pin it here! Your favorite features at your fingertips."
 })
 
+-- Dynamic favorites tracking (toggled items starred from other tabs appear here)
+local _favDynamicToggles = {} -- flagKey → toggle api
+
 print("[LeonX Debug] Initializing core modules...")
-if AntiAFK then pcall(function() AntiAFK:Enable() end) end
 if PerfStats then pcall(function() PerfStats:Enable() end) end
 
 -- ── Macro Recorder UI ────────────────────────────────────────────────────────
@@ -842,10 +844,10 @@ antiRagdollToggle = MovTab:Toggle({
 })
 ConfigMgr:Register("AntiRagdoll", antiRagdollToggle)
 invisToggle = MovTab:Toggle({
-    Title    = "Invisible (Ghost Mode)",
+    Title    = "Invisible (Server-Side)",
     Flag     = "Invisible",
     Value    = false,
-    Tooltip  = "Safe invisibility with ghost visual feedback",
+    Tooltip  = "True invisibility — other players cannot see you (CFrame void method)",
     Callback = function(v)
         if v then Invisible:Enable() else Invisible:Disable() end
         N("Invisible", v and "Enabled" or "Disabled")
@@ -2129,6 +2131,27 @@ tpDrop = TeleTab:Dropdown({
 })
 do local list = Teleport:GetPlayerList(); selectedPlayer = list[1] end
 
+-- Auto-refresh player list when players join/leave
+pcall(function()
+    Players.PlayerAdded:Connect(function()
+        task.wait(1)
+        local list = Teleport:GetPlayerList()
+        tpDrop:Refresh(list)
+        if not selectedPlayer or selectedPlayer == "(no players)" then
+            selectedPlayer = list[1]
+        end
+    end)
+    Players.PlayerRemoving:Connect(function(p)
+        task.wait(0.5)
+        local list = Teleport:GetPlayerList()
+        tpDrop:Refresh(list)
+        -- If the removed player was selected, reset selection
+        if selectedPlayer and (selectedPlayer:find(p.Name) or selectedPlayer == p.Name) then
+            selectedPlayer = list[1]
+        end
+    end)
+end)
+
 TeleTab:Button({
     Title    = "Refresh Players",
     Icon     = "refresh-cw",
@@ -2137,7 +2160,7 @@ TeleTab:Button({
         local list = Teleport:GetPlayerList()
         tpDrop:Refresh(list)
         selectedPlayer = list[1]
-        N("Players", "Refreshed")
+        N("Players", "Refreshed (" .. (#list == 1 and list[1] == "(no players)" and "0" or tostring(#list)) .. " found)")
     end
 })
 TeleTab:Button({
@@ -2145,14 +2168,29 @@ TeleTab:Button({
     Icon     = "send",
     Tooltip = "Teleport to the selected player",
     Callback = function()
-        local name = selectedPlayer
-        if not name or name == "(no players)" then return end
-        if Teleport:ToPlayer(name, Fly) then N("Teleport", "→ "..name)
-        else N("Teleport", name.." not found") end
+        local raw = selectedPlayer
+        if not raw or raw == "(no players)" then return end
+        -- Extract actual username from "DisplayName (@Username)" format
+        local name = Teleport:ExtractName(raw)
+        local ok, reason = Teleport:ToPlayer(name, Fly)
+        if ok then
+            N("Teleport", "→ " .. raw)
+        elseif reason == "left" then
+            N("Teleport", raw .. " has left the game")
+            -- Auto-refresh the list
+            local list = Teleport:GetPlayerList()
+            tpDrop:Refresh(list)
+            selectedPlayer = list[1]
+        elseif reason == "nochar" then
+            N("Teleport", raw .. " — character not loaded yet")
+        else
+            N("Teleport", raw .. " not found")
+        end
     end
 })
 
 TeleTab:Section({ Title = "Waypoints" })
+
 
 wpNameIn = TeleTab:Input({
     Title       = "Waypoint Name",
@@ -2459,7 +2497,7 @@ AutoTab:Keybind({
     end
 })
 
--- Populate Favorites Quick Access Tab
+-- Populate Favorites Quick Access Tab (default pinned items)
 FavTab:Toggle({
     Title      = "Fly",
     Flag       = "Fly",
@@ -2531,6 +2569,69 @@ FavTab:Toggle({
         if v and AutoClicker then AutoClicker:Enable() elseif AutoClicker then AutoClicker:Disable() end
     end
 })
+
+-- Dynamic favorites: when user stars a toggle from any other tab, create a synced toggle here
+FavTab:Section({ Title = "Your Starred Features" })
+
+Library._onFavoriteChanged = function(flagKey, isStarred, info)
+    if isStarred then
+        -- Don't duplicate if already exists (default pinned items)
+        if _favDynamicToggles[flagKey] then return end
+        -- Skip if this is one of the default pinned flags (they're already above)
+        local defaults = { Fly=true, SpeedHack=true, ESP=true, SuperAntiLag=true, Noclip=true, AutoClicker=true }
+        if defaults[flagKey] then return end
+
+        pcall(function()
+            local toggle = FavTab:Toggle({
+                Title      = info.Title or flagKey,
+                Flag       = info.Flag,
+                Icon       = info.Icon,
+                _isStarred = true,
+                Value      = false,
+                Tooltip    = info.Tooltip or ("Quick toggle for " .. (info.Title or flagKey)),
+                Callback   = info.Callback,
+            })
+            _favDynamicToggles[flagKey] = toggle
+        end)
+    else
+        -- Remove the dynamic toggle
+        if _favDynamicToggles[flagKey] then
+            pcall(function()
+                local toggle = _favDynamicToggles[flagKey]
+                if toggle and toggle.Frame then
+                    toggle.Frame:Destroy()
+                end
+            end)
+            _favDynamicToggles[flagKey] = nil
+        end
+    end
+
+    -- Save favorites to file for persistence
+    pcall(function()
+        local favList = {}
+        for k, _ in pairs(Library._favorites) do
+            favList[#favList + 1] = k
+        end
+        local json = game:GetService("HttpService"):JSONEncode(favList)
+        if not isfolder("Leon X") then makefolder("Leon X") end
+        writefile("Leon X/favorites.json", json)
+    end)
+end
+
+-- Load saved favorites from file on boot
+pcall(function()
+    if isfile and isfile("Leon X/favorites.json") then
+        local raw = readfile("Leon X/favorites.json")
+        local list = game:GetService("HttpService"):JSONDecode(raw)
+        if type(list) == "table" then
+            for _, flagKey in ipairs(list) do
+                Library._favorites[flagKey] = true
+            end
+        end
+    end
+end)
+
+
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- SETTINGS TAB
