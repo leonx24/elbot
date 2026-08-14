@@ -733,16 +733,22 @@ flyToggle = MovTab:Toggle({
     Value    = false,
     Tooltip  = "Free flight with adjustable speed",
     Callback = function(v)
-        if v and Fly then Fly:Enable() elseif Fly then Fly:Disable() end
+        if v and Fly then
+            local fs = (flySpeedSlider and flySpeedSlider.Value) or 100
+            Fly:SetSpeed(fs)
+            Fly:Enable()
+        elseif Fly then
+            Fly:Disable()
+        end
         N("Fly", v and "Enabled" or "Disabled")
     end
 })
 ConfigMgr:Register("Fly", flyToggle)
 flySpeedSlider = MovTab:Slider({
     Title    = "Fly Speed",
-    Value    = { Min = 10, Max = 300, Default = 60 },
+    Value    = { Min = 10, Max = 500, Default = 100 },
     Step     = 1,
-    Tooltip  = "Adjust flight speed (10-300)",
+    Tooltip  = "Adjust flight speed (10-500)",
     Callback = function(v) if v >= 10 then Fly:SetSpeed(v) end end
 })
 ConfigMgr:Register("FlySpeed", flySpeedSlider)
@@ -3108,18 +3114,21 @@ task.delay(1.5, function()
             end
         end)
 
-        -- 9. WalkSpeed safety: ensure character can walk
+        -- 9. WalkSpeed safety: ensure character can walk normally
         pcall(function()
             local char = game:GetService("Players").LocalPlayer.Character
             if char then
                 local hum = char:FindFirstChildOfClass("Humanoid")
                 if hum then
-                    if not Speed.Enabled and hum.WalkSpeed < 16 then
-                        hum.WalkSpeed = 16
-                    end
-                    if not Speed.Enabled and hum.JumpPower < 50 then
-                        hum.JumpPower = 50
-                        hum.JumpHeight = 7.2
+                    if not Speed.Enabled then
+                        if hum.WalkSpeed < 16 then
+                            hum.WalkSpeed = 16
+                        end
+                        if hum.UseJumpPower then
+                            if hum.JumpPower < 50 then hum.JumpPower = 50 end
+                        else
+                            if hum.JumpHeight < 7.2 then hum.JumpHeight = 7.2 end
+                        end
                     end
                 end
             end
