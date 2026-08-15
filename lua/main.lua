@@ -46,7 +46,7 @@ local BASE = "https://raw.githubusercontent.com/leonx24/Leon-x/main/"
 
 local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getfenv and getfenv(0).loadstring)
 
-local CURRENT_VERSION = "1.3"
+local CURRENT_VERSION = "0.0.2"
 pcall(function()
     CURRENT_VERSION = game:HttpGet(BASE.."version.txt?t="..tostring(os.time()), true):match("^%s*(.-)%s*$")
 end)
@@ -734,7 +734,7 @@ flyToggle = MovTab:Toggle({
     Tooltip  = "Free flight with adjustable speed",
     Callback = function(v)
         if v and Fly then
-            local fs = (flySpeedSlider and flySpeedSlider.Value) or 100
+            local fs = (flySpeedSlider and flySpeedSlider.Value) or Fly.Speed or 60
             Fly:SetSpeed(fs)
             Fly:Enable()
         elseif Fly then
@@ -746,7 +746,7 @@ flyToggle = MovTab:Toggle({
 ConfigMgr:Register("Fly", flyToggle)
 flySpeedSlider = MovTab:Slider({
     Title    = "Fly Speed",
-    Value    = { Min = 10, Max = 500, Default = 100 },
+    Value    = { Min = 10, Max = 500, Default = 60 },
     Step     = 1,
     Tooltip  = "Adjust flight speed (10-500)",
     Callback = function(v) if v >= 10 then Fly:SetSpeed(v) end end
@@ -766,7 +766,6 @@ UIS.InputBegan:Connect(function(i, gp)
     if gp or i.KeyCode ~= flyKey then return end
     local s = not Fly.Enabled
     flyToggle:Set(s)
-    if s then Fly:Enable() else Fly:Disable() end
 end)
 
 MovTab:Section({ Title = "Speed" })
@@ -2512,7 +2511,13 @@ FavTab:Toggle({
     Value      = false,
     Tooltip    = "Quick toggle for Fly",
     Callback   = function(v)
-        if v and Fly then Fly:Enable() elseif Fly then Fly:Disable() end
+        if v and Fly then
+            local fs = (flySpeedSlider and flySpeedSlider.Value) or Fly.Speed or 60
+            Fly:SetSpeed(fs)
+            Fly:Enable()
+        elseif Fly then
+            Fly:Disable()
+        end
     end
 })
 
@@ -2524,7 +2529,15 @@ FavTab:Toggle({
     Value      = false,
     Tooltip    = "Quick toggle for Speed Hack",
     Callback   = function(v)
-        if v and Speed then Speed:Enable() elseif Speed then Speed:Disable() end
+        if v and Speed then
+            local ws = (walkSpeedSlider and walkSpeedSlider.Value) or Speed.WalkSpeed or 16
+            local jp = (jumpPowerSlider  and jumpPowerSlider.Value)  or Speed.JumpPower or 50
+            Speed:SetWalkSpeed(ws)
+            Speed:SetJumpPower(jp)
+            Speed:Enable()
+        elseif Speed then
+            Speed:Disable()
+        end
     end
 })
 
