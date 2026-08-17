@@ -46,7 +46,7 @@ local BASE = "https://raw.githubusercontent.com/leonx24/Leon-x/main/"
 
 local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getfenv and getfenv(0).loadstring)
 
-local CURRENT_VERSION = "0.0.2"
+local CURRENT_VERSION = "0.0.3"
 pcall(function()
     CURRENT_VERSION = game:HttpGet(BASE.."version.txt?t="..tostring(os.time()), true):match("^%s*(.-)%s*$")
 end)
@@ -353,6 +353,7 @@ end)
 local loadErrors = {}
 local MAX_RETRIES = 4
 local function load(p)
+    local shortName = p:match("([^/]+)%.lua$") or p
     for attempt = 1, MAX_RETRIES do
         local ok, result = pcall(function()
             local src = game:HttpGet(BASE..p.."?t="..tostring(os.time()), true)
@@ -370,6 +371,11 @@ local function load(p)
         if attempt < MAX_RETRIES then
             local delay = attempt * 3
             warn("[LeonX] RETRY " .. attempt .. "/" .. MAX_RETRIES .. ": " .. tostring(p) .. " — " .. tostring(result) .. " (waiting " .. delay .. "s)")
+            -- Show retry status on splash screen
+            pcall(function()
+                SplashStatus.Text = "Retrying " .. shortName .. "... (" .. attempt .. "/" .. MAX_RETRIES .. ")"
+                SplashPct.Text = delay .. "s"
+            end)
             task.wait(delay)
         else
             warn("[LeonX] FAIL: " .. tostring(p) .. " — " .. tostring(result))
