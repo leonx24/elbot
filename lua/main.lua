@@ -42,7 +42,7 @@ pcall(function()
     end
 end)
 
-local BASE = "https://raw.githubusercontent.com/leonx24/Leon-x/main/"
+local BASE = "https://gitlab.com/affavanleon/leonx/-/raw/main/"
 
 local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getfenv and getfenv(0).loadstring)
 
@@ -109,7 +109,7 @@ task.spawn(function()
     end
 end)
 
-local LOGO_URL = "https://raw.githubusercontent.com/leonx24/Leon-x/main/assets/logo.jpg"
+local LOGO_URL = "https://gitlab.com/affavanleon/leonx/-/raw/main/assets/logo.jpg"
 local cachedLogoAsset = nil
 local function getCustomLogoAsset()
     if cachedLogoAsset then return cachedLogoAsset end
@@ -371,7 +371,6 @@ local function load(p)
         if attempt < MAX_RETRIES then
             local delay = attempt * 3
             warn("[LeonX] RETRY " .. attempt .. "/" .. MAX_RETRIES .. ": " .. tostring(p) .. " — " .. tostring(result) .. " (waiting " .. delay .. "s)")
-            -- Show retry status on splash screen
             pcall(function()
                 SplashStatus.Text = "Retrying " .. shortName .. "... (" .. attempt .. "/" .. MAX_RETRIES .. ")"
                 SplashPct.Text = delay .. "s"
@@ -3203,35 +3202,34 @@ end)
 -- Smooth splash exit
 local splashDestroyed = false
 task.spawn(function()
-    task.wait(0.3)
     pcall(function()
-        tw(SplashBarFill, 0.2, {Size = UDim2.new(1, 0, 1, 0)})
+        tw(SplashBarFill, 0.15, {Size = UDim2.new(1, 0, 1, 0)})
     end)
-    task.wait(0.35)
+    task.wait(0.2)
     pcall(function()
-        tw(SplashCard, 0.5, {BackgroundTransparency = 1})
+        tw(SplashCard, 0.35, {BackgroundTransparency = 1})
         for _, child in ipairs(SplashCard:GetDescendants()) do
             pcall(function()
                 if child:IsA("TextLabel") then
-                    TweenService:Create(child, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+                    TweenService:Create(child, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
                 elseif child:IsA("Frame") then
-                    TweenService:Create(child, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
+                    TweenService:Create(child, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
                 elseif child:IsA("UIStroke") then
-                    TweenService:Create(child, TweenInfo.new(0.4), {Transparency = 1}):Play()
+                    TweenService:Create(child, TweenInfo.new(0.3), {Transparency = 1}):Play()
                 end
             end)
         end
-        tw(SplashBg, 0.5, {BackgroundTransparency = 1})
+        tw(SplashBg, 0.35, {BackgroundTransparency = 1})
     end)
-    task.wait(0.55)
+    task.wait(0.35)
     pcall(function()
         if SplashGui and SplashGui.Parent then SplashGui:Destroy() end
     end)
     splashDestroyed = true
 end)
 
--- Guaranteed fallback: force-destroy splash after 5s no matter what
-task.delay(5, function()
+-- Guaranteed fallback: force-destroy splash after 1.5s
+task.delay(1.5, function()
     if not splashDestroyed then
         pcall(function() if SplashGui and SplashGui.Parent then SplashGui:Destroy() end end)
         splashDestroyed = true
