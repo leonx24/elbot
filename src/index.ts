@@ -1970,7 +1970,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      if (interaction.commandName === "supported-games") {
+      if (interaction.commandName === "supported-games" || interaction.commandName === "support-game") {
         const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
         const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
         await interaction.reply(v2Payload);
