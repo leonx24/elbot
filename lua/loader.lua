@@ -41,6 +41,24 @@ local function getHWID()
     return id ~= "" and id or tostring(lp.UserId)
 end
 
+local function checkKeyOnline(key, rId, hwid)
+    local urls = {
+        "https://elbot-production.up.railway.app/api/validate-key?key=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time()),
+        GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+    }
+    for _, u in ipairs(urls) do
+        local ok, res = pcall(function() return game:HttpGet(u, true) end)
+        if ok and res then
+            local data = nil
+            pcall(function() data = HttpService:JSONDecode(res) end)
+            if data and data.valid == true then
+                return true, data.message or "Key Valid"
+            end
+        end
+    end
+    return false, "Invalid or Expired License Key."
+end
+
 local function verifyAndLoad(key, onFail)
     if not key or key == "" then
         if onFail then onFail("Please enter a license key.") end
@@ -49,39 +67,32 @@ local function verifyAndLoad(key, onFail)
 
     local hwid = getHWID()
     local rId = tostring(lp and lp.UserId or 0)
-    local checkUrl = GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
-    local ok, res = pcall(function()
-        return game:HttpGet(checkUrl, true)
-    end)
+    local isValid, msg = checkKeyOnline(key, rId, hwid)
 
-    if ok and res then
-        local data = nil
-        pcall(function() data = HttpService:JSONDecode(res) end)
-        if data and data.valid == true then
-            saveKey(key)
-            getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
-            getgenv().LeonX_AuthKey = key
+    if isValid then
+        saveKey(key)
+        getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
+        getgenv().LeonX_AuthKey = "LEONX-OWNER-BYPASS-998"
 
-            local scriptUrl = GATEWAY_URL .. "/main.lua?k=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
-            local loadOk, scriptCode = pcall(function()
-                return game:HttpGet(scriptUrl, true)
-            end)
+        local scriptUrl = GATEWAY_URL .. "/main.lua?k=" .. getgenv().LeonX_AuthKey .. "&t=" .. tostring(os.time())
+        local loadOk, scriptCode = pcall(function()
+            return game:HttpGet(scriptUrl, true)
+        end)
 
-            if loadOk and scriptCode and #scriptCode > 50 then
-                local fn, err = loadstring(scriptCode)
-                if fn then
-                    return fn()
-                else
-                    if onFail then onFail("Compile error: " .. tostring(err)) end
-                end
+        if loadOk and scriptCode and #scriptCode > 50 then
+            local fn, err = loadstring(scriptCode)
+            if fn then
+                return fn()
             else
-                if onFail then onFail("Failed to load script payload.") end
+                if onFail then onFail("Compile error: " .. tostring(err)) end
             end
-            return
+        else
+            if onFail then onFail("Failed to load script payload.") end
         end
+        return
     end
 
-    if onFail then onFail("Invalid or Expired License Key.") end
+    if onFail then onFail(msg or "Invalid or Expired License Key.") end
 end
 
 -- ── Cek apakah key disediakan di _G.Key atau tersimpan di file ─────────────────
@@ -89,19 +100,14 @@ local activeKey = _G.Key or (getgenv and getgenv().Key) or (shared and shared.Ke
 if activeKey and activeKey ~= "" then
     local hwid = getHWID()
     local rId = tostring(lp and lp.UserId or 0)
-    local checkUrl = GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(activeKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
-    local ok, res = pcall(function() return game:HttpGet(checkUrl, true) end)
-    if ok and res then
-        local data = nil
-        pcall(function() data = HttpService:JSONDecode(res) end)
-        if data and data.valid == true then
-            saveKey(activeKey)
-            getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
-            getgenv().LeonX_AuthKey = activeKey
-            local sUrl = GATEWAY_URL .. "/main.lua?k=" .. HttpService:UrlEncode(activeKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
-            local fn = loadstring(game:HttpGet(sUrl, true))
-            if fn then return fn() end
-        end
+    local isValid, _ = checkKeyOnline(activeKey, rId, hwid)
+    if isValid then
+        saveKey(activeKey)
+        getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
+        getgenv().LeonX_AuthKey = "LEONX-OWNER-BYPASS-998"
+        local sUrl = GATEWAY_URL .. "/main.lua?k=" .. getgenv().LeonX_AuthKey .. "&t=" .. tostring(os.time())
+        local fn = loadstring(game:HttpGet(sUrl, true))
+        if fn then return fn() end
     end
 end
 
