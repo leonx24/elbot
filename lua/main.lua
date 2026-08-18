@@ -77,7 +77,9 @@ end)
 local CURRENT_VERSION = "0.0.4"
 pcall(function()
     local vSrc = secureFetch("version.txt")
-    if vSrc then CURRENT_VERSION = vSrc:match("^%s*(.-)%s*$") end
+    if vSrc and vSrc:match("^%s*([%d%.]+)%s*$") and not vSrc:find("<") and not vSrc:find("html") then
+        CURRENT_VERSION = vSrc:match("^%s*([%d%.]+)%s*$")
+    end
 end)
 
 local Players      = game:GetService("Players")
@@ -151,7 +153,6 @@ task.spawn(function()
     end
 end)
 
-local LOGO_URL = "https://gitlab.com/affavanleon/leonx/-/raw/main/assets/logo.jpg"
 local cachedLogoAsset = nil
 local function getCustomLogoAsset()
     if cachedLogoAsset then return cachedLogoAsset end
@@ -164,8 +165,8 @@ local function getCustomLogoAsset()
         if makefolder and not isfolder("Leon X") then makefolder("Leon X") end
         if makefolder and not isfolder("Leon X/assets") then makefolder("Leon X/assets") end
         if writefile and game and getcustomasset then
-            local data = game:HttpGet(LOGO_URL .. "?t=" .. tostring(os.time()), true)
-            if data and #data > 100 then
+            local data = secureFetch("assets/logo.jpg")
+            if data and #data > 100 and not data:find("html") and not data:find("<") then
                 writefile(path, data)
                 cachedLogoAsset = getcustomasset(path)
             end

@@ -194,16 +194,29 @@ Instance.new("UICorner", submitBtn).CornerRadius = UDim.new(0, 8)
 
 submitBtn.MouseButton1Click:Connect(function()
     local k = input.Text:gsub("%s+", "")
-    submitBtn.Text = "Verifying Key..."
-    statusLbl.Text = ""
+    if k == "" then
+        statusLbl.Text = "Please enter your key."
+        return
+    end
+
+    submitBtn.Text = "Verifying..."
+    statusLbl.TextColor3 = Color3.fromRGB(200, 200, 100)
+    statusLbl.Text = "Checking key with server..."
 
     task.spawn(function()
+        local success = false
         verifyAndLoad(k, function(err)
             submitBtn.Text = "Unlock Leon X"
+            statusLbl.TextColor3 = Color3.fromRGB(255, 90, 90)
             statusLbl.Text = err or "Verification failed."
         end)
-        if sg and sg.Parent then
-            sg:Destroy()
+        
+        -- If success, verifyAndLoad executed main.lua; destroy key UI
+        task.wait(0.5)
+        if getgenv().LeonX_AuthKey == k then
+            if sg and sg.Parent then
+                sg:Destroy()
+            end
         end
     end)
 end)
