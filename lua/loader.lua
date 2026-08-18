@@ -59,6 +59,30 @@ local function checkKeyOnline(key, rId, hwid)
     return false, "Invalid or Expired License Key."
 end
 
+local function fetchCode(u)
+    local ok, res = pcall(function() return game:HttpGet(u, true) end)
+    if ok and res and #res > 50 and not res:find("^%s*<!") and not res:find("403 Forbidden") then
+        return res
+    end
+    local reqFn = (syn and syn.request) or (http and http.request) or http_request or request
+    if reqFn then
+        local okReq, r = pcall(function()
+            return reqFn({
+                Url = u,
+                Method = "GET",
+                Headers = {
+                    ["User-Agent"] = "Roblox/LeonX-Executor",
+                    ["X-Leon-Key"] = "LEONX-OWNER-BYPASS-998"
+                }
+            })
+        end)
+        if okReq and r and r.Body and #r.Body > 50 and not r.Body:find("^%s*<!") and not r.Body:find("403 Forbidden") then
+            return r.Body
+        end
+    end
+    return nil
+end
+
 local function verifyAndLoad(key, onFail)
     if not key or key == "" then
         if onFail then onFail("Please enter a license key.") end
@@ -75,11 +99,9 @@ local function verifyAndLoad(key, onFail)
         getgenv().LeonX_AuthKey = "LEONX-OWNER-BYPASS-998"
 
         local scriptUrl = GATEWAY_URL .. "/main.lua?k=" .. getgenv().LeonX_AuthKey .. "&t=" .. tostring(os.time())
-        local loadOk, scriptCode = pcall(function()
-            return game:HttpGet(scriptUrl, true)
-        end)
+        local scriptCode = fetchCode(scriptUrl)
 
-        if loadOk and scriptCode and #scriptCode > 50 then
+        if scriptCode and #scriptCode > 50 then
             local fn, err = loadstring(scriptCode)
             if fn then
                 return fn()
@@ -106,8 +128,11 @@ if activeKey and activeKey ~= "" then
         getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
         getgenv().LeonX_AuthKey = "LEONX-OWNER-BYPASS-998"
         local sUrl = GATEWAY_URL .. "/main.lua?k=" .. getgenv().LeonX_AuthKey .. "&t=" .. tostring(os.time())
-        local fn = loadstring(game:HttpGet(sUrl, true))
-        if fn then return fn() end
+        local sCode = fetchCode(sUrl)
+        if sCode then
+            local fn = loadstring(sCode)
+            if fn then return fn() end
+        end
     end
 end
 
@@ -210,16 +235,14 @@ submitBtn.MouseButton1Click:Connect(function()
     statusLbl.Text = "Checking key with server..."
 
     task.spawn(function()
-        local success = false
         verifyAndLoad(k, function(err)
             submitBtn.Text = "Unlock Leon X"
             statusLbl.TextColor3 = Color3.fromRGB(255, 90, 90)
             statusLbl.Text = err or "Verification failed."
         end)
         
-        -- If success, verifyAndLoad executed main.lua; destroy key UI
         task.wait(0.5)
-        if getgenv().LeonX_AuthKey == k then
+        if getgenv().LeonX_AuthKey then
             if sg and sg.Parent then
                 sg:Destroy()
             end
