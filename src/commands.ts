@@ -20,9 +20,13 @@ export const commands = [
     .setName("status")
     .setDescription("Lihat status layanan script"),
   new SlashCommandBuilder()
+    .setName("supported-games")
+    .setDescription("Lihat daftar game yang didukung oleh LeonX Script Hub"),
+  new SlashCommandBuilder()
     .setName("changelog")
     .setDescription("Lihat atau terbitkan changelog")
     .addSubcommand((sub) => sub.setName("latest").setDescription("Lihat update terbaru"))
+    .addSubcommand((sub) => sub.setName("games").setDescription("Lihat status game yang didukung (Script Support Game)"))
     .addSubcommand((sub) =>
       sub.setName("publish").setDescription("Terbitkan changelog")
         .addStringOption((o) =>

@@ -18,6 +18,7 @@ import {
   TextInputStyle
 } from "discord.js";
 import { buildV2Container, buildMultiV2Containers } from "./components-v2.js";
+import { buildSupportedGamesV2 } from "./supported-games.js";
 import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
@@ -163,18 +164,40 @@ async function callGroqAPI(messages: Array<{ role: string; content: string }>): 
   return { ok: false, error: "max_retries_exceeded" };
 }
 
-function buildAiSystemPrompt(): string {
-  return `You are the official assistant & server buddy of LeonX Hub Discord Server (a premium Roblox Script Hub).
+function buildAiSystemPrompt(userText?: string): string {
+  const isEng = userText ? isEnglishText(userText) : false;
+
+  const langDirective = isEng
+    ? `
+═══════════════════════════════════════════════════════════════════════════════
+🔴 CRITICAL LANGUAGE REQUIREMENT: ENGLISH DETECTED 🔴
+═══════════════════════════════════════════════════════════════════════════════
+• User's input: "${userText?.replace(/"/g, "'") || ""}"
+• YOU MUST RESPOND EXCLUSIVELY AND 100% IN CASUAL, FRIENDLY, NATURAL ENGLISH.
+• DO NOT use any Indonesian words (e.g. no "Halo", "Waduh", "dong", "ya", "gue", "lo", "kamu", "bisa").
+• Tone/Style: Friendly, knowledgeable, casual Discord admin / server buddy.
+`
+    : `
+═══════════════════════════════════════════════════════════════════════════════
+🟢 CRITICAL LANGUAGE REQUIREMENT: INDONESIAN DETECTED 🟢
+═══════════════════════════════════════════════════════════════════════════════
+• User's input is in Indonesian (or default).
+• RESPOND IN CASUAL, FRIENDLY, NATURAL INDONESIAN.
+• Tone/Style: Admin/mod server yang santai dan helpful.
+`;
+
+  return `You are the official AI assistant & server buddy of LeonX Hub Discord Server (a premium Roblox Script Hub).
+
+${langDirective}
 
 ═══════════════════════════════════════════════════════════════════════════════
 SECTION 1: IDENTITY & LANGUAGE RULES
 ═══════════════════════════════════════════════════════════════════════════════
 
-[LANGUAGE DETECTION]
-→ Detect user's language automatically.
-→ English user → Respond in casual, friendly, natural English.
-→ Indonesian user → Respond in casual, friendly, natural Indonesian.
-→ Style: Like a senior admin/mod chatting with server friends.
+[LANGUAGE STRICTNESS - STAGE 1 RULE]
+→ ALWAYS match the language indicated in the CRITICAL LANGUAGE REQUIREMENT banner above.
+→ If English → 100% English response.
+→ If Indonesian → 100% Indonesian response.
 
 [TONE RULES - MANDATORY]
 ✅ DO: Be direct, helpful, slightly playful.
@@ -182,20 +205,28 @@ SECTION 1: IDENTITY & LANGUAGE RULES
 ✅ DO: Keep responses concise — max 3-4 paragraphs unless explaining complex stuff.
 
 ❌ FORBIDDEN (AI clichés - NEVER use these):
-   • "Halo! Saya LeonX AI Assistant..." / "Hello! I am..."
+   • "Halo! Saya LeonX AI Assistant..." / "Hello! I am LeonX AI..."
    • "Tentu, saya akan membantu Anda..." / "Sure, I can help you..."
    • "Berikut adalah penjelasan mengenai..." / "Here is the explanation..."
    • "Semoga informasi ini bermanfaat!" / "Hope this helps!"
    • Any robotic opening/closing statements.
 
 [FORMATTING EXAMPLES]
-❌ BAD: **Oh iya** jangan lupa ya! *Penting banget* loh! ## Ingat!
-✅ GOOD: Oh iya, jangan lupa ya! Penting banget loh!
-✅ GOOD: Pake command **/script** buat dapetin key nya
+❌ BAD: **Oh yeah** don't forget! *Very important*! ## Remember!
+✅ GOOD (EN): Oh by the way, don't forget! That's super important!
+✅ GOOD (EN): Use the **/script** command to get your key.
+✅ GOOD (ID): Oh iya, jangan lupa ya! Penting banget loh!
+✅ GOOD (ID): Pake command **/script** buat dapetin key nya.
 
 ═══════════════════════════════════════════════════════════════════════════════
 SECTION 2: KNOWLEDGE BASE (COMMANDS & INFO)
 ═══════════════════════════════════════════════════════════════════════════════
+
+[ABOUT LEONX HUB & DISCORD SERVER]
+• LeonX Hub is a top-tier Roblox Script Hub offering high quality scripts & loaders.
+• Features include multi-game support, instant key delivery via Discord, HWID management, and active support.
+• Official Website: https://leonthings.my.id
+• Web Console / Dashboard: https://script.leonthings.my.id (used for managing keys & resetting HWID).
 
 [DISCORD COMMANDS]
 | Command        | Description                                              |
@@ -208,18 +239,16 @@ SECTION 2: KNOWLEDGE BASE (COMMANDS & INFO)
 | /bug-report    | Report bugs/errors to developers                          |
 | /ticket        | Create support ticket for issues                          |
 
-[IMPORTANT URLs]
-• Official Website: https://leonthings.my.id
-• Bot Console / Dashboard: https://script.leonthings.my.id
-
 [COMMON PROBLEMS & SOLUTIONS]
 
 Problem 1: Script tidak jalan / Script not working
-→ Solution: Pastikan baris pertama script: _G.Key = "LICENSE_KEY_ANDA"
+→ Solution (ID): Pastikan baris pertama script: _G.Key = "LICENSE_KEY_ANDA"
+→ Solution (EN): Make sure the first line of your script is: _G.Key = "YOUR_LICENSE_KEY"
 → Make sure executor supports loadstring & is updated.
 
 Problem 2: HWID Error / Key bound to other device
-→ Solution: Use /resethwid in Discord OR website console (My Key → Reset HWID)
+→ Solution (ID): Gunakan /resethwid di Discord ATAU lewat website console (My Key → Reset HWID)
+→ Solution (EN): Use /resethwid in Discord OR web console (My Key → Reset HWID)
 → Limit: 1 reset per 10 minutes.
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -227,7 +256,7 @@ SECTION 3: SCOPE & BOUNDARIES
 ═══════════════════════════════════════════════════════════════════════════════
 
 [ALLOWED TOPICS] ✓
-• LeonX Hub (features, commands, status)
+• LeonX Hub (features, commands, status, server details)
 • Roblox (general, scripting, Lua)
 • Roblox Executors
 • LeonX Hub Discord Server
@@ -237,14 +266,14 @@ SECTION 3: SCOPE & BOUNDARIES
 • Other games (Minecraft, Valorant, etc.)
 • Off-topic chat (politics, drama, unrelated stuff)
 
-[OUT OF SCOPE RESPONSE TEMPLATE]
+[OUT OF SCOPE RESPONSE TEMPLATES]
 Indonesian: "Waduh itu di luar kuasa aku 😅 Aku cuma bisa bantu soal LeonX Hub & Roblox scripting. Mau tanya soal script atau command Discord?"
-English: "That's outside my area expertise 😅 I can only help with LeonX Hub & Roblox scripting. Wanna ask about scripts or Discord commands?"
+English: "That's outside my area of expertise 😅 I can only help with LeonX Hub & Roblox scripting. Wanna ask about scripts or Discord commands?"
 
 [EDGE CASE HANDLING]
 • User spamming/toxic → Respond coldly & briefly, don't feed trolls
 • User unclear/confused → Ask clarification before answering
-• User mixed language → Follow dominant language (60%+ rule)
+• User mixed language → Follow dominant language matching the language directive
 
 ═══════════════════════════════════════════════════════════════════════════════
 SECTION 4: ACTION TRIGGERS (READ CAREFULLY)
@@ -278,34 +307,38 @@ SECTION 4: ACTION TRIGGERS (READ CAREFULLY)
 These questions do NOT trigger action tags (just answer normally):
 • "Apa itu key?" / "What is a key?" → Explain concept only
 • "Gimana cara reset hwid?" / "How to reset hwid?" → Explain steps only
-• "Script loader support mobile gak?" → Info question, no action needed
-• "Berapa cooldown reset?" → Info question
+• "Script loader support mobile gak?" / "Does loader support mobile?" → Info question
+• "Tell me abt this server" → Server info question (answer in English with server overview!)
 
 [RESPONSE EXAMPLES WITH ACTIONS]
 
-Example 1 - TRIGGER Send Script:
+Example 1 (ID) - TRIGGER Send Script:
 User: "Minta key dong"
 Bot: "Siap, gue kirim key + loader script ke DM lo sekarang! Cek DM ya 👀 [ACTION: SEND_SCRIPT]"
 
-Example 2 - NO TRIGGER (info only):
+Example 1 (EN) - TRIGGER Send Script:
+User: "Give me the key please"
+Bot: "Sure thing! Sending your key + loader script straight to your DMs right now! Check your DMs 👀 [ACTION: SEND_SCRIPT]"
+
+Example 2 (ID) - NO TRIGGER:
 User: "Gimana cara pake keynya?"
 Bot: "Gampang! Taruh _G.Key = "KEY_LO" di baris pertama sebelum loadstring. Executor lo harus support loadstring ya."
 
-Example 3 - TRIGGER Reset HWID:
-Bot: "Oke, HWID lo gue reset sekarang. Tunggu 10 menit kalau mau reset lagi ya [ACTION: RESET_HWID]"
+Example 2 (EN) - NO TRIGGER (e.g. Tell me abt this server):
+User: "tell me abt this server"
+Bot: "Welcome to LeonX Hub! We're an official community for LeonX Hub, a premium Roblox Script Hub. Here you can get free license keys via **/script**, verify your account using **/verify**, reset your HWID with **/resethwid**, and get support from our staff. Feel free to ask if you need any help with scripts or bot commands!"
 
 ═══════════════════════════════════════════════════════════════════════════════
 SECTION 5: RESPONSE QUALITY CHECKLIST (INTERNAL)
 ═══════════════════════════════════════════════════════════════════════════════
 
 Before sending ANY response, verify:
+□ Output language MATCHES the user's language directive (EN if English input, ID if Indonesian input)
 □ No AI cliché opening/closing used
-□ Language matches user's input
-□ Formatting is minimal (bold for commands only)
-□ Answer is direct, not roundabout
+□ Formatting is minimal (bold for commands/highlights only)
+□ Answer is direct and engaging
 □ If action needed → tag placed at VERY END
-□ If info-only question → NO action tag appended
-□ Out-of-scope → redirected politely with template`;
+□ If info-only question (like "tell me abt this server") → answer naturally in the detected language without action tags`;
 }
 
 function hasExplicitScriptRequest(userText: string): boolean {
@@ -412,17 +445,74 @@ function hasExplicitCheckKeyRequest(userText: string): boolean {
 }
 
 function isEnglishText(userText: string): boolean {
+  if (!userText || typeof userText !== "string") return false;
   const text = userText.toLowerCase().trim();
-  const englishKeywords = [
-    "the", "is", "are", "am", "you", "me", "my", "your", "how", "what", "why", "where",
-    "can", "could", "would", "please", "help", "send", "give", "get", "need", "want",
-    "reset", "script", "key", "loader", "show", "check", "device", "hi", "hello", "hey",
-    "working", "not", "error", "fix", "issue", "problem", "thanks", "thank", "does"
+  if (!text) return false;
+
+  // 1. Direct Indonesian markers
+  const idMarkers = [
+    "apa", "apakah", "bagaimana", "gimana", "kenapa", "mengapa", "kapan", "siapa", "dimana", "mana",
+    "yang", "ini", "itu", "bisa", "gak", "ga", "nggak", "ndak", "tidak", "enggak", "ada", "mau",
+    "ingin", "tolong", "bantu", "minta", "kasih", "kasi", "kirim", "dong", "ya", "yah", "dah",
+    "udah", "sudah", "belum", "blm", "gue", "gua", "gw", "lu", "lo", "elu", "elo", "saya",
+    "aku", "kami", "kita", "kamu", "dia", "mereka", "biar", "agar", "supaya", "kalo", "kalau",
+    "jika", "tapi", "tetapi", "sama", "dengan", "buat", "untuk", "dari", "ke", "di", "bukan",
+    "lagi", "masih", "cuma", "hanya", "saja", "aja", "tau", "tahu", "ngerti", "paham", "soal",
+    "tentang", "mengenai", "bagaimanakah", "apakah", "kenapakah", "dapet", "dapat", "pake", "pakai"
   ];
-  const words = text.split(/\s+/);
-  const matchCount = words.filter(w => englishKeywords.includes(w.replace(/[^a-z]/g, ""))).length;
-  const englishPrefix = /^(hi|hello|hey|can|how|what|why|where|is|give|send|please|reset|check|i need|i want|my)\b/i;
-  return englishPrefix.test(text) || matchCount >= 2 || (words.length <= 3 && matchCount >= 1 && !/^(bisa|bagaimana|apa|kenapa|gimana|halo|hai|minta|kirim|kasi|kasih|tolong|bagaimanakah)\b/i.test(text));
+
+  // 2. English phrase patterns
+  const enPhrases = [
+    /\b(tell|show|give|send|explain|ask)\s+(me|us|him|her)\b/i,
+    /\b(what|how|why|where|who|when|which)\s+(is|are|am|do|does|did|can|could|would|should)\b/i,
+    /\b(can|could|would|will)\s+(you|u|i|we)\b/i,
+    /\b(i\s+want|i\s+need|i\s+have|i\s+am|i'm|i\s+got)\b/i,
+    /\b(tell\s+me|about\s+this|abt\s+this|what\s+is|how\s+to|how\s+do|is\s+there|how\s+can|help\s+me)\b/i,
+    /\b(is\s+this|is\s+it|does\s+it|does\s+this|how's|what's|who's|where's)\b/i,
+    /\b(thanks|thank\s+you|thx|ty|pls|please|sorry)\b/i
+  ];
+
+  // 3. English words dictionary
+  const enWords = new Set([
+    "the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not", "on",
+    "with", "he", "as", "you", "u", "do", "at", "this", "but", "his", "by", "from", "they",
+    "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there",
+    "their", "what", "so", "up", "out", "if", "about", "abt", "who", "get", "which", "go",
+    "me", "when", "make", "can", "like", "time", "no", "just", "him", "know", "take", "people",
+    "into", "year", "your", "ur", "good", "some", "could", "them", "see", "other", "than",
+    "then", "now", "look", "only", "come", "its", "over", "think", "also", "back", "after",
+    "use", "two", "how", "our", "work", "first", "well", "way", "even", "new", "want",
+    "because", "any", "these", "give", "day", "most", "us", "tell", "explain", "server",
+    "discord", "script", "loader", "key", "resethwid", "hwid", "working", "error", "issue",
+    "help", "please", "pls", "plz", "show", "check", "need", "wanna", "gonna", "idk", "thanks",
+    "thank", "does", "is", "are", "am", "was", "were", "been", "being", "has", "had", "device",
+    "reset", "status", "bot", "hub", "roblox", "info", "information", "details", "support",
+    "ticket", "executor", "working", "run", "running", "execute", "executing", "bug", "report"
+  ]);
+
+  const cleanWords = text.replace(/[^a-z0-9\s']/g, " ").split(/\s+/).filter(Boolean);
+
+  let idCount = 0;
+  let enCount = 0;
+
+  for (const w of cleanWords) {
+    if (idMarkers.includes(w)) idCount++;
+    if (enWords.has(w)) enCount++;
+  }
+
+  let phraseMatch = false;
+  for (const pattern of enPhrases) {
+    if (pattern.test(text)) {
+      phraseMatch = true;
+      break;
+    }
+  }
+
+  if (phraseMatch && enCount >= idCount) return true;
+  if (idCount === 0 && (enCount > 0 || phraseMatch)) return true;
+  if (enCount > idCount + 1) return true;
+
+  return false;
 }
 
 const changelogTypes = {
@@ -1108,7 +1198,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply();
 
         try {
-          const systemPrompt = buildAiSystemPrompt();
+          const isEng = isEnglishText(query);
+          const systemPrompt = buildAiSystemPrompt(query);
 
           const groqResult = await callGroqAPI([
             { role: "system", content: systemPrompt },
@@ -1116,7 +1207,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ]);
 
           if (groqResult.ok) {
-            const replyText = groqResult.text || "Maaf, tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.";
+            const replyText = groqResult.text || (isEng ? "Sorry, unable to process your request. Please try again." : "Maaf, tidak dapat memahami pertanyaan tersebut. Silakan coba lagi.");
             let finalReply = replyText.trim();
 
             const actionSendScriptRegex = /\[\s*ACTION\s*:\s*SEND_SCRIPT\s*\]/i;
@@ -1141,17 +1232,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (actionSendScriptRegex.test(finalReply)) {
               const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
               if (blacklistCheck.blacklisted) {
-                finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`);
+                finalReply = finalReply.replace(
+                  actionSendScriptRegex,
+                  isEng
+                    ? `\n\n❌ **Access Denied:** Your Discord account is blacklisted.\nReason: *${blacklistCheck.reason}*`
+                    : `\n\n❌ **Akses ditolak:** Akun Discord Anda berada dalam daftar blacklist.\nAlasan: *${blacklistCheck.reason}*`
+                );
               } else {
                 const hasRole = !config.VERIFIED_ROLE_ID || (member && member.roles.cache.has(config.VERIFIED_ROLE_ID));
                 if (!hasRole) {
-                  finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`);
+                  finalReply = finalReply.replace(
+                    actionSendScriptRegex,
+                    isEng
+                      ? `\n\n❌ **Failed:** You must complete verification first in channel <#${config.VERIFY_CHANNEL_ID}>.`
+                      : `\n\n❌ **Gagal:** Anda harus melakukan verifikasi terlebih dahulu di channel <#${config.VERIFY_CHANNEL_ID}>.`
+                  );
                 } else {
                   try {
                     const userKey = getOrCreateUserKey(interaction.user.id);
                     const v2DmScript = buildV2Container({
                       title: "🔑 LeonX Hub Loader & Key",
-                      description: "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
+                      description: isEng
+                        ? "Here is your personal script loader. *Do not share this key with anyone!*"
+                        : "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
                       sections: [
                         {
                           title: "📜 Script Loader (Lua)",
@@ -1165,9 +1268,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
                       footer: "LeonX Hub • License System"
                     });
                     await interaction.user.send(v2DmScript);
-                    finalReply = finalReply.replace(actionSendScriptRegex, `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`);
+                    finalReply = finalReply.replace(
+                      actionSendScriptRegex,
+                      isEng
+                        ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs privately. Please check your inbox.`
+                        : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`
+                    );
                   } catch (dmErr) {
-                    finalReply = finalReply.replace(actionSendScriptRegex, `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`);
+                    finalReply = finalReply.replace(
+                      actionSendScriptRegex,
+                      isEng
+                        ? `\n\n❌ **Failed:** Bot could not send a DM to you. Please make sure your server DMs are enabled.`
+                        : `\n\n❌ **Gagal:** Bot tidak dapat mengirim pesan ke DM Anda. Pastikan pengaturan privasi DM Anda untuk server ini diaktifkan.`
+                    );
                   }
                 }
               }
@@ -1187,23 +1300,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
                   const mins = Math.floor(secs / 60);
                   const hours = Math.floor(mins / 60);
                   const days = Math.floor(hours / 24);
-                  uptimeString = days > 0 
-                    ? `${days}hari ${hours % 24}jam`
-                    : hours > 0 
-                    ? `${hours}jam ${mins % 60}menit`
-                    : `${mins}menit ${secs % 60}detik`;
+                  uptimeString = isEng
+                    ? (days > 0 ? `${days}d ${hours % 24}h` : hours > 0 ? `${hours}h ${mins % 60}m` : `${mins}m ${secs % 60}s`)
+                    : (days > 0 ? `${days}hari ${hours % 24}jam` : hours > 0 ? `${hours}jam ${mins % 60}menit` : `${mins}menit ${secs % 60}detik`);
                 }
 
-                const statsBlock = 
-                  `\n\n📊 **Statistik Live Server LeonX Bot:**\n` +
-                  `• Jumlah Guild Server: \`${guildCount}\`\n` +
-                  `• Pengguna Lisensi (Keys): \`${totalKeys}\`\n` +
-                  `• Uptime Sistem: \`${uptimeString}\`\n` +
-                  `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
+                const statsBlock = isEng
+                  ? `\n\n📊 **LeonX Bot Server Live Stats:**\n` +
+                    `• Guild Count: \`${guildCount}\`\n` +
+                    `• License Users (Keys): \`${totalKeys}\`\n` +
+                    `• System Uptime: \`${uptimeString}\`\n` +
+                    `• Memory Usage: \`${memoryUsageMB} MB\``
+                  : `\n\n📊 **Statistik Live Server LeonX Bot:**\n` +
+                    `• Jumlah Guild Server: \`${guildCount}\`\n` +
+                    `• Pengguna Lisensi (Keys): \`${totalKeys}\`\n` +
+                    `• Uptime Sistem: \`${uptimeString}\`\n` +
+                    `• Penggunaan Memory: \`${memoryUsageMB} MB\``;
                   
                 finalReply = finalReply.replace(actionGetStatsRegex, statsBlock);
               } catch (statsErr) {
-                finalReply = finalReply.replace(actionGetStatsRegex, `\n\n❌ Gagal mengambil data statistik server saat ini.`);
+                finalReply = finalReply.replace(actionGetStatsRegex, isEng ? `\n\n❌ Failed to retrieve server statistics.` : `\n\n❌ Gagal mengambil data statistik server saat ini.`);
               }
             }
 
@@ -1211,18 +1327,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (actionResetHwidRegex.test(finalReply)) {
               const blacklistCheck = isBlacklisted({ discordId: interaction.user.id });
               if (blacklistCheck.blacklisted) {
-                finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
+                finalReply = finalReply.replace(actionResetHwidRegex, isEng ? `\n\n❌ **Failed:** Account is blacklisted.` : `\n\n❌ **Gagal:** Akun Anda di-blacklist.`);
               } else {
                 const hasRole = !config.VERIFIED_ROLE_ID || (member && member.roles.cache.has(config.VERIFIED_ROLE_ID));
                 if (!hasRole) {
-                  finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
+                  finalReply = finalReply.replace(actionResetHwidRegex, isEng ? `\n\n❌ **Failed:** Please complete verification first.` : `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
                 } else {
                   const isOwner = isUserOwnerOrAdmin(interaction.user.id, member);
                   const resetResult = resetUserKeyBinding(interaction.user.id, isOwner);
                   if (resetResult.success) {
-                    finalReply = finalReply.replace(actionResetHwidRegex, `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.${isOwner ? " *(Owner Bypass Active)*" : ""}`);
+                    finalReply = finalReply.replace(
+                      actionResetHwidRegex,
+                      isEng
+                        ? `\n\n🔄 **HWID Reset Successful!** Re-run the script in Roblox to bind your new device/account.${isOwner ? " *(Owner Bypass Active)*" : ""}`
+                        : `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.${isOwner ? " *(Owner Bypass Active)*" : ""}`
+                    );
                   } else {
-                    finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
+                    finalReply = finalReply.replace(actionResetHwidRegex, isEng ? `\n\n❌ **HWID Reset Failed:** ${resetResult.message}` : `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
                   }
                 }
               }
@@ -1239,7 +1360,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 } | undefined;
 
                 if (!row) {
-                  finalReply = finalReply.replace(actionCheckKeyRegex, `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
+                  finalReply = finalReply.replace(actionCheckKeyRegex, isEng ? `\n\n🔑 You don't have a registered key yet. Use /script to get one.` : `\n\n🔑 Anda belum memiliki key terdaftar. Silakan minta script terlebih dahulu agar key dibuat otomatis.`);
                 } else {
                   let cooldownRemainingMinutes = 0;
                   if (row.last_reset_at) {
@@ -1251,26 +1372,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     }
                   }
 
-                  const infoBlock = 
-                    `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
-                    `• **Key**: \`LEONX-••••-••••-••••\` (Disensor demi keamanan, detail lengkap telah dikirimkan ke DM Anda!)\n` +
-                    `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
-                    `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
-                    `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
+                  const infoBlock = isEng
+                    ? `\n\n🔑 **Your License Key Info:**\n` +
+                      `• **Key**: \`LEONX-••••-••••-••••\` (Censored for security, full details sent to your DM!)\n` +
+                      `• **Roblox ID**: \`${row.roblox_id || "Not Bound"}\`\n` +
+                      `• **HWID**: \`${row.hwid || "Not Bound"}\`\n` +
+                      `• **Reset Cooldown**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} minutes` : "Ready"}\``
+                    : `\n\n🔑 **Informasi Lisensi Key Anda:**\n` +
+                      `• **Key**: \`LEONX-••••-••••-••••\` (Disensor demi keamanan, detail lengkap telah dikirimkan ke DM Anda!)\n` +
+                      `• **Roblox ID**: \`${row.roblox_id || "Belum Terikat (Not Bound)"}\`\n` +
+                      `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
+                      `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``;
                     
                   finalReply = finalReply.replace(actionCheckKeyRegex, infoBlock);
 
                   try {
                     const v2DmKeyInfo = buildV2Container({
-                      title: "🔑 Informasi Lisensi Key Anda",
-                      description: "Berikut adalah detail lisensi aktif Anda di LeonX Hub (Detail Privasi):",
+                      title: isEng ? "🔑 Your License Key Information" : "🔑 Informasi Lisensi Key Anda",
+                      description: isEng ? "Here are your active license details for LeonX Hub:" : "Berikut adalah detail lisensi aktif Anda di LeonX Hub (Detail Privasi):",
                       sections: [
                         {
                           content:
-                            `• \`Key:\` \`${row.key}\` *(Jangan bagikan key ini!)*\n` +
-                            `• \`Roblox ID:\` \`${row.roblox_id || "Belum Terikat"}\`\n` +
-                            `• \`HWID:\` \`${row.hwid || "Belum Terikat"}\`\n` +
-                            `• \`Cooldown Reset:\` \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready (Bebas Cooldown)"}\``
+                            `• \`Key:\` \`${row.key}\` *(${isEng ? "Do not share!" : "Jangan bagikan key ini!"})*\n` +
+                            `• \`Roblox ID:\` \`${row.roblox_id || (isEng ? "Not Bound" : "Belum Terikat")}\`\n` +
+                            `• \`HWID:\` \`${row.hwid || (isEng ? "Not Bound" : "Belum Terikat")}\`\n` +
+                            `• \`Reset Cooldown:\` \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} ${isEng ? "min" : "menit"}` : (isEng ? "Ready" : "Ready (Bebas Cooldown)")}\``
                         }
                       ],
                       footer: "LeonX Hub • License Privacy"
@@ -1825,6 +1951,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
             content: `✅ Changelog **${version}** berhasil diterbitkan di <#${config.CHANGELOG_CHANNEL_ID}>.` +
               (tagEveryone ? " (dengan tag @everyone)" : "")
           });
+        } else if (sub === "games") {
+          const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+          const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+          await interaction.reply(v2Payload);
         } else {
           const row = db.prepare("SELECT title, content, created_at FROM changelogs ORDER BY id DESC LIMIT 1")
             .get() as { title: string; content: string; created_at: string } | undefined;
@@ -1838,6 +1968,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
             await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
           }
         }
+      }
+
+      if (interaction.commandName === "supported-games") {
+        const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+        const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+        await interaction.reply(v2Payload);
       }
 
       if (["warn", "timeout", "kick", "ban"].includes(interaction.commandName)) {
@@ -2967,10 +3103,13 @@ async function handleTicketAiResponse(message: Message, ticket: TicketRecord) {
     const categoryInfo = TICKET_CATEGORIES[catKey] || TICKET_CATEGORIES.general;
     const categoryLabel = categoryInfo.label;
 
+    const isEngTicket = isEnglishText(userMessage);
     const systemPrompt = `You are an official support assistant for the LeonX Hub Discord server (a premium Roblox Script Hub).
 The user opened a support ticket under category: "${categoryLabel}".
 Latest user message:
 "${userMessage}"
+
+${isEngTicket ? `🔴 CRITICAL LANGUAGE DIRECTIVE: The user asked in ENGLISH. You MUST reply 100% in natural ENGLISH. Do NOT use Indonesian words.` : `🟢 CRITICAL LANGUAGE DIRECTIVE: Respond in friendly, casual INDONESIAN.`}
 
 LANGUAGE & TONE INSTRUCTIONS (NATURAL & HUMAN-LIKE):
 - Automatically detect the user's language.
@@ -3385,7 +3524,7 @@ client.on(Events.MessageCreate, async (message) => {
       const userMessage = message.content.replace(new RegExp(`<@!?${client.user?.id}>`, 'g'), "").trim();
       if (!userMessage) return; // Ignore empty messages in AI channel
 
-      const systemPrompt = buildAiSystemPrompt();
+      const systemPrompt = buildAiSystemPrompt(userMessage);
 
       const groqResult = await callGroqAPI([
         { role: "system", content: systemPrompt },
