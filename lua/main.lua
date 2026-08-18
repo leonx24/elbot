@@ -8,6 +8,10 @@
 -- AntiDetect module handles script destruction only (no function hooking)
 -- ═══════════════════════════════════════════════════════════════════════════
 
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
+end
+
 _G._LeonX_AllowTeleport = function(allow)
     _G._LeonX_AllowTeleportActive = allow and true or false
 end
@@ -42,13 +46,38 @@ pcall(function()
     end
 end)
 
-local BASE = "https://gitlab.com/affavanleon/leonx/-/raw/main/"
+local BASE = (getgenv and getgenv().LeonX_BaseUrl) or "https://gitlab.com/affavanleon/leonx/-/raw/main/"
+local AUTH_KEY = (getgenv and getgenv().LeonX_AuthKey) or ""
+
+local function secureFetch(path)
+    local fullUrl = BASE .. path .. (BASE:find("%?") and "&t=" or "?t=") .. tostring(os.time())
+    if AUTH_KEY ~= "" and (not fullUrl:find("k=")) then
+        fullUrl = fullUrl .. "&k=" .. AUTH_KEY
+    end
+    local ok, res = pcall(function()
+        return game:HttpGet(fullUrl, true)
+    end)
+    if ok and res and #res >= 10 then return res end
+    return nil
+end
 
 local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getfenv and getfenv(0).loadstring)
 
-local CURRENT_VERSION = "0.0.3"
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BAC 7511 STEALTH PATCH (Early Runtime Override)
+-- ═══════════════════════════════════════════════════════════════════════════
 pcall(function()
-    CURRENT_VERSION = game:HttpGet(BASE.."version.txt?t="..tostring(os.time()), true):match("^%s*(.-)%s*$")
+    local patchSrc = secureFetch("modules/core/bac7511patch.lua")
+    if patchSrc and #patchSrc > 20 then
+        local fn = raw_loadstring(patchSrc)
+        if fn then fn() end
+    end
+end)
+
+local CURRENT_VERSION = "0.0.4"
+pcall(function()
+    local vSrc = secureFetch("version.txt")
+    if vSrc then CURRENT_VERSION = vSrc:match("^%s*(.-)%s*$") end
 end)
 
 local Players      = game:GetService("Players")
@@ -56,8 +85,18 @@ local UIS          = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService   = game:GetService("RunService")
 local lp           = Players.LocalPlayer
-local gui          = lp:WaitForChild("PlayerGui")
-local isMobile     = UIS.TouchEnabled and not UIS.KeyboardEnabled
+
+local function getSafeGuiParent()
+    local ok, res = pcall(function()
+        if gethui then return gethui() end
+        return game:GetService("CoreGui")
+    end)
+    if ok and res then return res end
+    return (lp and (lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui"))) or game:GetService("CoreGui")
+end
+
+local gui = getSafeGuiParent()
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- SPLASH SCREEN (shown before UI loads)
@@ -68,6 +107,9 @@ SplashGui.ResetOnSpawn     = false
 SplashGui.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
 SplashGui.DisplayOrder     = 9999
 SplashGui.IgnoreGuiInset   = true
+pcall(function()
+    if syn and syn.protect_gui then syn.protect_gui(SplashGui) end
+end)
 SplashGui.Parent           = gui
 
 local SplashBg = Instance.new("Frame")
@@ -356,7 +398,7 @@ local function load(p)
     local shortName = p:match("([^/]+)%.lua$") or p
     for attempt = 1, MAX_RETRIES do
         local ok, result = pcall(function()
-            local src = game:HttpGet(BASE..p.."?t="..tostring(os.time()), true)
+            local src = secureFetch(p)
             if not src or #src < 10 then error("empty response ("..#tostring(src).." bytes)") end
             if src:find("Too Many Requests") or src:find("^%s*<!") or src:find("^%s*<html") then
                 error("rate-limited (429 or HTML error page)")
@@ -504,6 +546,15 @@ local famModule = load("modules/games/fishandmonsters.lua")
 if famModule and famModule.PlaceIds then
     GAME_MODULES[#GAME_MODULES + 1] = famModule
 end
+local saeModule = load("modules/games/stealanegg.lua")
+if saeModule and saeModule.PlaceIds then
+    GAME_MODULES[#GAME_MODULES + 1] = saeModule
+    pcall(function() load("modules/core/bac8519patch.lua") end)
+end
+local vdModule = load("modules/games/violencedistrict.lua")
+if vdModule and vdModule.PlaceIds then
+    GAME_MODULES[#GAME_MODULES + 1] = vdModule
+end
 -- add more game modules here
 
 local ActiveGameModule = nil
@@ -557,7 +608,7 @@ local windowTitle = "Leon X v"..CURRENT_VERSION
 local windowAuthor = "by leon"
 if ActiveGameModule then
     windowTitle = "Leon X v"..CURRENT_VERSION.." | "..ActiveGameModule.Name
-    windowAuthor = "Game Mode: "..ActiveGameModule.Name
+    windowAuthor = ActiveGameModule.Name
 else
     windowAuthor = "Universal Mode"
 end
@@ -632,7 +683,6 @@ end
 if ActiveGameModule then
     -- Game-specific mode: only show game tabs, skip universal tabs
     if PerfStats then PerfStats:Enable() end
-    if AntiAFK then AntiAFK:Enable() end
     pcall(function() ActiveGameModule:Init() end)
     pcall(function() ActiveGameModule:Enable() end)
     local wireSuccess, wireErr = pcall(function()

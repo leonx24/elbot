@@ -1,77 +1,209 @@
-local userKey = _G.Key
+--[[
+    Leon X | Official Universal Loader with Key System
+    Protected Gateway: https://leonx.affavanleon.workers.dev
+]]
 
-print("[Leon X Loader] Memulai verifikasi...")
-
-if not userKey or userKey == "" then
-    warn("[Leon X Loader] Error: Key tidak ditemukan di _G.Key!")
-    game:GetService("Players").LocalPlayer:Kick("Key tidak ditemukan! Silakan dapatkan key via /script di Discord.")
-    return
-end
-
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
-local robloxId = tostring(localPlayer.UserId)
+local lp = game:GetService("Players").LocalPlayer
 
--- Mendapatkan Hardware ID perangkat (HWID)
-local hwid = "unknown"
-if gethwid then
-    hwid = gethwid()
-elseif ext and ext.gethwid then
-    hwid = ext.gethwid()
+local GATEWAY_URL = "https://leonx.affavanleon.workers.dev"
+local KEY_FILE = "Leon X/license.key"
+
+local function ensureDir()
+    if not isfolder("Leon X") then makefolder("Leon X") end
 end
 
--- Mendapatkan nama executor
-local executor = "Unknown"
-if identifyexecutor then
-    executor = identifyexecutor()
-elseif checkclosure then
-    executor = "Solara/Celery"
+local function getSavedKey()
+    if isfile and isfile(KEY_FILE) then
+        local ok, content = pcall(readfile, KEY_FILE)
+        if ok and content then return content:gsub("%s+", "") end
+    end
+    return ""
 end
 
--- Memanggil file load.php di website dengan cache busting
-local webUrl = string.format(
-    "https://api.leonthings.my.id/load.php?key=%s&roblox_id=%s&hwid=%s&username=%s&executor=%s&place_id=%s&t=%s",
-    HttpService:UrlEncode(userKey), 
-    HttpService:UrlEncode(robloxId), 
-    HttpService:UrlEncode(hwid),
-    HttpService:UrlEncode(localPlayer.Name),
-    HttpService:UrlEncode(executor),
-    HttpService:UrlEncode(tostring(game.PlaceId)),
-    tostring(os.time())
-)
+local function saveKey(k)
+    pcall(function()
+        ensureDir()
+        writefile(KEY_FILE, k:gsub("%s+", ""))
+    end)
+end
 
-print("[Leon X Loader] Mengirim permintaan verifikasi ke server...")
+local function getHWID()
+    local id = ""
+    pcall(function()
+        if gethwid then id = gethwid()
+        elseif identifyexecutor then id = identifyexecutor() .. "_" .. tostring(lp.UserId)
+        else id = tostring(lp.UserId) end
+    end)
+    return id ~= "" and id or tostring(lp.UserId)
+end
 
--- Melakukan HTTP Request ke website
-local success, response = pcall(function()
-    return game:HttpGet(webUrl)
+local function verifyAndLoad(key, onFail)
+    if not key or key == "" then
+        if onFail then onFail("Please enter a license key.") end
+        return
+    end
+
+    local hwid = getHWID()
+    local rId = tostring(lp and lp.UserId or 0)
+    local checkUrl = GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+    local ok, res = pcall(function()
+        return game:HttpGet(checkUrl, true)
+    end)
+
+    if ok and res then
+        local data = nil
+        pcall(function() data = HttpService:JSONDecode(res) end)
+        if data and data.valid == true then
+            saveKey(key)
+            getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
+            getgenv().LeonX_AuthKey = key
+
+            local scriptUrl = GATEWAY_URL .. "/main.lua?k=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+            local loadOk, scriptCode = pcall(function()
+                return game:HttpGet(scriptUrl, true)
+            end)
+
+            if loadOk and scriptCode and #scriptCode > 50 then
+                local fn, err = loadstring(scriptCode)
+                if fn then
+                    return fn()
+                else
+                    if onFail then onFail("Compile error: " .. tostring(err)) end
+                end
+            else
+                if onFail then onFail("Failed to load script payload.") end
+            end
+            return
+        end
+    end
+
+    if onFail then onFail("Invalid or Expired License Key.") end
+end
+
+-- ── Cek apakah key disediakan di _G.Key atau tersimpan di file ─────────────────
+local activeKey = _G.Key or (getgenv and getgenv().Key) or (shared and shared.Key) or getSavedKey()
+if activeKey and activeKey ~= "" then
+    local hwid = getHWID()
+    local rId = tostring(lp and lp.UserId or 0)
+    local checkUrl = GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(activeKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+    local ok, res = pcall(function() return game:HttpGet(checkUrl, true) end)
+    if ok and res then
+        local data = nil
+        pcall(function() data = HttpService:JSONDecode(res) end)
+        if data and data.valid == true then
+            saveKey(activeKey)
+            getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
+            getgenv().LeonX_AuthKey = activeKey
+            local sUrl = GATEWAY_URL .. "/main.lua?k=" .. HttpService:UrlEncode(activeKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+            local fn = loadstring(game:HttpGet(sUrl, true))
+            if fn then return fn() end
+        end
+    end
+end
+
+-- ── Tampilkan UI Key Prompt jika belum ada key valid ─────────────────────────
+local sg = Instance.new("ScreenGui")
+sg.Name = "LeonX_KeySystem"
+sg.ResetOnSpawn = false
+sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+sg.DisplayOrder = 100000
+
+pcall(function()
+    if syn and syn.protect_gui then syn.protect_gui(sg) end
+    sg.Parent = (gethui and gethui()) or CoreGui or lp:WaitForChild("PlayerGui")
 end)
 
-if not success then
-    warn("[Leon X Loader] Error: Gagal terhubung ke server! Detail: " .. tostring(response))
-    localPlayer:Kick("Gagal terhubung ke server verifikasi LeonThings!")
-    return
-end
+local main = Instance.new("Frame", sg)
+main.Size = UDim2.fromOffset(360, 220)
+main.Position = UDim2.fromScale(0.5, 0.5)
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+main.BorderSizePixel = 0
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 14)
 
-if not response or response == "" then
-    warn("[Leon X Loader] Error: Response dari server kosong (empty body).")
-    return
-end
+local stroke = Instance.new("UIStroke", main)
+stroke.Color = Color3.fromRGB(100, 80, 255)
+stroke.Thickness = 1.5
 
-print(string.format("[Leon X Loader] Server merespon (%d bytes). Memuat script...", #response))
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1, -30, 0, 30)
+title.Position = UDim2.fromOffset(15, 16)
+title.BackgroundTransparency = 1
+title.Text = "Leon X — License Verification"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 15
+title.TextColor3 = Color3.fromRGB(240, 240, 255)
+title.TextXAlignment = Enum.TextXAlignment.Left
 
--- Menjalankan script utama yang dikirimkan oleh website jika verifikasi lolos
-local func, compileErr = loadstring(response)
-if not func then
-    warn("[Leon X Loader] Error Syntax/Compilation: Response bukan Lua script valid!")
-    warn("Detail Error: " .. tostring(compileErr))
-    warn("Isi Response (200 char pertama): " .. tostring(response:sub(1, 200)))
-    return
-end
+local sub = Instance.new("TextLabel", main)
+sub.Size = UDim2.new(1, -30, 0, 18)
+sub.Position = UDim2.fromOffset(15, 42)
+sub.BackgroundTransparency = 1
+sub.Text = "Enter your license key to unlock the hub."
+sub.Font = Enum.Font.GothamMedium
+sub.TextSize = 11
+sub.TextColor3 = Color3.fromRGB(140, 140, 165)
+sub.TextXAlignment = Enum.TextXAlignment.Left
 
-local loadSuccess, loadErr = pcall(func)
-if not loadSuccess then
-    warn("[Leon X Loader] Error Runtime saat menjalankan script utama: " .. tostring(loadErr))
-end
+local boxFrame = Instance.new("Frame", main)
+boxFrame.Size = UDim2.new(1, -30, 0, 42)
+boxFrame.Position = UDim2.fromOffset(15, 72)
+boxFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+boxFrame.BorderSizePixel = 0
+Instance.new("UICorner", boxFrame).CornerRadius = UDim.new(0, 8)
+local bStroke = Instance.new("UIStroke", boxFrame)
+bStroke.Color = Color3.fromRGB(40, 40, 60)
+bStroke.Thickness = 1
 
+local input = Instance.new("TextBox", boxFrame)
+input.Size = UDim2.new(1, -20, 1, 0)
+input.Position = UDim2.fromOffset(10, 0)
+input.BackgroundTransparency = 1
+input.PlaceholderText = "e.g. LEONX-VIP-MASTER-999"
+input.PlaceholderColor3 = Color3.fromRGB(90, 90, 120)
+input.Text = ""
+input.Font = Enum.Font.GothamBold
+input.TextSize = 12
+input.TextColor3 = Color3.fromRGB(255, 255, 255)
+input.ClearTextOnFocus = false
+
+local statusLbl = Instance.new("TextLabel", main)
+statusLbl.Size = UDim2.new(1, -30, 0, 16)
+statusLbl.Position = UDim2.fromOffset(15, 120)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text = ""
+statusLbl.Font = Enum.Font.GothamMedium
+statusLbl.TextSize = 11
+statusLbl.TextColor3 = Color3.fromRGB(255, 90, 90)
+
+local submitBtn = Instance.new("TextButton", main)
+submitBtn.Size = UDim2.new(1, -30, 0, 40)
+submitBtn.Position = UDim2.fromOffset(15, 148)
+submitBtn.BackgroundColor3 = Color3.fromRGB(90, 70, 240)
+submitBtn.BorderSizePixel = 0
+submitBtn.Text = "Unlock Leon X"
+submitBtn.Font = Enum.Font.GothamBold
+submitBtn.TextSize = 13
+submitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+submitBtn.AutoButtonColor = false
+Instance.new("UICorner", submitBtn).CornerRadius = UDim.new(0, 8)
+
+submitBtn.MouseButton1Click:Connect(function()
+    local k = input.Text:gsub("%s+", "")
+    submitBtn.Text = "Verifying Key..."
+    statusLbl.Text = ""
+
+    task.spawn(function()
+        verifyAndLoad(k, function(err)
+            submitBtn.Text = "Unlock Leon X"
+            statusLbl.Text = err or "Verification failed."
+        end)
+        if sg and sg.Parent then
+            sg:Destroy()
+        end
+    end)
+end)
