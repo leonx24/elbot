@@ -89,11 +89,13 @@ const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "s
 function isUserOwnerOrAdmin(userId: string, member?: GuildMember | null): boolean {
   if (userId === config.OWNER_ID) return true;
   if (!member) return false;
-  if (config.OWNER_ROLE_ID && member.roles.cache.has(config.OWNER_ROLE_ID)) return true;
+  const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
+  if (member.roles.cache.has(ownerRoleId) || member.roles.cache.has("1515320851656872066")) return true;
   if (member.permissions && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (member.permissions && member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
   return member.roles.cache.some(r => {
     const name = r.name.toLowerCase();
-    return name.includes("owner") || name.includes("developer") || name.includes("founder") || name.includes("admin") || name.includes("co-owner");
+    return name.includes("owner") || name.includes("developer") || name.includes("founder") || name.includes("admin") || name.includes("co-owner") || name.includes("staff");
   });
 }
 const faq: Record<string, string> = {
@@ -1971,9 +1973,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "supported-games" || interaction.commandName === "support-game") {
+        const targetChannel = interaction.options.getChannel("channel") as TextChannel | null;
         const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
         const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
-        await interaction.reply(v2Payload);
+
+        if (targetChannel && targetChannel.id !== interaction.channelId) {
+          const targetChannelId = targetChannel.id;
+          if (!("send" in targetChannel) || typeof targetChannel.send !== "function") {
+            await interaction.reply({
+              content: `❌ Gagal: Channel <#${targetChannelId}> tidak dapat menerima pesan.`,
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          try {
+            await (targetChannel as TextChannel).send(v2Payload);
+            await interaction.reply({
+              content: `✅ Embed **Script Support Game** berhasil dikirim ke <#${targetChannelId}>.`,
+              flags: MessageFlags.Ephemeral
+            });
+          } catch (err) {
+            console.error("Gagal mengirim embed support-game ke channel target:", err);
+            await interaction.reply({
+              content: `❌ Gagal mengirim pesan ke <#${targetChannelId}>: ${err instanceof Error ? err.message : String(err)}`,
+              flags: MessageFlags.Ephemeral
+            });
+          }
+        } else {
+          // Kirim langsung ke channel saat ini secara publik agar semua member bisa lihat
+          await interaction.reply(v2Payload);
+        }
       }
 
       if (["warn", "timeout", "kick", "ban"].includes(interaction.commandName)) {

@@ -21,10 +21,20 @@ export const commands = [
     .setDescription("Lihat status layanan script"),
   new SlashCommandBuilder()
     .setName("support-game")
-    .setDescription("Lihat daftar game yang didukung (Script Support Game)"),
+    .setDescription("Lihat atau kirim status game yang didukung (Script Support Game)")
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Kirim embed ke channel tertentu (opsional, default: channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    ),
   new SlashCommandBuilder()
     .setName("supported-games")
-    .setDescription("Lihat daftar game yang didukung oleh LeonX Script Hub"),
+    .setDescription("Lihat atau kirim daftar game yang didukung oleh LeonX Script Hub")
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Kirim embed ke channel tertentu (opsional, default: channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    ),
   new SlashCommandBuilder()
     .setName("changelog")
     .setDescription("Lihat atau terbitkan changelog")
