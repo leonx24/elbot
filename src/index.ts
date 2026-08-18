@@ -775,7 +775,7 @@ client.once(Events.ClientReady, async (readyClient) => {
                 `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script khusus dan key lisensi Anda:\n` +
                 `\`\`\`lua\n` +
                 `_G.Key = "${userKey}"\n` +
-                `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+                `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n` +
                 `\`\`\`\n` +
                 `Jangan bagikan key ini kepada siapapun!`;
                 
@@ -857,7 +857,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               content:
                 "```lua\n" +
                 `_G.Key = "${userKey}"\n` +
-                'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n' +
+                'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n' +
                 "```"
             }
           ],
@@ -1144,7 +1144,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                           content:
                             "```lua\n" +
                             `_G.Key = "${userKey}"\n` +
-                            'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n' +
+                            'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n' +
                             "```"
                         }
                       ],
@@ -1312,7 +1312,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             `Administrator telah membuatkan/memperbarui key baru untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
             `\`\`\`lua\n` +
             `_G.Key = "${newKey}"\n` +
-            `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n` +
+            `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n` +
             `\`\`\``;
           await user.send(dmContent);
         } catch {
@@ -3395,7 +3395,7 @@ client.on(Events.MessageCreate, async (message) => {
                       content:
                         "```lua\n" +
                         `_G.Key = "${userKey}"\n` +
-                        'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua"))()\n' +
+                        'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n' +
                         "```"
                     }
                   ],
