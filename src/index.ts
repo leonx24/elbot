@@ -1690,6 +1690,43 @@ client.on(Events.InteractionCreate, async (interaction) => {
             timeZone: "Asia/Jakarta"
           });
 
+          // Process Map / Place ID & Thumbnail
+          let mapDisplayName = mapName;
+          let changelogThumbnailUrl = guildIcon;
+
+          if (mapName) {
+            const trimmedMap = mapName.trim();
+            const placeIdMatch = trimmedMap.match(/\b\d{6,15}\b/);
+            const isUniversalOrDiscord = /^(universal|discord|leon\s*x|global|bot)$/i.test(trimmedMap);
+
+            if (placeIdMatch && !isUniversalOrDiscord) {
+              const detectedPlaceId = placeIdMatch[0];
+              try {
+                const uRes = await fetch(`https://apis.roblox.com/universes/v1/places/${detectedPlaceId}/universe`).then(r => r.json()).catch(() => null);
+                if (uRes && uRes.universeId) {
+                  const [gameRes, iconRes] = await Promise.all([
+                    fetch(`https://games.roblox.com/v1/games?universeIds=${uRes.universeId}`).then(r => r.json()).catch(() => null),
+                    fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${uRes.universeId}&size=512x512&format=Png&isCircular=false`).then(r => r.json()).catch(() => null)
+                  ]);
+                  const rbxGameName = gameRes?.data?.[0]?.name;
+                  const rbxIconUrl = iconRes?.data?.[0]?.imageUrl;
+
+                  if (rbxGameName) {
+                    mapDisplayName = `${rbxGameName}`;
+                  }
+                  if (rbxIconUrl) {
+                    changelogThumbnailUrl = rbxIconUrl;
+                  }
+                }
+              } catch (e) {
+                console.error("[CHANGELOG] Error fetching Roblox game info:", e);
+              }
+            } else if (isUniversalOrDiscord) {
+              changelogThumbnailUrl = guildIcon;
+              mapDisplayName = trimmedMap.charAt(0).toUpperCase() + trimmedMap.slice(1);
+            }
+          }
+
           // Build info section
           let infoText = "";
           if (tagEveryone) {
@@ -1699,8 +1736,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
             `**Status:** ${statusEmoji}\n` +
             `**Time:** \`${timeStr}\`\n` +
             `**Version:** \`${version}\``;
-          if (mapName) {
-            infoText += `\n**Map:** \`${mapName}\``;
+          if (mapDisplayName) {
+            infoText += `\n**Map:** \`${mapDisplayName}\``;
           }
 
           // Build changelog section content
@@ -1743,7 +1780,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
           const v2Payload = buildV2Container({
             title: `# U P D A T E`,
-            thumbnailUrl: guildIcon,
+            thumbnailUrl: changelogThumbnailUrl,
             description: infoText,
             sections: [
               {

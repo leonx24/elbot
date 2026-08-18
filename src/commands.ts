@@ -49,7 +49,7 @@ export const commands = [
         )
         .addStringOption((o) =>
           o.setName("map")
-            .setDescription("Nama map server, contoh: Erangel, Miramar (opsional)")
+            .setDescription("Roblox Place ID (contoh: 93978595733734) atau nama game / Universal (opsional)")
         )
         .addBooleanOption((o) =>
           o.setName("tag_everyone")
