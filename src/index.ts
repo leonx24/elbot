@@ -84,6 +84,17 @@ const client = new Client({
 const cooldowns = new Map<string, number>();
 const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
 const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
+
+function isUserOwnerOrAdmin(userId: string, member?: GuildMember | null): boolean {
+  if (userId === config.OWNER_ID) return true;
+  if (!member) return false;
+  if (config.OWNER_ROLE_ID && member.roles.cache.has(config.OWNER_ROLE_ID)) return true;
+  if (member.permissions && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  return member.roles.cache.some(r => {
+    const name = r.name.toLowerCase();
+    return name.includes("owner") || name.includes("developer") || name.includes("founder") || name.includes("admin") || name.includes("co-owner");
+  });
+}
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
   error: "Cek `/status`, pastikan versinya terbaru, lalu kirim `/bug-report` bila masih error.",
@@ -887,9 +898,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
+        const isOwner = isUserOwnerOrAdmin(interaction.user.id, interaction.member);
+
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const result = resetUserKeyBinding(interaction.user.id);
-        await interaction.editReply(result.message);
+        const result = resetUserKeyBinding(interaction.user.id, isOwner);
+        const replyText = result.message + (isOwner && result.success ? "\n*(Bypass cooldown aktif karena Anda memiliki role Owner/Admin)*" : "");
+        await interaction.editReply(replyText);
       }
 
       if (interaction.commandName === "keyinfo") {
@@ -1203,9 +1217,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 if (!hasRole) {
                   finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`);
                 } else {
-                  const resetResult = resetUserKeyBinding(interaction.user.id);
+                  const isOwner = isUserOwnerOrAdmin(interaction.user.id, member);
+                  const resetResult = resetUserKeyBinding(interaction.user.id, isOwner);
                   if (resetResult.success) {
-                    finalReply = finalReply.replace(actionResetHwidRegex, `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`);
+                    finalReply = finalReply.replace(actionResetHwidRegex, `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.${isOwner ? " *(Owner Bypass Active)*" : ""}`);
                   } else {
                     finalReply = finalReply.replace(actionResetHwidRegex, `\n\n❌ **Gagal reset HWID:** ${resetResult.message}`);
                   }
@@ -3486,13 +3501,14 @@ client.on(Events.MessageCreate, async (message) => {
                 isEng ? `\n\n❌ **Failed:** Please complete verification first.` : `\n\n❌ **Gagal:** Silakan verifikasi terlebih dahulu.`
               );
             } else {
-              const resetResult = resetUserKeyBinding(message.author.id);
+              const isOwner = isUserOwnerOrAdmin(message.author.id, member);
+              const resetResult = resetUserKeyBinding(message.author.id, isOwner);
               if (resetResult.success) {
                 finalReply = finalReply.replace(
                   actionResetHwidRegex,
                   isEng
-                    ? `\n\n🔄 **HWID Reset Successful!** Please execute the script again in Roblox to bind your new device/account.`
-                    : `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.`
+                    ? `\n\n🔄 **HWID Reset Successful!** Please execute the script again in Roblox to bind your new device/account.${isOwner ? " *(Owner Bypass Active)*" : ""}`
+                    : `\n\n🔄 **HWID Reset Sukses!** Silakan jalankan kembali script di Roblox untuk menautkan perangkat/akun baru Anda.${isOwner ? " *(Owner Bypass Active)*" : ""}`
                 );
               } else {
                 finalReply = finalReply.replace(
@@ -4033,7 +4049,10 @@ http.createServer(async (req, res) => {
       }
 
       const user = await discordRes.json() as { id: string };
-      const result = resetUserKeyBinding(user.id);
+      const guild = client.guilds.cache.get(config.GUILD_ID);
+      const member = await guild?.members.fetch(user.id).catch(() => null);
+      const isOwner = isUserOwnerOrAdmin(user.id, member);
+      const result = resetUserKeyBinding(user.id, isOwner);
       if (result.success) {
         res.writeHead(200);
         res.end(JSON.stringify({ success: true, message: result.message }));

@@ -304,15 +304,15 @@ export function validateUserKey(
   return { valid: true, message: "Key valid.", discordId: row.discord_id };
 }
 
-export function resetUserKeyBinding(discordId: string): { success: boolean; message: string } {
+export function resetUserKeyBinding(discordId: string, bypassCooldown: boolean = false): { success: boolean; message: string } {
   const row = db.prepare("SELECT last_reset_at, key FROM user_keys WHERE discord_id = ?").get(discordId) as { last_reset_at: string | null; key: string } | undefined;
 
   if (!row) {
     return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
   }
 
-  // Check 10 minute cooldown
-  if (row.last_reset_at) {
+  // Check 10 minute cooldown if not bypassing
+  if (!bypassCooldown && row.last_reset_at) {
     const lastReset = new Date(row.last_reset_at).getTime();
     const now = Date.now();
     const diffMinutes = (now - lastReset) / (1000 * 60);
