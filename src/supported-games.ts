@@ -7,6 +7,7 @@ export interface SupportedGame {
   name: string;
   status: GameStatus;
   category?: string;
+  note?: string;
 }
 
 /**
@@ -43,35 +44,61 @@ export const DEFAULT_SUPPORTED_GAMES: SupportedGame[] = [
  * Membangun embed Discord Components V2 untuk Script Support Game LeonX Hub.
  */
 export function buildSupportedGamesV2(games: SupportedGame[] = DEFAULT_SUPPORTED_GAMES, iconUrl?: string) {
-  const gameLines = games.map((game) => {
+  const activeGames = games.filter((g) => g.status === "WORK" || g.status === "NEED_UPDATE");
+  const discontinuedGames = games.filter((g) => g.status === "DISCONTINUED" || g.status === "DOWN");
+
+  const formatGame = (game: SupportedGame) => {
     let icon = "🟢";
+    let badge = "WORK";
 
     if (game.status === "NEED_UPDATE") {
       icon = "🟠";
-    } else if (game.status === "DOWN" || game.status === "DISCONTINUED") {
+      badge = "NEED UPDATE";
+    } else if (game.status === "DOWN") {
       icon = "🔴";
+      badge = "DOWN";
+    } else if (game.status === "DISCONTINUED") {
+      icon = "🔴";
+      badge = "DISCONTINUED";
     }
 
-    return `${game.name} : ${icon}`;
+    const note = game.note ? `\n> ↳ -# *${game.note}*` : "";
+    return `> ${icon} **${game.name}**  •  \`${badge}\`${note}`;
+  };
+
+  const sections: { title?: string; content: string }[] = [];
+
+  // Section 1: Active / Supported Games
+  if (activeGames.length > 0) {
+    sections.push({
+      title: "🎮 Supported Games",
+      content: activeGames.map(formatGame).join("\n"),
+    });
+  }
+
+  // Section 2: Discontinued Games
+  if (discontinuedGames.length > 0) {
+    sections.push({
+      title: "🛑 Discontinued",
+      content: discontinuedGames.map(formatGame).join("\n"),
+    });
+  }
+
+  // Section 3: Status Legend
+  sections.push({
+    title: "📊 Status Legend",
+    content:
+      `🟢 \`WORK\` — Script berjalan normal & stabil\n` +
+      `🟠 \`NEED UPDATE\` — Sedang maintenance / beta test\n` +
+      `🔴 \`DISCONTINUED\` — Dukungan script telah dihentikan`,
   });
 
   return buildV2Container({
     title: "Script Support Game",
+    description: "Daftar status dukungan script game Roblox pada **LeonX Hub**.",
     thumbnailUrl: iconUrl,
-    sections: [
-      {
-        title: "List Game Roblox",
-        content: gameLines.join("\n"),
-      },
-      {
-        title: "Status",
-        content:
-          `🟢 WORK\n` +
-          `🟠 NEED UPDATE/BETA TEST\n` +
-          `🔴 DOWN / DISCONTINUED`,
-      },
-    ],
-    accentColor: 0xff7700, // Orange accent matching LeonX Script Hub
+    sections,
+    // accentColor tidak diisi agar garis warna di sisi kiri dihapus
     footer: "LeonX Hub • Script Support System",
   });
 }

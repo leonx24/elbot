@@ -1954,9 +1954,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
               (tagEveryone ? " (dengan tag @everyone)" : "")
           });
         } else if (sub === "games") {
+          const targetChannel = (interaction.channel as TextChannel | null);
           const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
           const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
-          await interaction.reply(v2Payload);
+
+          if (!targetChannel || !("send" in targetChannel) || typeof targetChannel.send !== "function") {
+            await interaction.reply({
+              content: `❌ Gagal: Channel tidak dapat menerima pesan.`,
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          try {
+            await targetChannel.send(v2Payload);
+            await interaction.reply({
+              content: `✅ Pesan **Script Support Game** berhasil dikirim ke <#${targetChannel.id}>.`,
+              flags: MessageFlags.Ephemeral
+            });
+          } catch (err) {
+            console.error("Gagal mengirim pesan support-game:", err);
+            await interaction.reply({
+              content: `❌ Gagal mengirim pesan: ${err instanceof Error ? err.message : String(err)}`,
+              flags: MessageFlags.Ephemeral
+            });
+          }
         } else {
           const row = db.prepare("SELECT title, content, created_at FROM changelogs ORDER BY id DESC LIMIT 1")
             .get() as { title: string; content: string; created_at: string } | undefined;
@@ -1973,36 +1995,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "supported-games" || interaction.commandName === "support-game") {
-        const targetChannel = interaction.options.getChannel("channel") as TextChannel | null;
+        const targetChannel = (interaction.options.getChannel("channel") as TextChannel | null) ?? (interaction.channel as TextChannel | null);
         const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
         const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
 
-        if (targetChannel && targetChannel.id !== interaction.channelId) {
-          const targetChannelId = targetChannel.id;
-          if (!("send" in targetChannel) || typeof targetChannel.send !== "function") {
-            await interaction.reply({
-              content: `❌ Gagal: Channel <#${targetChannelId}> tidak dapat menerima pesan.`,
-              flags: MessageFlags.Ephemeral
-            });
-            return;
-          }
+        if (!targetChannel || !("send" in targetChannel) || typeof targetChannel.send !== "function") {
+          await interaction.reply({
+            content: `❌ Gagal: Channel tidak dapat menerima pesan.`,
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
 
-          try {
-            await (targetChannel as TextChannel).send(v2Payload);
-            await interaction.reply({
-              content: `✅ Embed **Script Support Game** berhasil dikirim ke <#${targetChannelId}>.`,
-              flags: MessageFlags.Ephemeral
-            });
-          } catch (err) {
-            console.error("Gagal mengirim embed support-game ke channel target:", err);
-            await interaction.reply({
-              content: `❌ Gagal mengirim pesan ke <#${targetChannelId}>: ${err instanceof Error ? err.message : String(err)}`,
-              flags: MessageFlags.Ephemeral
-            });
-          }
-        } else {
-          // Kirim langsung ke channel saat ini secara publik agar semua member bisa lihat
-          await interaction.reply(v2Payload);
+        try {
+          await targetChannel.send(v2Payload);
+          await interaction.reply({
+            content: `✅ Pesan **Script Support Game** berhasil dikirim ke <#${targetChannel.id}>.`,
+            flags: MessageFlags.Ephemeral
+          });
+        } catch (err) {
+          console.error("Gagal mengirim embed support-game ke channel target:", err);
+          await interaction.reply({
+            content: `❌ Gagal mengirim pesan ke <#${targetChannel.id}>: ${err instanceof Error ? err.message : String(err)}`,
+            flags: MessageFlags.Ephemeral
+          });
         }
       }
 
