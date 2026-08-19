@@ -100,11 +100,16 @@ function buildSingleContainer(params: V2ContainerParams) {
     }
   }
 
-  return {
+  const containerObj: any = {
     type: 17, // Container
-    accent_color: params.accentColor ?? null,
     components: containerComponents,
   };
+
+  if (params.accentColor !== undefined && params.accentColor !== null) {
+    containerObj.accent_color = params.accentColor;
+  }
+
+  return containerObj;
 }
 
 /**

@@ -20,9 +20,26 @@ export const commands = [
     .setName("status")
     .setDescription("Lihat status layanan script"),
   new SlashCommandBuilder()
+    .setName("support-game")
+    .setDescription("Lihat atau kirim status game yang didukung (Script Support Game)")
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Kirim embed ke channel tertentu (opsional, default: channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    ),
+  new SlashCommandBuilder()
+    .setName("supported-games")
+    .setDescription("Lihat atau kirim daftar game yang didukung oleh LeonX Script Hub")
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Kirim embed ke channel tertentu (opsional, default: channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    ),
+  new SlashCommandBuilder()
     .setName("changelog")
     .setDescription("Lihat atau terbitkan changelog")
     .addSubcommand((sub) => sub.setName("latest").setDescription("Lihat update terbaru"))
+    .addSubcommand((sub) => sub.setName("games").setDescription("Lihat status game yang didukung (Script Support Game)"))
     .addSubcommand((sub) =>
       sub.setName("publish").setDescription("Terbitkan changelog")
         .addStringOption((o) =>
