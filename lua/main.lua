@@ -63,16 +63,7 @@ end
 
 local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getfenv and getfenv(0).loadstring)
 
--- ═══════════════════════════════════════════════════════════════════════════
--- BAC 7511 STEALTH PATCH (Early Runtime Override)
--- ═══════════════════════════════════════════════════════════════════════════
-pcall(function()
-    local patchSrc = secureFetch("modules/core/bac7511patch.lua")
-    if patchSrc and #patchSrc > 20 then
-        local fn = raw_loadstring(patchSrc)
-        if fn then fn() end
-    end
-end)
+
 
 local CURRENT_VERSION = "0.0.4"
 pcall(function()
@@ -537,52 +528,55 @@ WebhookLogger  = safe(WebhookLogger)
 ServerUtils    = safe(ServerUtils)
 
 
--- ── Game-specific modules ────────────────────────────────────────────────────
-local GAME_MODULES = {}
-local gagModule = load("modules/games/growagarden2.lua")
-if gagModule and gagModule.PlaceIds then
-    GAME_MODULES[#GAME_MODULES + 1] = gagModule
-end
-local famModule = load("modules/games/fishandmonsters.lua")
-if famModule and famModule.PlaceIds then
-    GAME_MODULES[#GAME_MODULES + 1] = famModule
-end
-local saeModule = load("modules/games/stealanegg.lua")
-if saeModule and saeModule.PlaceIds then
-    GAME_MODULES[#GAME_MODULES + 1] = saeModule
-    pcall(function() load("modules/core/bac8519patch.lua") end)
-end
-local vdModule = load("modules/games/violencedistrict.lua")
-if vdModule and vdModule.PlaceIds then
-    GAME_MODULES[#GAME_MODULES + 1] = vdModule
-end
--- add more game modules here
+-- ── Game-specific modules (Lazy-Loaded on Game Match) ─────────────────────────
+local GAME_REGISTRY = {
+    {
+        Name = "Grow a Garden 2",
+        PlaceIds = { 77085202503540, 97598239454123 },
+        Path = "modules/games/growagarden2.lua"
+    },
+    {
+        Name = "Fish and Monsters",
+        PlaceIds = { 111385005478215 },
+        GameIds = { 10009809198 },
+        Path = "modules/games/fishandmonsters.lua"
+    },
+    {
+        Name = "Violence District",
+        PlaceIds = { 93978595733734 },
+        Path = "modules/games/violencedistrict.lua"
+    },
+}
 
 local ActiveGameModule = nil
-for _, gm in ipairs(GAME_MODULES) do
-    -- Check PlaceIds first
-    if gm and gm.PlaceIds then
-        for _, pid in ipairs(gm.PlaceIds) do
-            if tostring(pid) == tostring(game.PlaceId) then
-                ActiveGameModule = gm
-                break
-            end
-        end
-    end
-    -- Check GameIds (Universe ID) if PlaceId didn't match
-    if not ActiveGameModule and gm and gm.GameIds then
-        for _, gid in ipairs(gm.GameIds) do
-            if tostring(gid) == tostring(game.GameId) then
-                ActiveGameModule = gm
-                break
-            end
-        end
-    end
-    if ActiveGameModule then break end
-end
+local curPlaceId = tostring(game.PlaceId)
+local curGameId  = tostring(game.GameId)
 
-if not ActiveGameModule then
-    -- Universal mode
+for _, gameDef in ipairs(GAME_REGISTRY) do
+    local isMatch = false
+    if gameDef.PlaceIds then
+        for _, pid in ipairs(gameDef.PlaceIds) do
+            if tostring(pid) == curPlaceId then
+                isMatch = true
+                break
+            end
+        end
+    end
+    if not isMatch and gameDef.GameIds then
+        for _, gid in ipairs(gameDef.GameIds) do
+            if tostring(gid) == curGameId then
+                isMatch = true
+                break
+            end
+        end
+    end
+    if isMatch then
+        local gm = load(gameDef.Path)
+        if gm then
+            ActiveGameModule = gm
+        end
+        break
+    end
 end
 
 if Waypoint then Waypoint:Init() end
