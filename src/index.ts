@@ -2769,6 +2769,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
+    // Refresh script support status button handler
+    if (interaction.isButton() && interaction.customId === "refresh_script_status") {
+      const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+      const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+      await interaction.update(v2Payload);
+      return;
+    }
+
     if (interaction.isButton() && interaction.customId === "verify:accept") {
       if (!config.VERIFIED_ROLE_ID || !(interaction.member instanceof GuildMember)) {
         await interaction.reply({ content: "Role verifikasi belum dikonfigurasi oleh admin.", flags: MessageFlags.Ephemeral });
