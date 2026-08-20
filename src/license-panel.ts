@@ -7,18 +7,58 @@ import {
   ThumbnailBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ActionRowBuilder,
   MessageFlags,
 } from "discord.js";
 
+// Configuration for self-service actions
+export const SERVICES = [
+  {
+    emoji: "🔑",
+    title: "Get My Key",
+    desc: "Dapatkan atau lihat License Key pribadi Anda.",
+    customId: "get_my_key",
+    style: ButtonStyle.Success,
+  },
+  {
+    emoji: "🔄",
+    title: "Reset HWID",
+    desc: "Reset tautan perangkat jika Anda mengganti device.",
+    note: "Cooldown 10 menit",
+    customId: "reset_hwid",
+    style: ButtonStyle.Primary,
+  },
+  {
+    emoji: "📊",
+    title: "My Key Info",
+    desc: "Periksa status lisensi, perangkat terikat, dan riwayat eksekusi.",
+    customId: "my_key_info",
+    style: ButtonStyle.Secondary,
+  },
+  {
+    emoji: "📋",
+    title: "Copy Loader",
+    desc: "Ambil script loader siap eksekusi di Roblox.",
+    customId: "copy_loader",
+    style: ButtonStyle.Secondary,
+  },
+  {
+    emoji: "🎮",
+    title: "Game Support",
+    desc: "Cek daftar game yang didukung saat ini.",
+    customId: "game_support",
+    style: ButtonStyle.Secondary,
+  },
+];
+
 /**
- * Membangun Dashboard Panel Lisensi LeonX Hub (Components V2)
- * Tanpa border warna di sisi kiri.
+ * Membangun Dashboard Panel Lisensi LeonX Hub (Discord Components V2)
+ * Tanpa garis aksen di sisi kiri.
  */
 export function buildLicensePanelV2(iconUrl?: string) {
   const container = new ContainerBuilder();
+  // Catatan: Tidak menggunakan .setAccentColor(...) agar tidak ada garis warna di sisi kiri
 
-  // Header section with thumbnail
+  // Header: title/desc + logo thumbnail accessory
   const headerContent = new TextDisplayBuilder().setContent(
     "## 🔑 LeonX Hub — License & Script Dashboard\n" +
     "Kelola lisensi script LeonX, reset HWID perangkat, dan dapatkan script loader dalam satu klik."
@@ -38,61 +78,49 @@ export function buildLicensePanelV2(iconUrl?: string) {
     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
   );
 
-  // Guide Section
   container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(
-      "### 📌 Layanan Mandiri (Self-Service)\n" +
-      "• 🔑 **Get My Key** — Dapatkan atau lihat License Key pribadi Anda.\n" +
-      "• 🔄 **Reset HWID** — Reset tautan perangkat jika Anda mengganti device (Cooldown 10 menit).\n" +
-      "• 📊 **My Key Info** — Periksa status lisensi, perangkat terikat, dan riwayat eksekusi.\n" +
-      "• 📋 **Copy Loader** — Ambil script loader siap eksekusi di Roblox.\n" +
-      "• 🎮 **Game Support** — Cek daftar game yang didukung saat ini."
-    )
+    new TextDisplayBuilder().setContent("### 📌 Layanan Mandiri (Self-Service)")
   );
+
+  // Each service as its own Section with actionable button accessory
+  for (const s of SERVICES) {
+    const lines = [`**${s.emoji} ${s.title}**`, s.desc];
+    if (s.note) lines.push(`-# ${s.note}`);
+
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(lines.join("\n")))
+        .setButtonAccessory(
+          new ButtonBuilder()
+            .setCustomId(s.customId)
+            .setLabel(s.title)
+            .setStyle(s.style)
+        )
+    );
+  }
 
   container.addSeparatorComponents(
     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large)
   );
 
-  // Footer Section
+  // Security notice
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      "-# 🔒 Keamanan: Jangan pernah membagikan Key pribadi Anda kepada siapapun.\n" +
-      "-# LeonX Hub • Automated License Management System"
+      "🔒 **Keamanan:** Jangan pernah membagikan Key pribadi Anda kepada siapapun."
     )
   );
 
-  // Action Buttons
-  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("license:get_key")
-      .setLabel("Get My Key")
-      .setEmoji("🔑")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("license:reset_hwid")
-      .setLabel("Reset HWID")
-      .setEmoji("🔄")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("license:info")
-      .setLabel("My Key Info")
-      .setEmoji("📊")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("license:copy_loader")
-      .setLabel("Copy Loader")
-      .setEmoji("📋")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("license:games")
-      .setLabel("Game Support")
-      .setEmoji("🎮")
-      .setStyle(ButtonStyle.Secondary)
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+  );
+
+  // Footer
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent("-# LeonX Hub • Automated License Management System")
   );
 
   return {
-    components: [container, row1],
+    components: [container],
     flags: MessageFlags.IsComponentsV2 as const,
   };
 }

@@ -2892,14 +2892,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     // License Panel Button Handlers
-    if (interaction.isButton() && interaction.customId === "license:get_key") {
+    if (interaction.isButton() && (interaction.customId === "get_my_key" || interaction.customId === "license:get_key")) {
       const userKey = getOrCreateUserKey(interaction.user.id);
       const ephemeralPayload = buildUserKeyEphemeral(userKey, interaction.user.id);
       await interaction.reply(ephemeralPayload);
       return;
     }
 
-    if (interaction.isButton() && interaction.customId === "license:reset_hwid") {
+    if (interaction.isButton() && (interaction.customId === "reset_hwid" || interaction.customId === "license:reset_hwid")) {
       const result = resetUserKeyBinding(interaction.user.id);
       await interaction.reply({
         content: result.success ? `✅ **Sukses:** ${result.message}` : `⚠️ **Perhatian:** ${result.message}`,
@@ -2908,7 +2908,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.isButton() && interaction.customId === "license:info") {
+    if (interaction.isButton() && (interaction.customId === "my_key_info" || interaction.customId === "license:info")) {
       const info = getUserKeyInfo(interaction.user.id);
       if (!info) {
         getOrCreateUserKey(interaction.user.id);
@@ -2929,7 +2929,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.isButton() && interaction.customId === "license:copy_loader") {
+    if (interaction.isButton() && (interaction.customId === "copy_loader" || interaction.customId === "license:copy_loader")) {
       const userKey = getOrCreateUserKey(interaction.user.id);
       const code = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
       await interaction.reply({
@@ -2939,7 +2939,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.isButton() && interaction.customId === "license:games") {
+    if (interaction.isButton() && (interaction.customId === "game_support" || interaction.customId === "license:games")) {
       const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
       const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
       await interaction.reply({
