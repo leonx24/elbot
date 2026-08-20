@@ -19,7 +19,8 @@ const schema = z.object({
   TICKET_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   TICKET_REVIEW_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   GROQ_API_KEY: z.string().optional().or(z.literal("")),
-  AI_CHANNEL_ID: z.string().optional().or(z.literal(""))
+  AI_CHANNEL_ID: z.string().optional().or(z.literal("")),
+  SECURITY_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
 });
 
 export const config = schema.parse(process.env);

@@ -96,6 +96,12 @@ db.exec(`
     executor TEXT,
     executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS banned_ips (
+    ip TEXT PRIMARY KEY,
+    reason TEXT NOT NULL,
+    banned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
@@ -329,3 +335,55 @@ export function resetUserKeyBinding(discordId: string, bypassCooldown: boolean =
 
   return { success: true, message: "Berhasil mereset data HWID dan Roblox ID Anda. Silakan jalankan script kembali di Roblox untuk mengaitkannya ke perangkat/akun baru." };
 }
+
+export function isIpBanned(ip: string): boolean {
+  if (!ip) return false;
+  const row = db.prepare("SELECT 1 FROM banned_ips WHERE ip = ?").get(ip);
+  return !!row;
+}
+
+export function banIp(ip: string, reason: string): void {
+  if (!ip) return;
+  db.prepare(`
+    INSERT INTO banned_ips (ip, reason, banned_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason, banned_at = datetime('now')
+  `).run(ip, reason);
+}
+
+export function unbanIp(ip: string): boolean {
+  if (!ip) return false;
+  const res = db.prepare("DELETE FROM banned_ips WHERE ip = ?").run(ip);
+  return res.changes > 0;
+}
+
+export function getBannedIps(): Array<{ ip: string; reason: string; banned_at: string }> {
+  return db.prepare("SELECT * FROM banned_ips ORDER BY banned_at DESC").all() as any;
+}
+
+export function getUserKeyInfo(discordId: string): {
+  key: string;
+  roblox_id: string | null;
+  hwid: string | null;
+  last_reset_at: string | null;
+  created_at: string;
+  execution_count: number;
+} | null {
+  const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(discordId) as {
+    key: string;
+    roblox_id: string | null;
+    hwid: string | null;
+    last_reset_at: string | null;
+    created_at: string;
+  } | undefined;
+
+  if (!row) return null;
+
+  const countRow = db.prepare("SELECT COUNT(*) as count FROM script_executions WHERE discord_id = ?").get(discordId) as { count: number } | undefined;
+
+  return {
+    ...row,
+    execution_count: countRow?.count || 0
+  };
+}
+

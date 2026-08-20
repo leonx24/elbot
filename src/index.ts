@@ -19,11 +19,29 @@ import {
 } from "discord.js";
 import { buildV2Container, buildMultiV2Containers } from "./components-v2.js";
 import { buildSupportedGamesV2 } from "./supported-games.js";
+import { buildLicensePanelV2, buildUserKeyEphemeral, buildKeyInfoEphemeral } from "./license-panel.js";
+import { handleSecurityCheck, recordFailedKeyAttempt, getClientIp } from "./security.js";
 import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { db, trackCommand, addToBlacklist, removeFromBlacklist, isBlacklisted, getBlacklistList, getOrCreateUserKey, forceGenerateUserKey, validateUserKey, resetUserKeyBinding } from "./database.js";
+import {
+  db,
+  trackCommand,
+  addToBlacklist,
+  removeFromBlacklist,
+  isBlacklisted,
+  getBlacklistList,
+  getOrCreateUserKey,
+  forceGenerateUserKey,
+  validateUserKey,
+  resetUserKeyBinding,
+  banIp,
+  unbanIp,
+  isIpBanned,
+  getBannedIps,
+  getUserKeyInfo
+} from "./database.js";
 import {
   createTicketPanel,
   createTicketChannel,
@@ -97,6 +115,11 @@ function isUserOwnerOrAdmin(userId: string, member?: GuildMember | null): boolea
     const name = r.name.toLowerCase();
     return name.includes("owner") || name.includes("developer") || name.includes("founder") || name.includes("admin") || name.includes("co-owner") || name.includes("staff");
   });
+}
+
+function isStaff(member?: GuildMember | null): boolean {
+  if (!member) return false;
+  return isUserOwnerOrAdmin(member.id, member);
 }
 const faq: Record<string, string> = {
   script: "Gunakan `/script nama:LeonX Hub Loader`. Bot akan mengirimkannya lewat DM.",
@@ -2039,6 +2062,80 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
+      if (interaction.commandName === "license-panel") {
+        if (!isStaff(interaction.member as GuildMember)) {
+          await interaction.reply({ content: "❌ Anda tidak memiliki izin untuk menggunakan perintah ini.", flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        const targetChannel = (interaction.options.getChannel("channel") as TextChannel | null) ?? (interaction.channel as TextChannel | null);
+        const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+        const v2Payload = buildLicensePanelV2(guildIcon);
+
+        if (!targetChannel || !("send" in targetChannel) || typeof targetChannel.send !== "function") {
+          await interaction.reply({
+            content: `❌ Gagal: Channel tidak dapat menerima pesan.`,
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        try {
+          await targetChannel.send(v2Payload as any);
+          await interaction.reply({
+            content: `✅ Panel **License & Script Dashboard** berhasil dikirim ke <#${targetChannel.id}>.`,
+            flags: MessageFlags.Ephemeral
+          });
+        } catch (err) {
+          console.error("Gagal mengirim panel license-dashboard:", err);
+          await interaction.reply({
+            content: `❌ Gagal mengirim panel ke <#${targetChannel.id}>: ${err instanceof Error ? err.message : String(err)}`,
+            flags: MessageFlags.Ephemeral
+          });
+        }
+      }
+
+      if (interaction.commandName === "security") {
+        if (!isStaff(interaction.member as GuildMember)) {
+          await interaction.reply({ content: "❌ Anda tidak memiliki izin untuk menggunakan perintah ini.", flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        const sub = interaction.options.getSubcommand();
+        if (sub === "list-bans") {
+          const bannedList = getBannedIps();
+          if (bannedList.length === 0) {
+            await interaction.reply({ content: "✅ Tidak ada IP yang saat ini diblokir oleh sistem anti-tamper.", flags: MessageFlags.Ephemeral });
+            return;
+          }
+
+          const lines = bannedList.slice(0, 20).map((b, i) =>
+            `**${i + 1}.** \`${b.ip}\` — ${b.reason} (<t:${Math.floor(new Date(b.banned_at).getTime() / 1000)}:R>)`
+          );
+
+          const embed = new EmbedBuilder()
+            .setTitle("🛡️ Daftar IP Terblokir (Anti-Tamper)")
+            .setColor(0xed4245)
+            .setDescription(lines.join("\n") + (bannedList.length > 20 ? `\n\n*...dan ${bannedList.length - 20} IP lainnya.*` : ""))
+            .setFooter({ text: `Total IP Diblokir: ${bannedList.length}` });
+
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        } else if (sub === "unban-ip") {
+          const ip = interaction.options.getString("ip", true).trim();
+          const success = unbanIp(ip);
+          if (success) {
+            await interaction.reply({ content: `✅ Berhasil membuka blokir IP \`${ip}\`.`, flags: MessageFlags.Ephemeral });
+          } else {
+            await interaction.reply({ content: `⚠️ IP \`${ip}\` tidak ditemukan dalam daftar blacklist IP.`, flags: MessageFlags.Ephemeral });
+          }
+        } else if (sub === "ban-ip") {
+          const ip = interaction.options.getString("ip", true).trim();
+          const reason = interaction.options.getString("alasan", true).trim();
+          banIp(ip, `Manual Admin Ban: ${reason}`);
+          await interaction.reply({ content: `⛔ Berhasil memblokir IP \`${ip}\` dengan alasan: **${reason}**.`, flags: MessageFlags.Ephemeral });
+        }
+      }
+
       if (["warn", "timeout", "kick", "ban"].includes(interaction.commandName)) {
         const user = interaction.options.getUser("user", true);
         const member = await interaction.guild?.members.fetch(user.id).catch(() => null);
@@ -2791,6 +2888,93 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
       const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
       await interaction.update(v2Payload);
+      return;
+    }
+
+    // License Panel Button Handlers
+    if (interaction.isButton() && interaction.customId === "license:get_key") {
+      const userKey = getOrCreateUserKey(interaction.user.id);
+      const ephemeralPayload = buildUserKeyEphemeral(userKey, interaction.user.id);
+      await interaction.reply(ephemeralPayload);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === "license:reset_hwid") {
+      const result = resetUserKeyBinding(interaction.user.id);
+      await interaction.reply({
+        content: result.success ? `✅ **Sukses:** ${result.message}` : `⚠️ **Perhatian:** ${result.message}`,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === "license:info") {
+      const info = getUserKeyInfo(interaction.user.id);
+      if (!info) {
+        getOrCreateUserKey(interaction.user.id);
+        const newInfo = getUserKeyInfo(interaction.user.id);
+        if (newInfo) {
+          const ephemeralPayload = buildKeyInfoEphemeral(newInfo, interaction.user.id);
+          await interaction.reply(ephemeralPayload);
+          return;
+        }
+        await interaction.reply({
+          content: "❌ Anda belum memiliki key terdaftar. Silakan klik **Get My Key** terlebih dahulu.",
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+      const ephemeralPayload = buildKeyInfoEphemeral(info, interaction.user.id);
+      await interaction.reply(ephemeralPayload);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === "license:copy_loader") {
+      const userKey = getOrCreateUserKey(interaction.user.id);
+      const code = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+      await interaction.reply({
+        content: `📋 **Script Loader Siap Pakai:**\n\`\`\`lua\n${code}\n\`\`\``,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === "license:games") {
+      const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+      const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+      await interaction.reply({
+        ...v2Payload,
+        flags: (MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral) as any
+      });
+      return;
+    }
+
+    // Security Alert Button Handlers
+    if (interaction.isButton() && interaction.customId.startsWith("security:unban:")) {
+      if (!isStaff(interaction.member as GuildMember)) {
+        await interaction.reply({ content: "❌ Anda tidak memiliki izin untuk melakukan aksi ini.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const rawIp = interaction.customId.replace("security:unban:", "").replace(/_/g, ":");
+      const success = unbanIp(rawIp);
+      await interaction.reply({
+        content: success ? `🔓 IP \`${rawIp}\` berhasil di-unban oleh <@${interaction.user.id}>.` : `⚠️ IP \`${rawIp}\` sudah tidak ada di daftar blokir.`,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("security:blacklist_hwid:")) {
+      if (!isStaff(interaction.member as GuildMember)) {
+        await interaction.reply({ content: "❌ Anda tidak memiliki izin untuk melakukan aksi ini.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const hwid = interaction.customId.replace("security:blacklist_hwid:", "");
+      addToBlacklist({ hwid, reason: `Security Alert Blacklist by ${interaction.user.tag}` });
+      await interaction.reply({
+        content: `⛔ HWID \`${hwid}\` berhasil dimasukkan ke daftar hitam (Blacklist) oleh <@${interaction.user.id}>.`,
+        flags: MessageFlags.Ephemeral
+      });
       return;
     }
 
@@ -4049,6 +4233,10 @@ http.createServer(async (req, res) => {
     return;
   }
 
+  // Anti-Tamper & Security Defense Engine Check
+  const isAllowed = await handleSecurityCheck(req, res, client);
+  if (!isAllowed) return;
+
   // Parse path and query params
   const urlObj = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
   const pathname = urlObj.pathname;
@@ -4085,6 +4273,7 @@ http.createServer(async (req, res) => {
     try {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
+        await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId, username });
         res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
         res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: ${result.message.replace(/"/g, '\\"')}")`);
         return;
@@ -4173,6 +4362,7 @@ http.createServer(async (req, res) => {
     try {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
+        await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId });
         res.writeHead(403);
         res.end(JSON.stringify({ valid: false, error: result.message }));
         return;

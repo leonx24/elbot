@@ -286,7 +286,32 @@ export const commands = [
     .addStringOption((o) => o.setName("key").setDescription("Key lisensi yang dicari (opsional)"))
     .addUserOption((o) => o.setName("user").setDescription("User Discord yang dicari (opsional)"))
     .addStringOption((o) => o.setName("roblox_id").setDescription("Roblox User ID yang dicari (opsional)"))
-    .addStringOption((o) => o.setName("hwid").setDescription("Hardware ID (HWID) yang dicari (opsional)"))
+    .addStringOption((o) => o.setName("hwid").setDescription("Hardware ID (HWID) yang dicari (opsional)")),
+  new SlashCommandBuilder()
+    .setName("license-panel")
+    .setDescription("Kirim Panel Dashboard Lisensi & Key System 1-Klik ke channel")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Channel target untuk mengirim panel (opsional, default: channel saat ini)")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    ),
+  new SlashCommandBuilder()
+    .setName("security")
+    .setDescription("Kelola sistem keamanan anti-tamper dan blacklist IP (Admin Only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((sub) =>
+      sub.setName("list-bans").setDescription("Lihat daftar IP yang diblokir oleh sistem anti-tamper")
+    )
+    .addSubcommand((sub) =>
+      sub.setName("unban-ip").setDescription("Buka blokir IP address")
+        .addStringOption((o) => o.setName("ip").setDescription("IP address yang ingin dibuka blokirnya").setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("ban-ip").setDescription("Blokir IP address secara manual")
+        .addStringOption((o) => o.setName("ip").setDescription("IP address yang ingin diblokir").setRequired(true))
+        .addStringOption((o) => o.setName("alasan").setDescription("Alasan pemblokiran").setRequired(true))
+    )
 ].map((command) => command.toJSON());
 
 export type CommandData = {
