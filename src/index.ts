@@ -106,64 +106,81 @@ const faq: Record<string, string> = {
 };
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.1-8b-instant";
+const GROQ_MODELS = [
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "groq/compound",
+  "qwen/qwen3.6-27b"
+];
 const GROQ_MAX_RETRIES = 3;
 const GROQ_TIMEOUT_MS = 25_000;
 
 async function callGroqAPI(messages: Array<{ role: string; content: string }>): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  for (let attempt = 1; attempt <= GROQ_MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetch(GROQ_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.GROQ_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          messages,
-          max_tokens: 2048,
-          temperature: 0.7
-        }),
-        signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
-      });
+  for (const model of GROQ_MODELS) {
+    for (let attempt = 1; attempt <= GROQ_MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(GROQ_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${config.GROQ_API_KEY}`
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            max_tokens: 2048,
+            temperature: 0.7
+          }),
+          signal: AbortSignal.timeout(GROQ_TIMEOUT_MS)
+        });
 
-      if (response.ok) {
-        const data = await response.json() as any;
-        const text = data.choices?.[0]?.message?.content || "";
-        return { ok: true, text };
-      }
+        if (response.ok) {
+          const data = await response.json() as any;
+          let text = data.choices?.[0]?.message?.content || "";
+          // Bersihkan tag <think> jika model menggunakan reasoning chain
+          text = text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+          if (text) {
+            return { ok: true, text };
+          }
+        }
 
-      // Retry on 503 (overloaded) or 429 (rate limit)
-      if ((response.status === 503 || response.status === 429) && attempt < GROQ_MAX_RETRIES) {
-        const backoffMs = Math.min(
-          30000,
-          Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
-        );
-        console.warn(`[Groq] ${response.status} on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
-        await new Promise(r => setTimeout(r, backoffMs));
-        continue;
-      }
+        // Jika model tidak ditemukan (404), langsung beralih ke model berikutnya
+        if (response.status === 404) {
+          console.warn(`[Groq] Model ${model} not found (404), trying next model...`);
+          break;
+        }
 
-      const errText = await response.text().catch(() => "(unreadable)");
-      console.error(`[Groq] API error ${response.status}:`, errText);
-      return { ok: false, error: `API error ${response.status}` };
-    } catch (err: any) {
-      const isTimeout = err?.name === "TimeoutError" || err?.code === "UND_ERR_HEADERS_TIMEOUT" || err?.cause?.code === "UND_ERR_HEADERS_TIMEOUT";
-      if (isTimeout && attempt < GROQ_MAX_RETRIES) {
-        const backoffMs = Math.min(
-          30000,
-          Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
-        );
-        console.warn(`[Groq] Timeout on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
-        await new Promise(r => setTimeout(r, backoffMs));
-        continue;
+        // Retry on 503 (overloaded) or 429 (rate limit)
+        if ((response.status === 503 || response.status === 429) && attempt < GROQ_MAX_RETRIES) {
+          const backoffMs = Math.min(
+            30000,
+            Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+          );
+          console.warn(`[Groq] ${response.status} on ${model} attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+          await new Promise(r => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        const errText = await response.text().catch(() => "(unreadable)");
+        console.error(`[Groq] API error ${response.status} on model ${model}:`, errText);
+        break; // Coba model berikutnya jika error lain
+      } catch (err: any) {
+        const isTimeout = err?.name === "TimeoutError" || err?.code === "UND_ERR_HEADERS_TIMEOUT" || err?.cause?.code === "UND_ERR_HEADERS_TIMEOUT";
+        if (isTimeout && attempt < GROQ_MAX_RETRIES) {
+          const backoffMs = Math.min(
+            30000,
+            Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+          );
+          console.warn(`[Groq] Timeout on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+          await new Promise(r => setTimeout(r, backoffMs));
+          continue;
+        }
+        console.error(`[Groq] Fetch failed for ${model} (attempt ${attempt}):`, err);
+        break;
       }
-      console.error(`[Groq] Fetch failed (attempt ${attempt}):`, err);
-      return { ok: false, error: isTimeout ? "timeout" : "fetch_failed" };
     }
   }
-  return { ok: false, error: "max_retries_exceeded" };
+  return { ok: false, error: "all_models_failed" };
 }
 
 function buildAiSystemPrompt(userText?: string): string {
