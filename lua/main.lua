@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.0.4"
+local CURRENT_VERSION = "0.0.5"
 pcall(function()
     local vSrc = secureFetch("version.txt")
     if vSrc and vSrc:match("^%s*([%d%.]+)%s*$") and not vSrc:find("<") and not vSrc:find("html") then
@@ -2948,8 +2948,7 @@ end)
 
 -- Hitbox Expander keybind (H)
 UIS.InputBegan:Connect(function(i, gp)
-    if i.KeyCode ~= hitboxKey then return end
-    if UIS:GetFocusedTextBox() then return end
+    if gp or i.KeyCode ~= hitboxKey then return end
     local s = not HitboxExp.Enabled
     hitboxToggle:Set(s)
 end)
@@ -3077,11 +3076,11 @@ task.delay(1.5, function()
 
     -- Anti-AFK is already auto-enabled above (universal)
 
-    -- ── Post-load sync: activate modules based on loaded toggle states ────────
-    -- ConfigManager:Load() does NOT fire callbacks, so we manually sync here
-    -- in a deterministic order to avoid race conditions.
+    -- ── Post-load sync: verify slider/dropdown states and ensure enabled modules are active ────────
+    -- ConfigManager:Load() already fires registered callbacks. This block verifies non-flagged
+    -- settings and ensures modules are enabled without redundant double-activations.
     pcall(function()
-        -- 1. Sync slider/dropdown values to modules (callbacks don't fire during load)
+        -- 1. Sync slider/dropdown values to modules
         pcall(function()
             -- Speed sliders
             local ws = walkSpeedSlider.Value or 16
@@ -3132,56 +3131,56 @@ task.delay(1.5, function()
         end)
 
         -- 2. Speed Hack
-        if speedToggle.Value == true then
+        if speedToggle.Value == true and not Speed.Enabled then
             Speed:Enable()
         end
 
         -- 3. Fly
-        if flyToggle.Value == true then
+        if flyToggle.Value == true and not Fly.Enabled then
             Fly:Enable()
         end
 
         -- 4. FreeCam
-        if fcToggle.Value == true then
+        if fcToggle.Value == true and not FreeCam.Enabled then
             FreeCam:Enable()
         end
 
         -- 5. Movement features
-        if infJumpToggle.Value == true then InfJump:Enable() end
-        if noclipToggle.Value == true then Noclip:Enable() end
-        if antiRagdollToggle.Value == true then AntiRagdoll:Enable() end
-        if invisToggle.Value == true then Invisible:Enable() end
-        if clickTPToggle.Value == true then ClickTP:Enable() end
-        if wowToggle.Value == true then WalkOnWater:Enable() end
+        if infJumpToggle.Value == true and not InfJump.Enabled then InfJump:Enable() end
+        if noclipToggle.Value == true and not Noclip.Enabled then Noclip:Enable() end
+        if antiRagdollToggle.Value == true and not AntiRagdoll.Enabled then AntiRagdoll:Enable() end
+        if invisToggle.Value == true and not Invisible.Enabled then Invisible:Enable() end
+        if clickTPToggle.Value == true and not ClickTP.Enabled then ClickTP:Enable() end
+        if wowToggle.Value == true and not WalkOnWater.Enabled then WalkOnWater:Enable() end
 
         -- 6. Visual features
         if perfStatsToggle.Value == true then
-            PerfStats:Enable()
+            if not PerfStats.Enabled then PerfStats:Enable() end
         else
-            PerfStats:Disable()
+            if PerfStats.Enabled then PerfStats:Disable() end
         end
 
-        if espToggle.Value == true then ESP:Enable() end
-        if fullBrightToggle.Value == true then FullBright:Enable() end
-        if removeFogToggle.Value == true then RemoveFog:Enable() end
-        if tracerToggle.Value == true then Tracer:Enable() end
-        if antiLagToggle and antiLagToggle.Value == true then PerfBooster:Enable() end
+        if espToggle.Value == true and not ESP.Enabled then ESP:Enable() end
+        if fullBrightToggle.Value == true and not FullBright.Enabled then FullBright:Enable() end
+        if removeFogToggle.Value == true and not RemoveFog.Enabled then RemoveFog:Enable() end
+        if tracerToggle.Value == true and not Tracer.Enabled then Tracer:Enable() end
+        if antiLagToggle and antiLagToggle.Value == true and not PerfBooster.Enabled then PerfBooster:Enable() end
         pcall(function() PerfBooster:SetFPSCap(fpsCapSlider.Value or 60) end)
 
         -- 7. Player features
-        if AntiDetect and antiDetectToggle.Value == true then AntiDetect:Enable() end
-        if antiAFKToggle.Value == true then AntiAFK:Enable() end
-        if infStaminaToggle.Value == true then InfStamina:Enable() end
-        if godModeToggle.Value == true then GodMode:Enable() end
-        if noFallToggle.Value == true then NoFallDmg:Enable() end
-        if antiFlingToggle.Value == true then AntiFling:Enable() end
-        if antiVoidToggle.Value == true then AntiVoid:Enable() end
-        if gpSpoofToggle and gpSpoofToggle.Value == true then GamepassSpoof:Enable() end
-        if avatarCustomizerToggle.Value == true then AvatarSpoof:Enable() end
+        if AntiDetect and antiDetectToggle.Value == true and not AntiDetect.Enabled then AntiDetect:Enable() end
+        if antiAFKToggle.Value == true and not AntiAFK.Enabled then AntiAFK:Enable() end
+        if infStaminaToggle.Value == true and not InfStamina.Enabled then InfStamina:Enable() end
+        if godModeToggle.Value == true and not GodMode.Enabled then GodMode:Enable() end
+        if noFallToggle.Value == true and not NoFallDmg.Enabled then NoFallDmg:Enable() end
+        if antiFlingToggle.Value == true and not AntiFling.Enabled then AntiFling:Enable() end
+        if antiVoidToggle.Value == true and not AntiVoid.Enabled then AntiVoid:Enable() end
+        if gpSpoofToggle and gpSpoofToggle.Value == true and not GamepassSpoof.Enabled then GamepassSpoof:Enable() end
+        if avatarCustomizerToggle.Value == true and not AvatarSpoof.Enabled then AvatarSpoof:Enable() end
         pcall(function() WebhookLogger:SetUrl(webhookUrlInput.Value or "") end)
-        if hitboxToggle.Value == true then HitboxExp:Enable() end
-        if ikToggle.Value == true then InstantKill:Enable() end
-        if quickSwitchToggle.Value == true then QuickSwitch:Enable() end
+        if hitboxToggle.Value == true and not HitboxExp.Enabled then HitboxExp:Enable() end
+        if ikToggle.Value == true and not InstantKill.Enabled then InstantKill:Enable() end
+        if quickSwitchToggle.Value == true and not QuickSwitch.Enabled then QuickSwitch:Enable() end
         pcall(function() QuickSwitch:SetDelayAfterShot(qsShotDelaySlider.Value or 50) end)
         pcall(function() QuickSwitch:SetDelayBetweenSwitches(qsSwitchDelaySlider.Value or 50) end)
         pcall(function() QuickSwitch:SetSwitchType(qsModeDrop.Value or "Q-Q") end)
