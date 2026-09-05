@@ -480,6 +480,7 @@ local KillAura    = load("modules/combat/killaura.lua");     setSplashProgress(0
 local AutoClicker = load("modules/auto/autoclicker.lua");    setSplashProgress(0.91)
 local QuickSwitch = load("modules/combat/quickswitch.lua");  setSplashProgress(0.92)
 local MacroRec    = load("modules/movements/macrorecorder.lua"); setSplashProgress(0.93)
+local Backtracker = load("modules/movements/backtracker.lua");   setSplashProgress(0.935)
 local AntiVoid    = load("modules/player/antivoid.lua");     setSplashProgress(0.94)
 local GamepassSpoof = load("modules/player/gamepassspoofer.lua"); setSplashProgress(0.95)
 local AvatarSpoof = load("modules/player/avatarspoofer.lua");      setSplashProgress(0.96)
@@ -540,6 +541,11 @@ KillAura       = safe(KillAura)
 AutoClicker    = safe(AutoClicker)
 QuickSwitch    = safe(QuickSwitch)
 MacroRec       = safe(MacroRec)
+Backtracker    = safe(Backtracker)
+pcall(function()
+    Backtracker:SetMacroRecorder(MacroRec)
+    Backtracker:SetNotifyCallback(N)
+end)
 AntiVoid       = safe(AntiVoid)
 GamepassSpoof  = safe(GamepassSpoof)
 AvatarSpoof    = safe(AvatarSpoof)
@@ -1113,6 +1119,54 @@ recordInputsToggle = MacroTab:Toggle({
     Callback = function(v) MacroRec.RecordInputs = v end
 })
 ConfigMgr:Register("MacroRecordInputs", recordInputsToggle)
+
+MacroTab:Section({ Title = "Position Backtracker (Rewind)" })
+
+local backtrackerToggle = MacroTab:Toggle({
+    Title    = "Position Backtracker",
+    Flag     = "Backtracker",
+    Value    = false,
+    Tooltip  = "Record position history every 0.5s; rewind on demand or fling",
+    Callback = function(s)
+        if s then Backtracker:Enable() else Backtracker:Disable() end
+        N("Backtracker", s and "Enabled (Hotkey: B)" or "Disabled")
+    end
+})
+
+local backtrackerSecondsSlider = MacroTab:Slider({
+    Title    = "Rewind Time (Seconds)",
+    Flag     = "BacktrackerSeconds",
+    Value    = { Min = 2, Max = 15, Default = 5 },
+    Step     = 1,
+    Tooltip  = "How many seconds into the past to teleport back",
+    Callback = function(v) Backtracker:SetRewindSeconds(v) end
+})
+
+local backtrackerAutoFlingToggle = MacroTab:Toggle({
+    Title    = "Auto Recover on Fling",
+    Flag     = "BacktrackerAutoFling",
+    Value    = false,
+    Tooltip  = "Automatically rewinds position if extreme fling velocity is detected",
+    Callback = function(s) Backtracker:SetAutoFling(s) end
+})
+
+MacroTab:Button({
+    Title    = "⏪ Rewind Position Now (Hotkey: B)",
+    Icon     = "history",
+    Tooltip  = "Teleport back to position 5-10s ago and cancel momentum",
+    Callback = function()
+        if not Backtracker.Enabled then
+            N("Backtracker", "Enable Backtracker first!")
+            return
+        end
+        local ok, sec = Backtracker:Backtrack()
+        if ok then
+            N("Backtracker", "Rewound " .. tostring(sec) .. "s back!")
+        else
+            N("Backtracker", tostring(sec or "No history"))
+        end
+    end
+})
 
 MacroTab:Section({ Title = "Save / Load" })
 
@@ -2969,6 +3023,22 @@ UIS.InputBegan:Connect(function(i, gp)
     end
 end)
 
+-- Position Backtracker keybind (B)
+local backtrackerKey = Enum.KeyCode.B
+UIS.InputBegan:Connect(function(i, gp)
+    if gp or i.KeyCode ~= backtrackerKey then return end
+    if not Backtracker.Enabled then
+        N("Backtracker", "Backtracker is disabled (Enable in Macro tab)")
+        return
+    end
+    local ok, sec = Backtracker:Backtrack()
+    if ok then
+        N("Backtracker", "Rewound " .. tostring(sec) .. "s back!")
+    else
+        N("Backtracker", tostring(sec or "No history"))
+    end
+end)
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- PANIC KEY (Delete) — Disable ALL active modules + hide window
 -- ════════════════════════════════════════════════════════════════════════════
@@ -3011,6 +3081,7 @@ UIS.InputBegan:Connect(function(i, gp)
 
     -- Disable auto modules
     pcall(function() if AutoClicker.Enabled then autoClickerToggle:Set(false); AutoClicker:Disable() end end)
+    pcall(function() if Backtracker.Enabled then backtrackerToggle:Set(false); Backtracker:Disable() end end)
 
     -- Stop waypoint queue
     pcall(function() Waypoint:StopQueue() end)
@@ -3193,6 +3264,13 @@ task.delay(1.5, function()
         pcall(function() AutoClicker:SetClickType(clickTypeDrop.Value or "mouse") end)
         pcall(function() AutoClicker:SetHoldDown(holdDownToggle.Value) end)
         pcall(function() AutoClicker:SetRandomDelay(randomDelayToggle.Value) end)
+
+        -- 7c. Backtracker
+        pcall(function()
+            Backtracker:SetRewindSeconds(backtrackerSecondsSlider.Value or 5)
+            Backtracker:SetAutoFling(backtrackerAutoFlingToggle.Value or false)
+        end)
+        if backtrackerToggle.Value == true and not Backtracker.Enabled then Backtracker:Enable() end
 
         -- 8. Theme (always sync)
         pcall(function()
