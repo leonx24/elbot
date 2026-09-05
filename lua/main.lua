@@ -23,6 +23,14 @@ pcall(function()
     end
 end)
 
+-- Generate or reuse session-unique attribute key for GUI identification
+pcall(function()
+    if not _G._LX_AttrKey then
+        _G._LX_AttrKey = "_" .. game:GetService("HttpService"):GenerateGUID(false):sub(1, 8)
+    end
+end)
+if not _G._LX_AttrKey then _G._LX_AttrKey = "_LX" end
+
 pcall(function()
     local players = game:GetService("Players")
     local lp = players and players.LocalPlayer
@@ -30,10 +38,21 @@ pcall(function()
     
     local function cleanupGui(guiParent)
         if not guiParent then return end
-        for _, name in ipairs({"LeonXSplash", "LeonXNoir", "LeonXNotif"}) do
-            local old = guiParent:FindFirstChild(name)
-            if old then
-                pcall(function() old:Destroy() end)
+        for _, child in ipairs(guiParent:GetChildren()) do
+            if child:IsA("ScreenGui") then
+                local isLeon = false
+                pcall(function()
+                    if child:GetAttribute(_G._LX_AttrKey) then isLeon = true end
+                end)
+                if not isLeon then
+                    local nm = child.Name:lower()
+                    if nm:find("leonx") or nm == "leonxsplash" or nm == "leonxnoir" or nm == "leonxnotif" then
+                        isLeon = true
+                    end
+                end
+                if isLeon then
+                    pcall(function() child:Destroy() end)
+                end
             end
         end
     end
@@ -80,10 +99,7 @@ local RunService   = game:GetService("RunService")
 local lp           = Players.LocalPlayer
 
 local function getSafeGuiParent()
-    local ok, res = pcall(function()
-        if gethui then return gethui() end
-        return game:GetService("CoreGui")
-    end)
+    local ok, res = pcall(function() return game:GetService("CoreGui") end)
     if ok and res then return res end
     return (lp and (lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui"))) or game:GetService("CoreGui")
 end
@@ -92,14 +108,19 @@ local gui = getSafeGuiParent()
 local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- SPLASH SCREEN (shown before UI loads)
+-- SPLASH SCREEN (shown before UI loads — Cloaked)
 -- ══════════════════════════════════════════════════════════════════════════════
+local splashName = ""
+pcall(function() splashName = game:GetService("HttpService"):GenerateGUID(false):sub(1, 10) end)
+if splashName == "" then splashName = tostring(math.random(100000, 999999)) end
+
 local SplashGui = Instance.new("ScreenGui")
-SplashGui.Name             = "LeonXSplash"
+SplashGui.Name             = splashName
 SplashGui.ResetOnSpawn     = false
 SplashGui.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
 SplashGui.DisplayOrder     = 9999
 SplashGui.IgnoreGuiInset   = true
+pcall(function() SplashGui:SetAttribute(_G._LX_AttrKey or "_LX", true) end)
 pcall(function()
     if syn and syn.protect_gui then syn.protect_gui(SplashGui) end
 end)
@@ -135,12 +156,12 @@ SplashStroke.Parent    = SplashCard
 -- Pulsing Ambient Border Glow
 task.spawn(function()
     while SplashCard and SplashCard.Parent do
-        TweenService:Create(SplashStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        TweenService:Create(SplashStroke, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
             {Color = Color3.fromRGB(100, 140, 255)}):Play()
-        task.wait(1.5)
-        TweenService:Create(SplashStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        task.wait(3)
+        TweenService:Create(SplashStroke, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
             {Color = Color3.fromRGB(45, 45, 65)}):Play()
-        task.wait(1.5)
+        task.wait(3)
     end
 end)
 
@@ -545,6 +566,11 @@ local GAME_REGISTRY = {
         Name = "Violence District",
         PlaceIds = { 93978595733734 },
         Path = "modules/games/violencedistrict.lua"
+    },
+    {
+        Name = "Steal an Egg",
+        PlaceIds = { 107778070777162 },
+        Path = "modules/games/stealanegg.lua"
     },
 }
 
@@ -2642,7 +2668,7 @@ FavTab:Toggle({
 -- Dynamic favorites: when user stars a toggle from any other tab, create a synced toggle here
 FavTab:Section({ Title = "Your Starred Features" })
 
-Library._onFavoriteChanged = function(flagKey, isStarred, info)
+Library._favCb = function(flagKey, isStarred, info)
     if isStarred then
         -- Don't duplicate if already exists (default pinned items)
         if _favDynamicToggles[flagKey] then return end
@@ -2678,7 +2704,7 @@ Library._onFavoriteChanged = function(flagKey, isStarred, info)
     -- Save favorites to file for persistence
     pcall(function()
         local favList = {}
-        for k, _ in pairs(Library._favorites) do
+        for k, _ in pairs(Library._fav) do
             favList[#favList + 1] = k
         end
         local json = game:GetService("HttpService"):JSONEncode(favList)
@@ -2694,7 +2720,7 @@ pcall(function()
         local list = game:GetService("HttpService"):JSONDecode(raw)
         if type(list) == "table" then
             for _, flagKey in ipairs(list) do
-                Library._favorites[flagKey] = true
+                Library._fav[flagKey] = true
             end
         end
     end
