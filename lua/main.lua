@@ -485,9 +485,13 @@ local AntiVoid    = load("modules/player/antivoid.lua");     setSplashProgress(0
 local GamepassSpoof = load("modules/player/gamepassspoofer.lua"); setSplashProgress(0.95)
 local AvatarSpoof = load("modules/player/avatarspoofer.lua");      setSplashProgress(0.96)
 local MobileOverlay = load("modules/core/mobileoverlay.lua");     setSplashProgress(0.97)
-local PerfBooster   = load("modules/visuals/perfbooster.lua");     setSplashProgress(0.98)
-local WebhookLogger = load("modules/core/webhooklogger.lua");     setSplashProgress(0.99)
-local ServerUtils   = load("modules/core/serverutils.lua");       setSplashProgress(1.00)
+local PerfBooster   = load("modules/visuals/perfbooster.lua");     setSplashProgress(0.955)
+local WebhookLogger = load("modules/core/webhooklogger.lua");     setSplashProgress(0.96)
+local ServerUtils   = load("modules/core/serverutils.lua");       setSplashProgress(0.965)
+local FOVMod        = load("modules/visuals/fovmodifier.lua");     setSplashProgress(0.97)
+local InstantPrompts = load("modules/auto/instantprompts.lua");    setSplashProgress(0.975)
+local Orbit          = load("modules/movements/orbit.lua");        setSplashProgress(0.98)
+local Radar          = load("modules/visuals/radar.lua");          setSplashProgress(0.99)
 
 
 -- Dummy stub for any module that failed to load
@@ -553,6 +557,10 @@ MobileOverlay  = safe(MobileOverlay)
 PerfBooster    = safe(PerfBooster)
 WebhookLogger  = safe(WebhookLogger)
 ServerUtils    = safe(ServerUtils)
+FOVMod         = safe(FOVMod)
+InstantPrompts = safe(InstantPrompts)
+Orbit          = safe(Orbit)
+Radar          = safe(Radar)
 
 
 -- ── Game-specific modules (Lazy-Loaded on Game Match) ─────────────────────────
@@ -577,6 +585,11 @@ local GAME_REGISTRY = {
         Name = "Steal an Egg",
         PlaceIds = { 107778070777162 },
         Path = "modules/games/stealanegg.lua"
+    },
+    {
+        Name = "Sniper Arena",
+        PlaceIds = { 122446657157717 },
+        Path = "modules/games/sniperarena.lua"
     },
 }
 
@@ -628,6 +641,11 @@ _G.LeonX_Cleanup = function()
     pcall(function() if RemoveFog and RemoveFog.Disable then RemoveFog:Disable() end end)
     pcall(function() if AntiAFK and AntiAFK.Disable then AntiAFK:Disable() end end)
     pcall(function() if AutoClicker and AutoClicker.Disable then AutoClicker:Disable() end end)
+    pcall(function() if FOVMod and FOVMod.Disable then FOVMod:Disable() end end)
+    pcall(function() if InstantPrompts and InstantPrompts.Disable then InstantPrompts:Disable() end end)
+    pcall(function() if Orbit and Orbit.Disable then Orbit:Disable() end end)
+    pcall(function() if Radar and Radar.Disable then Radar:Disable() end end)
+    pcall(function() if ConfigMgr and ConfigMgr.StopAutoSave then ConfigMgr:StopAutoSave() end end)
 end
 
 -- ── Determine window title based on game mode ─────────────────────────────────
@@ -1002,6 +1020,70 @@ wowToggle = MovTab:Toggle({
     end
 })
 ConfigMgr:Register("WalkOnWater", wowToggle)
+
+MovTab:Section({ Title = "Orbit" })
+
+orbitToggle = MovTab:Toggle({
+    Title    = "Orbit Player",
+    Value    = false,
+    Tooltip  = "Orbit around a target player in a circle",
+    Callback = function(v)
+        if v then
+            Orbit:Enable()
+        else
+            Orbit:Disable()
+        end
+        N("Orbit", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("Orbit", orbitToggle)
+
+local function getOrbitPlayerList()
+    local list = {}
+    local lpp = game:GetService("Players").LocalPlayer
+    for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+        if p ~= lpp then
+            table.insert(list, p.DisplayName .. " (@" .. p.Name .. ")")
+        end
+    end
+    if #list == 0 then list = {"(no players)"} end
+    return list
+end
+
+orbitTargetDrop = MovTab:Dropdown({
+    Title    = "Orbit Target",
+    Tooltip  = "Select the player to orbit around",
+    Values   = getOrbitPlayerList(),
+    Value    = 1,
+    Callback = function(v) Orbit:SetTarget(v) end
+})
+
+orbitRadiusSlider = MovTab:Slider({
+    Title    = "Orbit Radius",
+    Value    = { Min = 5, Max = 50, Default = 15 },
+    Step     = 1,
+    Tooltip  = "Distance from the target (studs)",
+    Callback = function(v) Orbit:SetRadius(v) end
+})
+ConfigMgr:Register("OrbitRadius", orbitRadiusSlider)
+
+orbitSpeedSlider = MovTab:Slider({
+    Title    = "Orbit Speed",
+    Value    = { Min = 1, Max = 20, Default = 2 },
+    Step     = 1,
+    Tooltip  = "How fast to orbit (radians/sec)",
+    Callback = function(v) Orbit:SetSpeed(v) end
+})
+ConfigMgr:Register("OrbitSpeed", orbitSpeedSlider)
+
+orbitHeightSlider = MovTab:Slider({
+    Title    = "Orbit Height",
+    Value    = { Min = 0, Max = 30, Default = 5 },
+    Step     = 1,
+    Tooltip  = "Height above the target (studs)",
+    Callback = function(v) Orbit:SetHeight(v) end
+})
+ConfigMgr:Register("OrbitHeight", orbitHeightSlider)
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- MACRO RECORDER TAB
@@ -1523,6 +1605,28 @@ espModeDrop = VisTab:Dropdown({
 })
 ConfigMgr:Register("ESPMode", espModeDrop)
 
+espTeamColorToggle = VisTab:Toggle({
+    Title    = "Team Color (Override ESP Color by Team)",
+    Value    = false,
+    Tooltip  = "Use the player's team color instead of the selected ESP color",
+    Callback = function(v)
+        ESP:SetTeamColor(v)
+        N("ESP", v and "Team Color Enabled" or "Team Color Disabled")
+    end
+})
+ConfigMgr:Register("ESPTeamColor", espTeamColorToggle)
+
+espSkeletonToggle = VisTab:Toggle({
+    Title    = "Skeleton ESP (Bone Lines)",
+    Value    = false,
+    Tooltip  = "Draw skeleton bone lines through walls (requires Drawing API)",
+    Callback = function(v)
+        ESP:SetShowSkeleton(v)
+        N("ESP", v and "Skeleton Enabled" or "Skeleton Disabled")
+    end
+})
+ConfigMgr:Register("ESPSkeleton", espSkeletonToggle)
+
 VisTab:Section({ Title = "Tracer" })
 
 tracerToggle = VisTab:Toggle({
@@ -1597,6 +1701,68 @@ fpsCapSlider = VisTab:Slider({
     Callback = function(v) PerfBooster:SetFPSCap(v) end
 })
 ConfigMgr:Register("FPSCap", fpsCapSlider)
+
+VisTab:Section({ Title = "Camera" })
+
+fovToggle = VisTab:Toggle({
+    Title    = "FOV Modifier",
+    Value    = false,
+    Tooltip  = "Adjust the camera Field of View (40-120)",
+    Callback = function(v)
+        if v then FOVMod:Enable() else FOVMod:Disable() end
+        N("FOV Modifier", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("FOVModifier", fovToggle)
+
+fovSlider = VisTab:Slider({
+    Title    = "Field of View",
+    Value    = { Min = 40, Max = 120, Default = 70 },
+    Step     = 1,
+    Tooltip  = "Camera FOV value (40 narrow - 120 wide)",
+    Callback = function(v) FOVMod:SetFOV(v) end
+})
+ConfigMgr:Register("FOVValue", fovSlider)
+
+VisTab:Section({ Title = "Radar" })
+
+radarToggle = VisTab:Toggle({
+    Title    = "Radar",
+    Value    = false,
+    Tooltip  = "Show a corner minimap with player dots",
+    Callback = function(v)
+        if v then Radar:Enable() else Radar:Disable() end
+        N("Radar", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("Radar", radarToggle)
+
+radarRangeSlider = VisTab:Slider({
+    Title    = "Radar Range",
+    Value    = { Min = 50, Max = 500, Default = 200 },
+    Step     = 10,
+    Tooltip  = "Detection range for the radar (studs)",
+    Callback = function(v) Radar:SetRange(v) end
+})
+ConfigMgr:Register("RadarRange", radarRangeSlider)
+
+radarSizeSlider = VisTab:Slider({
+    Title    = "Radar Size",
+    Value    = { Min = 80, Max = 300, Default = 150 },
+    Step     = 10,
+    Tooltip  = "Pixel size of the radar frame",
+    Callback = function(v) Radar:SetSize(v) end
+})
+ConfigMgr:Register("RadarSize", radarSizeSlider)
+
+radarOpacitySlider = VisTab:Slider({
+    Title    = "Radar Opacity",
+    Value    = { Min = 10, Max = 100, Default = 80 },
+    Step     = 5,
+    Tooltip  = "Background opacity of the radar (10-100%%)",
+    Callback = function(v) Radar:SetOpacity(v) end
+})
+ConfigMgr:Register("RadarOpacity", radarOpacitySlider)
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- COMBAT TAB
@@ -2565,6 +2731,19 @@ TeleTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 -- AUTO TAB (Automation Features)
 -- ══════════════════════════════════════════════════════════════════════════════
+AutoTab:Section({ Title = "Instant Prompts" })
+
+instantPromptsToggle = AutoTab:Toggle({
+    Title    = "Instant Prompts",
+    Value    = false,
+    Tooltip  = "Auto-complete all ProximityPrompts instantly",
+    Callback = function(v)
+        if v then InstantPrompts:Enable() else InstantPrompts:Disable() end
+        N("Instant Prompts", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("InstantPrompts", instantPromptsToggle)
+
 AutoTab:Section({ Title = "Auto Clicker" })
 
 autoClickerToggle = AutoTab:Toggle({
@@ -2833,6 +3012,28 @@ SetTab:Button({
     end
 })
 
+SetTab:Section({ Title = "Auto Save" })
+
+autoSaveToggle = SetTab:Toggle({
+    Title    = "Auto Save Config",
+    Value    = true,
+    Tooltip  = "Automatically save settings when they change",
+    Callback = function(v)
+        ConfigMgr:SetAutoSave(v)
+        N("Auto Save", v and "Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("AutoSaveConfig", autoSaveToggle)
+
+autoSaveIntervalSlider = SetTab:Slider({
+    Title    = "Auto Save Interval (s)",
+    Value    = { Min = 1, Max = 30, Default = 2 },
+    Step     = 1,
+    Tooltip  = "How often to check for changes and save (seconds)",
+    Callback = function(v) ConfigMgr:SetAutoSaveInterval(v) end
+})
+ConfigMgr:Register("AutoSaveInterval", autoSaveIntervalSlider)
+
 SetTab:Section({ Title = "Config" })
 
 cfgNameIn = SetTab:Input({
@@ -3057,12 +3258,15 @@ UIS.InputBegan:Connect(function(i, gp)
     pcall(function() if Invisible.Enabled then invisToggle:Set(false); Invisible:Disable() end end)
     pcall(function() if ClickTP.Enabled then clickTPToggle:Set(false); ClickTP:Disable() end end)
     pcall(function() if WalkOnWater.Enabled then wowToggle:Set(false); WalkOnWater:Disable() end end)
+    pcall(function() if Orbit and Orbit.Enabled then orbitToggle:Set(false); Orbit:Disable() end end)
 
     -- Disable visual modules
     pcall(function() if ESP.Enabled then espToggle:Set(false); ESP:Disable() end end)
     pcall(function() if FullBright.Enabled then fullBrightToggle:Set(false); FullBright:Disable() end end)
     pcall(function() if Tracer.Enabled then tracerToggle:Set(false); Tracer:Disable() end end)
     pcall(function() if RemoveFog.Enabled then removeFogToggle:Set(false); RemoveFog:Disable() end end)
+    pcall(function() if FOVMod and FOVMod.Enabled then fovToggle:Set(false); FOVMod:Disable() end end)
+    pcall(function() if Radar and Radar.Enabled then radarToggle:Set(false); Radar:Disable() end end)
 
     -- Disable combat modules
     pcall(function() if KillAura.Enabled then killAuraToggle:Set(false); KillAura:Disable() end end)
@@ -3082,6 +3286,7 @@ UIS.InputBegan:Connect(function(i, gp)
     -- Disable auto modules
     pcall(function() if AutoClicker.Enabled then autoClickerToggle:Set(false); AutoClicker:Disable() end end)
     pcall(function() if Backtracker.Enabled then backtrackerToggle:Set(false); Backtracker:Disable() end end)
+    pcall(function() if InstantPrompts and InstantPrompts.Enabled then instantPromptsToggle:Set(false); InstantPrompts:Disable() end end)
 
     -- Stop waypoint queue
     pcall(function() Waypoint:StopQueue() end)
@@ -3145,6 +3350,13 @@ setSplashProgress(1.0)
 task.delay(1.5, function()
     ConfigMgr:AutoLoad()
 
+    -- Start auto-save loop after config is loaded and initial snapshot is seeded
+    pcall(function()
+        if autoSaveToggle and autoSaveToggle.Value == true then
+            ConfigMgr:StartAutoSave()
+        end
+    end)
+
     -- Anti-AFK is already auto-enabled above (universal)
 
     -- ── Post-load sync: verify slider/dropdown states and ensure enabled modules are active ────────
@@ -3181,6 +3393,10 @@ task.delay(1.5, function()
             pcall(function() ESP:SetColor(EC[espColorDrop.Value] or Color3.new(1,1,1)) end)
             pcall(function() ESP:SetOpacity(espOpacitySlider.Value or 15) end)
             pcall(function() ESP:SetShowMode(espModeDrop.Value or "Both") end)
+            pcall(function()
+                if espTeamColorToggle then ESP:SetTeamColor(espTeamColorToggle.Value or false) end
+                if espSkeletonToggle then ESP:SetShowSkeleton(espSkeletonToggle.Value or false) end
+            end)
 
             -- Tracer settings
             pcall(function() Tracer:SetColor(TC[tracerColorDrop.Value] or Color3.new(1,1,1)) end)
@@ -3199,6 +3415,32 @@ task.delay(1.5, function()
 
             -- AntiFling mass manipulation
             pcall(function() AntiFling:SetMassManipulation(massManipToggle.Value) end)
+
+            -- FOV Modifier
+            pcall(function()
+                if fovSlider then FOVMod:SetFOV(fovSlider.Value or 70) end
+            end)
+
+            -- Orbit settings
+            pcall(function()
+                if orbitTargetDrop then Orbit:SetTarget(orbitTargetDrop.Value) end
+                if orbitRadiusSlider then Orbit:SetRadius(orbitRadiusSlider.Value or 15) end
+                if orbitSpeedSlider then Orbit:SetSpeed(orbitSpeedSlider.Value or 2) end
+                if orbitHeightSlider then Orbit:SetHeight(orbitHeightSlider.Value or 5) end
+            end)
+
+            -- Radar settings
+            pcall(function()
+                if radarRangeSlider then Radar:SetRange(radarRangeSlider.Value or 200) end
+                if radarSizeSlider then Radar:SetSize(radarSizeSlider.Value or 150) end
+                if radarOpacitySlider then Radar:SetOpacity(radarOpacitySlider.Value or 80) end
+            end)
+
+            -- Auto-Save settings
+            pcall(function()
+                if autoSaveToggle then ConfigMgr:SetAutoSave(autoSaveToggle.Value) end
+                if autoSaveIntervalSlider then ConfigMgr:SetAutoSaveInterval(autoSaveIntervalSlider.Value or 2) end
+            end)
         end)
 
         -- 2. Speed Hack
@@ -3223,6 +3465,7 @@ task.delay(1.5, function()
         if invisToggle.Value == true and not Invisible.Enabled then Invisible:Enable() end
         if clickTPToggle.Value == true and not ClickTP.Enabled then ClickTP:Enable() end
         if wowToggle.Value == true and not WalkOnWater.Enabled then WalkOnWater:Enable() end
+        if orbitToggle and orbitToggle.Value == true and not Orbit.Enabled then Orbit:Enable() end
 
         -- 6. Visual features
         if perfStatsToggle.Value == true then
@@ -3237,6 +3480,8 @@ task.delay(1.5, function()
         if tracerToggle.Value == true and not Tracer.Enabled then Tracer:Enable() end
         if antiLagToggle and antiLagToggle.Value == true and not PerfBooster.Enabled then PerfBooster:Enable() end
         pcall(function() PerfBooster:SetFPSCap(fpsCapSlider.Value or 60) end)
+        if fovToggle and fovToggle.Value == true and not FOVMod.Enabled then FOVMod:Enable() end
+        if radarToggle and radarToggle.Value == true and not Radar.Enabled then Radar:Enable() end
 
         -- 7. Player features
         if AntiDetect and antiDetectToggle.Value == true and not AntiDetect.Enabled then AntiDetect:Enable() end
@@ -3264,6 +3509,7 @@ task.delay(1.5, function()
         pcall(function() AutoClicker:SetClickType(clickTypeDrop.Value or "mouse") end)
         pcall(function() AutoClicker:SetHoldDown(holdDownToggle.Value) end)
         pcall(function() AutoClicker:SetRandomDelay(randomDelayToggle.Value) end)
+        if instantPromptsToggle and instantPromptsToggle.Value == true and not InstantPrompts.Enabled then InstantPrompts:Enable() end
 
         -- 7c. Backtracker
         pcall(function()
