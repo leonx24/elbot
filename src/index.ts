@@ -4982,7 +4982,46 @@ http.createServer(async (req, res) => {
 
     const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
     
-    // Retrieve tables dynamically from SQLite database
+    // Security: Return ONLY high-level counters, never sensitive database records to public callers
+    let totalTickets = 0;
+    let totalWarnings = 0;
+
+    try {
+      const ticketsRow = db.prepare("SELECT COUNT(*) as count FROM tickets").get() as { count: number };
+      totalTickets = ticketsRow?.count || 0;
+      
+      const warningsRow = db.prepare("SELECT COUNT(*) as count FROM warnings").get() as { count: number };
+      totalWarnings = warningsRow?.count || 0;
+    } catch (e: any) {
+      console.error("Database query failed inside HTTP server:", e);
+    }
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      status: "ONLINE",
+      ping: client.ws.ping || 14,
+      guilds: client.guilds.cache.size,
+      users: client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0),
+      uptime: client.uptime || 0,
+      memory: memoryUsageMB,
+      stats: {
+        tickets: totalTickets,
+        warnings: totalWarnings
+      },
+      avatar: client.user?.displayAvatarURL({ size: 128 }) || null,
+      botTag: client.user?.tag || "El Bot#8981"
+    }));
+  }
+  else if (pathname === "/api/admin/dashboard-stats" && req.method === "GET") {
+    // Security: admin-only. Requires Discord OAuth2 owner/admin token.
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
+    const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
     let totalTickets = 0;
     let totalWarnings = 0;
     let commandUsage: any[] = [];
@@ -5002,7 +5041,7 @@ http.createServer(async (req, res) => {
       recentTickets = db.prepare("SELECT * FROM tickets ORDER BY id DESC LIMIT 10").all();
       recentWarnings = db.prepare("SELECT * FROM warnings ORDER BY id DESC LIMIT 10").all();
     } catch (e: any) {
-      console.error("Database query failed inside HTTP server:", e);
+      console.error("Database query failed inside admin stats:", e);
     }
 
     const guildsList = client.guilds.cache.map(guild => ({
@@ -5148,6 +5187,148 @@ http.createServer(async (req, res) => {
       res.end(JSON.stringify({ success: true }));
     } catch (err) {
       console.error("Error in /api/blacklist (DELETE):", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/blacklist" && req.method === "GET") {
+    // Security: admin-only. Requires Discord OAuth2 owner/admin token.
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
+    try {
+      const list = db.prepare("SELECT * FROM blacklist ORDER BY id DESC").all();
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, blacklist: list }));
+    } catch (err) {
+      console.error("Error in /api/blacklist (GET):", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/auth/me" && req.method === "GET") {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    if (!token) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Bearer token required" }));
+      return;
+    }
+
+    try {
+      const discordRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: "Invalid Discord token" }));
+        return;
+      }
+      const user = await discordRes.json() as { id: string; username: string; avatar: string | null };
+
+      const guild = client.guilds.cache.get(config.GUILD_ID);
+      const member = await guild?.members.fetch(user.id).catch(() => null);
+
+      const isOwner = user.id === config.OWNER_ID || (config.OWNER_ROLE_ID && member?.roles.cache.has(config.OWNER_ROLE_ID)) || false;
+      const hasAllowedRole = isOwner || (config.VERIFIED_ROLE_ID && member?.roles.cache.has(config.VERIFIED_ROLE_ID)) || false;
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        id: user.id,
+        username: user.username,
+        avatar: user.avatar,
+        isOwner,
+        hasAllowedRole
+      }));
+    } catch (err) {
+      console.error("Error in /api/auth/me:", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/webhooks/send" && req.method === "POST") {
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
+    try {
+      const rawBody = await collectBody(req, 50_000);
+      const data = JSON.parse(rawBody);
+
+      const serverWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
+      if (serverWebhookUrl) {
+        await fetch(serverWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        }).catch(e => console.error("Server webhook forward failed:", e));
+      } else {
+        const targetChannelId = config.LOG_CHANNEL_ID || config.SECURITY_LOG_CHANNEL_ID;
+        if (targetChannelId) {
+          const ch = client.channels.cache.get(targetChannelId) as TextChannel | undefined;
+          if (ch?.isSendable()) {
+            await ch.send({
+              content: data.content || (data.message ? `[Dashboard Alert] ${data.message}` : "📢 Dashboard Alert Notification")
+            }).catch(() => {});
+          }
+        }
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, message: "Webhook dispatch processed server-side." }));
+    } catch (err: any) {
+      console.error("Error in /api/webhooks/send:", err);
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Invalid webhook dispatch payload" }));
+    }
+  }
+  else if (pathname === "/api/oauth2/token" && req.method === "POST") {
+    try {
+      const rawBody = await collectBody(req, 20_000);
+      const data = JSON.parse(rawBody) as { code: string; redirect_uri: string; code_verifier?: string };
+      if (!data.code || !data.redirect_uri) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "code and redirect_uri required" }));
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.append("client_id", config.CLIENT_ID);
+      const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+      if (clientSecret) {
+        params.append("client_secret", clientSecret);
+      }
+      params.append("grant_type", "authorization_code");
+      params.append("code", data.code);
+      params.append("redirect_uri", data.redirect_uri);
+      if (data.code_verifier) {
+        params.append("code_verifier", data.code_verifier);
+      }
+
+      const discordRes = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+      });
+
+      const tokenData = await discordRes.json();
+      if (!discordRes.ok) {
+        res.writeHead(discordRes.status);
+        res.end(JSON.stringify(tokenData));
+        return;
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify(tokenData));
+    } catch (err) {
+      console.error("Error in /api/oauth2/token:", err);
       res.writeHead(500);
       res.end(JSON.stringify({ error: "Internal server error" }));
     }
