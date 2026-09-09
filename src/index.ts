@@ -3739,16 +3739,16 @@ client.on(Events.MessageCreate, async (message) => {
 
     // $key
     if (cmd === "key") {
-      const keyData = db.prepare("SELECT * FROM license_keys WHERE discord_id = ?").get(message.author.id) as any;
+      const keyData = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(message.author.id) as any;
       if (!keyData) {
         await message.reply("❌ Anda belum memiliki key lisensi. Gunakan `/script` untuk mendapatkan key.");
         return;
       }
 
-      const totalExec = (db.prepare("SELECT COUNT(*) AS count FROM execution_logs WHERE key = ?").get(keyData.key) as { count: number }).count;
+      const totalExec = (db.prepare("SELECT COUNT(*) AS count FROM script_executions WHERE key = ?").get(keyData.key) as { count: number }).count;
       let cooldownText = "✅ Ready";
-      if (keyData.last_reset) {
-        const lastReset = new Date(keyData.last_reset + " UTC").getTime();
+      if (keyData.last_reset_at) {
+        const lastReset = new Date(keyData.last_reset_at + " UTC").getTime();
         const now = Date.now();
         const diff = 24 * 60 * 60 * 1000 - (now - lastReset);
         if (diff > 0) {
@@ -3758,7 +3758,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
       }
 
-      const last5 = db.prepare("SELECT * FROM execution_logs WHERE key = ? ORDER BY executed_at DESC LIMIT 5").all(keyData.key) as any[];
+      const last5 = db.prepare("SELECT * FROM script_executions WHERE key = ? ORDER BY executed_at DESC LIMIT 5").all(keyData.key) as any[];
       let historyText = "Belum ada riwayat eksekusi.";
       if (last5.length > 0) {
         historyText = last5.map(ex => {
@@ -4393,17 +4393,6 @@ function verifyScriptSessionToken(token: string): { valid: boolean; key?: string
   } catch {
     return { valid: false };
   }
-}
-
-// Fix #6: Full Lua string escaping helper preventing Lua code injection
-function escapeLuaString(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t")
-    .replace(/\0/g, "\\0");
 }
 
 function checkOauthIpRateLimit(ip: string): boolean {
