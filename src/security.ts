@@ -40,26 +40,27 @@ const IP_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2
 
 /**
  * Get the real client IP address.
- * Strictly trusts CF-Connecting-IP when TRUST_PROXY=true to prevent IP spoofing,
- * and validates the IP syntax before returning.
+ * Strictly trusts CF-Connecting-IP header (validated against IPv4/IPv6 syntax)
+ * to prevent IP spoofing via X-Forwarded-For or untrusted proxy headers.
  */
 export function getClientIp(req: IncomingMessage): string {
-  if (config.TRUST_PROXY === "true") {
-    const cfIp = req.headers["cf-connecting-ip"];
-    if (typeof cfIp === "string") {
-      const trimmed = cfIp.trim();
-      if (IP_REGEX.test(trimmed)) return trimmed;
-    }
+  const cfIp = req.headers["cf-connecting-ip"];
+  if (typeof cfIp === "string") {
+    const trimmed = cfIp.trim();
+    if (IP_REGEX.test(trimmed)) return trimmed;
   }
 
   const remoteAddress = req.socket?.remoteAddress;
   if (remoteAddress) {
-    const clean = remoteAddress.replace(/^.*:/, "");
-    if (clean && IP_REGEX.test(clean)) return clean;
+    if (remoteAddress.startsWith("::ffff:")) {
+      const ipv4 = remoteAddress.slice(7);
+      if (IP_REGEX.test(ipv4)) return ipv4;
+    }
+    if (IP_REGEX.test(remoteAddress)) return remoteAddress;
     return "127.0.0.1";
   }
 
-  return "Unknown IP";
+  return "127.0.0.1";
 }
 
 /**

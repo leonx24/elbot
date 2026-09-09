@@ -357,29 +357,33 @@ export function validateUserKey(
 }
 
 export function resetUserKeyBinding(discordId: string, bypassCooldown: boolean = false): { success: boolean; message: string } {
-  const row = db.prepare("SELECT last_reset_at, key FROM user_keys WHERE discord_id = ?").get(discordId) as { last_reset_at: string | null; key: string } | undefined;
+  const runReset = db.transaction(() => {
+    const row = db.prepare("SELECT last_reset_at, key FROM user_keys WHERE discord_id = ?").get(discordId) as { last_reset_at: string | null; key: string } | undefined;
 
-  if (!row) {
-    return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
-  }
-
-  // Check 10 minute cooldown if not bypassing
-  if (!bypassCooldown && row.last_reset_at) {
-    const lastReset = new Date(row.last_reset_at).getTime();
-    const now = Date.now();
-    const diffMinutes = (now - lastReset) / (1000 * 60);
-
-    if (diffMinutes < 10) {
-      const remainingMinutes = Math.ceil(10 - diffMinutes);
-      return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 10 menit. Silakan coba lagi dalam ${remainingMinutes} menit.` };
+    if (!row) {
+      return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
     }
-  }
 
-  const nowString = new Date().toISOString();
-  db.prepare("UPDATE user_keys SET roblox_id = NULL, hwid = NULL, last_reset_at = ? WHERE discord_id = ?")
-    .run(nowString, discordId);
+    // Check 10 minute cooldown if not bypassing
+    if (!bypassCooldown && row.last_reset_at) {
+      const lastReset = new Date(row.last_reset_at).getTime();
+      const now = Date.now();
+      const diffMinutes = (now - lastReset) / (1000 * 60);
 
-  return { success: true, message: "Berhasil mereset data HWID dan Roblox ID Anda. Silakan jalankan script kembali di Roblox untuk mengaitkannya ke perangkat/akun baru." };
+      if (diffMinutes < 10) {
+        const remainingMinutes = Math.ceil(10 - diffMinutes);
+        return { success: false, message: `Anda hanya dapat mereset HWID sekali setiap 10 menit. Silakan coba lagi dalam ${remainingMinutes} menit.` };
+      }
+    }
+
+    const nowString = new Date().toISOString();
+    db.prepare("UPDATE user_keys SET roblox_id = NULL, hwid = NULL, last_reset_at = ? WHERE discord_id = ?")
+      .run(nowString, discordId);
+
+    return { success: true, message: "Berhasil mereset data HWID dan Roblox ID Anda. Silakan jalankan script kembali di Roblox untuk mengaitkannya ke perangkat/akun baru." };
+  });
+
+  return runReset();
 }
 
 export function isIpBanned(ip: string): boolean {

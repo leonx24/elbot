@@ -103,8 +103,28 @@ const client = new Client({
   ]
 });
 
-const cooldowns = new Map<string, number>();
-const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
+// Fix #8 & #9: Bounded LRU Map to prevent unbounded memory growth
+class BoundedMap<K, V> extends Map<K, V> {
+  private readonly maxSize: number;
+
+  constructor(maxSize: number = 5000) {
+    super();
+    this.maxSize = maxSize;
+  }
+
+  set(key: K, value: V): this {
+    if (this.size >= this.maxSize && !this.has(key)) {
+      const oldestKey = this.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.delete(oldestKey);
+      }
+    }
+    return super.set(key, value);
+  }
+}
+
+const cooldowns = new BoundedMap<string, number>(5000);
+const ticketDeleteTimers = new BoundedMap<string, NodeJS.Timeout>(1000);
 const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
 
 // Fix #11: Whitelist-only role check (no name-based matching, no hardcoded ID fallback)
@@ -177,7 +197,7 @@ async function callGroqAPI(messages: Array<{ role: string; content: string }>): 
         if ((response.status === 503 || response.status === 429) && attempt < GROQ_MAX_RETRIES) {
           const backoffMs = Math.min(
             30000,
-            Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+            Math.pow(2, attempt) * 1000 + crypto.randomInt(0, 1000)
           );
           console.warn(`[Groq] ${response.status} on ${model} attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
           await new Promise(r => setTimeout(r, backoffMs));
@@ -192,7 +212,7 @@ async function callGroqAPI(messages: Array<{ role: string; content: string }>): 
         if (isTimeout && attempt < GROQ_MAX_RETRIES) {
           const backoffMs = Math.min(
             30000,
-            Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+            Math.pow(2, attempt) * 1000 + crypto.randomInt(0, 1000)
           );
           console.warn(`[Groq] Timeout on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
           await new Promise(r => setTimeout(r, backoffMs));
@@ -3279,11 +3299,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-const userSpamCache = new Map<string, {
+const userSpamCache = new BoundedMap<string, {
   timestamps: number[];
   lastContent: string;
   repeatCount: number;
-}>();
+}>(5000);
 
 const FAQ_RULES = [
   {
@@ -4323,32 +4343,31 @@ const ALLOWED_ORIGINS = new Set([
   "https://leonthings.my.id"
 ]);
 
-// Fix #9: Bounded LRU Map to prevent unbounded memory growth
-class BoundedMap<K, V> extends Map<K, V> {
-  private readonly maxSize: number;
-
-  constructor(maxSize: number = 5000) {
-    super();
-    this.maxSize = maxSize;
-  }
-
-  set(key: K, value: V): this {
-    if (this.size >= this.maxSize && !this.has(key)) {
-      const oldestKey = this.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.delete(oldestKey);
-      }
-    }
-    return super.set(key, value);
-  }
-}
-
-// Fix #8 & #9: Bounded rate limit trackers for OAuth endpoints (/api/my-key, /api/reset-my-hwid)
+// Fix #8 & #9: Bounded rate limit trackers for OAuth and API endpoints
 const oauthIpRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(5000);
 const userResetCooldown = new BoundedMap<string, number>(5000);
+const apiRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(10000);
+
+function checkApiRateLimit(endpoint: string, ip: string, maxRequests: number = 30, windowMs: number = 60_000): boolean {
+  const key = `${endpoint}:${ip}`;
+  const now = Date.now();
+  const current = apiRateLimits.get(key);
+  if (!current || now > current.resetAt) {
+    apiRateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= maxRequests) {
+    return false;
+  }
+  current.count += 1;
+  return true;
+}
 
 // Fix #1: Cryptographically signed short-lived session tokens for script loading
 const SCRIPT_TOKEN_SECRET = process.env.SCRIPT_SIGNING_SECRET || crypto.randomBytes(32).toString("hex");
+if (!process.env.SCRIPT_SIGNING_SECRET) {
+  console.warn("[SECURITY] SCRIPT_SIGNING_SECRET is not set. Session tokens will be invalidated on every restart — set this env var in production.");
+}
 
 function generateScriptSessionToken(key: string, hwid?: string, robloxId?: string): { token: string; expiresAt: number } {
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes short-lived
@@ -4480,6 +4499,11 @@ setInterval(() => {
         userResetCooldown.delete(userId);
       }
     }
+    for (const [key, data] of apiRateLimits.entries()) {
+      if (now > data.resetAt) {
+        apiRateLimits.delete(key);
+      }
+    }
   } catch (err) {
     console.error("[Cleanup] Error during in-memory cache cleanup:", err);
   }
@@ -4510,7 +4534,7 @@ http.createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
   res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Cache-Control", "no-store");
@@ -4556,7 +4580,7 @@ http.createServer(async (req, res) => {
 
     if (!loaderPath.startsWith(luaDir) || !fs.existsSync(loaderPath)) {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`warn("Gagal memuat script loader: file loader.lua tidak ditemukan di server.")`);
+      res.end(`warn("Akses ditolak")`);
       return;
     }
 
@@ -4568,7 +4592,7 @@ http.createServer(async (req, res) => {
       // Fix #2: Generic error message, no leak
       console.error("Gagal membaca loader.lua:", error);
       res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`warn("Internal server error")`);
+      res.end(`warn("Akses ditolak")`);
     }
   }
   else if (pathname === "/load.php" && req.method === "GET") {
@@ -4581,12 +4605,23 @@ http.createServer(async (req, res) => {
         res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
         return;
       }
-      // Valid session token: serve main.lua directly
+
+      // Fix: Re-validate HWID binding via database before serving the script.
+      // A session token alone is not sufficient — the key must still be valid
+      // and the HWID in the token must match the stored record.
+      const recheck = validateUserKey(verified.key || "", verified.robloxId, verified.hwid);
+      if (!recheck.valid) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
+        return;
+      }
+
+      // Valid session token with confirmed HWID binding: serve main.lua
       const luaDir = path.resolve(process.cwd(), "lua");
       const mainLuaPath = path.resolve(luaDir, "main.lua");
       if (!mainLuaPath.startsWith(luaDir) || !fs.existsSync(mainLuaPath)) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(`warn("Gagal memuat script utama: file main.lua tidak ditemukan di server.")`);
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
         return;
       }
       const content = fs.readFileSync(mainLuaPath, "utf8");
@@ -4606,7 +4641,7 @@ http.createServer(async (req, res) => {
     // Fix #5: Check if key is temporarily locked
     if (isKeyLocked(key)) {
       res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`game:GetService("Players").LocalPlayer:Kick("Key ini sementara dikunci karena terlalu banyak percobaan gagal. Silakan coba beberapa saat lagi.")`);
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Key dikunci sementara. Silakan coba lagi nanti.")`);
       return;
     }
 
@@ -4642,13 +4677,13 @@ http.createServer(async (req, res) => {
 
         if (!member) {
           res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak ditemukan di server Discord.")`);
+          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
           return;
         }
 
         if (config.VERIFIED_ROLE_ID && !member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
           res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi.")`);
+          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
           return;
         }
       }
@@ -4697,7 +4732,7 @@ http.createServer(async (req, res) => {
       const mainLuaPath = path.resolve(luaDir, "main.lua");
       if (!mainLuaPath.startsWith(luaDir) || !fs.existsSync(mainLuaPath)) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(`warn("Gagal memuat script utama: file main.lua tidak ditemukan di server.")`);
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
         return;
       }
       const content = fs.readFileSync(mainLuaPath, "utf8");
@@ -4737,8 +4772,9 @@ http.createServer(async (req, res) => {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
         await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId });
+        // Fix: Return generic error message to prevent key-enumeration side-channel
         res.writeHead(403);
-        res.end(JSON.stringify({ valid: false, error: result.message }));
+        res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
         return;
       }
 
@@ -4748,13 +4784,13 @@ http.createServer(async (req, res) => {
 
         if (!member) {
           res.writeHead(403);
-          res.end(JSON.stringify({ valid: false, error: "Akses ditolak: Pengguna tidak ditemukan di server Discord." }));
+          res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
           return;
         }
 
         if (config.VERIFIED_ROLE_ID && !member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
           res.writeHead(403);
-          res.end(JSON.stringify({ valid: false, error: "Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi." }));
+          res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
           return;
         }
       }
@@ -4972,11 +5008,10 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/stats" && req.method === "GET") {
-    // Security: admin-only. Requires Discord OAuth2 owner/admin token.
-    const adminCheck = await requireAdminAuth(req);
-    if (!adminCheck.ok) {
-      res.writeHead(adminCheck.status);
-      res.end(JSON.stringify({ error: adminCheck.error }));
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/stats", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
       return;
     }
 
@@ -5013,6 +5048,13 @@ http.createServer(async (req, res) => {
     }));
   }
   else if (pathname === "/api/admin/dashboard-stats" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/admin/dashboard-stats", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     // Security: admin-only. Requires Discord OAuth2 owner/admin token.
     const adminCheck = await requireAdminAuth(req);
     if (!adminCheck.ok) {
@@ -5073,6 +5115,13 @@ http.createServer(async (req, res) => {
     }));
   } 
   else if (pathname === "/api/changelogs" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/changelogs", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     try {
       const params = new URL(req.url || "", `http://${req.headers.host || "localhost"}`).searchParams;
       const page = Math.max(1, parseInt(params.get("page") || "1", 10));
@@ -5097,6 +5146,13 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/blacklist" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/blacklist", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     try {
       // Security: admin-only. Requires Discord OAuth2 owner/admin token.
       const adminCheck = await requireAdminAuth(req);
@@ -5149,6 +5205,13 @@ http.createServer(async (req, res) => {
     }
   } 
   else if (pathname === "/api/blacklist" && req.method === "DELETE") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/blacklist", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     // Security: admin-only. Requires Discord OAuth2 owner/admin token.
     const adminCheck = await requireAdminAuth(req);
     if (!adminCheck.ok) {
@@ -5192,6 +5255,13 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/blacklist" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/blacklist", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     // Security: admin-only. Requires Discord OAuth2 owner/admin token.
     const adminCheck = await requireAdminAuth(req);
     if (!adminCheck.ok) {
@@ -5211,6 +5281,13 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/auth/me" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/auth/me", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
     if (!token) {
@@ -5251,6 +5328,13 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/webhooks/send" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/webhooks/send", clientIp, 10)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     const adminCheck = await requireAdminAuth(req);
     if (!adminCheck.ok) {
       res.writeHead(adminCheck.status);
@@ -5290,6 +5374,13 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/oauth2/token" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/oauth2/token", clientIp, 10)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     try {
       const rawBody = await collectBody(req, 20_000);
       const data = JSON.parse(rawBody) as { code: string; redirect_uri: string; code_verifier?: string };
@@ -5334,6 +5425,13 @@ http.createServer(async (req, res) => {
     }
   } 
   else if (pathname === "/api/proxy" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/proxy", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     const targetUrl = urlObj.searchParams.get("url");
     if (!targetUrl) {
       res.writeHead(400);
