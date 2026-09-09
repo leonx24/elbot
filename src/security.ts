@@ -1,21 +1,23 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Client, ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } from "discord.js";
-import { banIp, isIpBanned } from "./database.js";
+import {
+  banIp,
+  isIpBanned,
+  getRateLimit,
+  upsertRateLimit,
+  cleanupExpiredRateLimits,
+  getFailedKeyAttempts,
+  upsertFailedKeyAttempt,
+  deleteFailedKeyAttempts,
+  cleanupExpiredFailedAttempts,
+  isKeyLocked,
+  lockKey,
+  cleanupExpiredKeyLocks,
+  getGlobalKeyFailures,
+  upsertGlobalKeyFailure,
+  deleteGlobalKeyFailure
+} from "./database.js";
 import { config } from "./config.js";
-
-interface IpRateLimit {
-  count: number;
-  resetAt: number;
-}
-
-interface FailedKeyTracker {
-  count: number;
-  lastAttempt: number;
-  keys: string[];
-}
-
-const rateLimitMap = new Map<string, IpRateLimit>();
-const failedKeyMap = new Map<string, FailedKeyTracker>();
 
 // Malicious probe paths & file names often targeted by scanners and scrapers
 const MALICIOUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
@@ -34,21 +36,24 @@ const MALICIOUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\/(setup|install|xmlrpc|telescope|actuator)\.php/i, reason: "Vulnerability probe" }
 ];
 
+/**
+ * Get the real client IP address.
+ * Only trusts proxy headers (cf-connecting-ip, x-forwarded-for, x-real-ip)
+ * when TRUST_PROXY=true is set in the environment config.
+ */
 export function getClientIp(req: IncomingMessage): string {
-  const cfIp = req.headers["cf-connecting-ip"];
-  if (typeof cfIp === "string" && cfIp.trim()) {
-    return cfIp.trim();
-  }
+  if (config.TRUST_PROXY === "true") {
+    const cfIp = req.headers["cf-connecting-ip"];
+    if (typeof cfIp === "string" && cfIp.trim()) return cfIp.trim();
 
-  const xRealIp = req.headers["x-real-ip"];
-  if (typeof xRealIp === "string" && xRealIp.trim()) {
-    return xRealIp.trim();
-  }
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.trim()) {
+      const parts = forwarded.split(",");
+      if (parts[0]) return parts[0].trim();
+    }
 
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    const parts = forwarded.split(",");
-    if (parts[0]) return parts[0].trim();
+    const xRealIp = req.headers["x-real-ip"];
+    if (typeof xRealIp === "string" && xRealIp.trim()) return xRealIp.trim();
   }
 
   const remoteAddress = req.socket?.remoteAddress;
@@ -75,7 +80,7 @@ export async function sendSecurityAlert(
     actionTaken: string;
   }
 ) {
-  const targetChannelId = config.SECURITY_LOG_CHANNEL_ID || "1539927426199461918";
+  const targetChannelId = config.SECURITY_LOG_CHANNEL_ID;
   if (!targetChannelId) return;
 
   try {
@@ -132,7 +137,9 @@ export async function sendSecurityAlert(
 }
 
 /**
- * Catat kegagalan key untuk mendeteksi brute-force / bypass key
+ * Catat kegagalan key untuk mendeteksi brute-force / bypass key.
+ * Uses persistent SQLite storage (survives restarts).
+ * Also tracks global per-key failures for key locking.
  */
 export async function recordFailedKeyAttempt(
   ip: string,
@@ -143,23 +150,33 @@ export async function recordFailedKeyAttempt(
   if (!ip || ip === "127.0.0.1" || ip === "Unknown IP") return;
 
   const now = Date.now();
-  let tracker = failedKeyMap.get(ip);
 
-  if (!tracker || now - tracker.lastAttempt > 120_000) {
-    tracker = { count: 0, lastAttempt: now, keys: [] };
+  // ── Per-IP tracking (persistent in SQLite) ──
+  let tracker = getFailedKeyAttempts(ip);
+
+  if (!tracker || now - tracker.last_attempt > 120_000) {
+    // Reset if older than 2 minutes
+    tracker = { count: 0, last_attempt: now, keys_json: "[]" };
   }
 
-  tracker.count += 1;
-  tracker.lastAttempt = now;
-  if (!tracker.keys.includes(key)) {
-    tracker.keys.push(key);
+  const count = tracker.count + 1;
+  let keys: string[];
+  try {
+    keys = JSON.parse(tracker.keys_json) as string[];
+  } catch {
+    keys = [];
   }
-  failedKeyMap.set(ip, tracker);
+  if (!keys.includes(key)) {
+    keys.push(key);
+  }
+
+  upsertFailedKeyAttempt(ip, count, now, JSON.stringify(keys));
 
   // Jika gagal 5 kali dalam 2 menit -> Auto-Ban IP
-  if (tracker.count >= 5) {
-    const reason = `Key Brute-force / Bypass Attack (${tracker.count}x failed attempts with keys: ${tracker.keys.slice(-3).join(", ")})`;
+  if (count >= 5) {
+    const reason = `Key Brute-force / Bypass Attack (${count}x failed attempts with keys: ${keys.slice(-3).join(", ")})`;
     banIp(ip, reason);
+    deleteFailedKeyAttempts(ip);
 
     if (client) {
       await sendSecurityAlert(client, {
@@ -171,6 +188,37 @@ export async function recordFailedKeyAttempt(
         robloxId: details?.robloxId,
         actionTaken: "⛔ IP Auto-Banned & Blacklisted Permanently"
       });
+    }
+  }
+
+  // ── Global per-key tracking (brute-force from multiple IPs) ──
+  const globalTracker = getGlobalKeyFailures(key);
+  const TEN_MINUTES = 10 * 60 * 1000;
+
+  if (now - globalTracker.firstFailure > TEN_MINUTES) {
+    // Reset window
+    upsertGlobalKeyFailure(key, 1, now);
+  } else {
+    const newCount = globalTracker.count + 1;
+    upsertGlobalKeyFailure(key, newCount, globalTracker.firstFailure);
+
+    // If key fails >5 times in 10 minutes globally, lock it for 30 minutes
+    if (newCount > 5 && !isKeyLocked(key)) {
+      const lockReason = `Key locked: ${newCount}x global failed attempts in 10 minutes`;
+      lockKey(key, 30 * 60 * 1000, lockReason); // 30 minutes
+      deleteGlobalKeyFailure(key);
+
+      if (client) {
+        await sendSecurityAlert(client, {
+          ip,
+          threatType: "Key Brute-Force (Global Lock)",
+          reason: lockReason,
+          pathname: "/api/validate-key or /load.php",
+          hwid: details?.hwid,
+          robloxId: details?.robloxId,
+          actionTaken: "🔒 Key Locked for 30 minutes (multi-IP brute-force)"
+        });
+      }
     }
   }
 }
@@ -219,15 +267,15 @@ export async function handleSecurityCheck(
     }
   }
 
-  // 3. In-memory Rate Limiting (Maks 40 requests / 10 detik per IP)
+  // 3. Persistent Rate Limiting (Maks 40 requests / 10 detik per IP) — stored in SQLite
   const now = Date.now();
-  let rateInfo = rateLimitMap.get(ip);
-  if (!rateInfo || now > rateInfo.resetAt) {
-    rateInfo = { count: 1, resetAt: now + 10_000 };
+  let rateInfo = getRateLimit(ip);
+  if (!rateInfo || now > rateInfo.reset_at) {
+    rateInfo = { count: 1, reset_at: now + 10_000 };
   } else {
-    rateInfo.count += 1;
+    rateInfo = { count: rateInfo.count + 1, reset_at: rateInfo.reset_at };
   }
-  rateLimitMap.set(ip, rateInfo);
+  upsertRateLimit(ip, rateInfo.count, rateInfo.reset_at);
 
   if (rateInfo.count > 40) {
     // Jika spam sangat parah (> 100 req dlm 10 detik) -> Auto-Ban
@@ -251,4 +299,23 @@ export async function handleSecurityCheck(
   }
 
   return true;
+}
+
+/**
+ * Start periodic cleanup for security-related data.
+ * Call this once at bot startup.
+ * Cleans up: expired rate limits, expired failed key attempts, expired key locks.
+ */
+export function startSecurityCleanup(): void {
+  const THIRTY_MINUTES = 30 * 60 * 1000;
+  setInterval(() => {
+    try {
+      cleanupExpiredRateLimits();
+      cleanupExpiredFailedAttempts();
+      cleanupExpiredKeyLocks();
+      console.log("[Security] Periodic cleanup completed.");
+    } catch (err) {
+      console.error("[Security] Cleanup error:", err);
+    }
+  }, THIRTY_MINUTES);
 }

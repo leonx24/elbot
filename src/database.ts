@@ -102,6 +102,27 @@ db.exec(`
     reason TEXT NOT NULL,
     banned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    ip TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 1,
+    reset_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limits(reset_at);
+
+  CREATE TABLE IF NOT EXISTS failed_key_attempts (
+    ip TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    last_attempt INTEGER NOT NULL,
+    keys_json TEXT NOT NULL DEFAULT '[]'
+  );
+
+  CREATE TABLE IF NOT EXISTS key_locks (
+    key TEXT PRIMARY KEY,
+    locked_until INTEGER NOT NULL,
+    reason TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_key_locks_until ON key_locks(locked_until);
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
@@ -288,6 +309,16 @@ export function validateUserKey(
     return { valid: false, message: "Key ini sudah terdaftar untuk perangkat (HWID) lain." };
   }
 
+  // HWID cross-user check: jika hwid belum bound ke key ini, cek apakah sudah dipakai discord_id lain
+  if (!row.hwid && hwid) {
+    const existingHwid = db.prepare(
+      "SELECT 1 FROM user_keys WHERE hwid = ? AND discord_id != ?"
+    ).get(hwid, row.discord_id);
+    if (existingHwid) {
+      return { valid: false, message: "Perangkat (HWID) ini sudah terdaftar oleh pengguna lain." };
+    }
+  }
+
   // Bind key to hwid if not yet bound, and update robloxId if it changed or was not set (without restricting)
   const updates: string[] = [];
   const params: any[] = [];
@@ -385,5 +416,105 @@ export function getUserKeyInfo(discordId: string): {
     ...row,
     execution_count: countRow?.count || 0
   };
+}
+
+// ── Security: Input Sanitizer ──
+
+/**
+ * Sanitize user input: strip invalid chars, enforce max length, fallback to defaultValue.
+ */
+export function sanitizeInput(
+  input: string | null | undefined,
+  maxLength: number,
+  allowedPattern: RegExp,
+  defaultValue: string = "Unknown"
+): string {
+  if (!input || typeof input !== "string") return defaultValue;
+  const trimmed = input.trim().slice(0, maxLength);
+  if (!trimmed || !allowedPattern.test(trimmed)) return defaultValue;
+  return trimmed;
+}
+
+// ── Security: Persistent Rate Limiting helpers ──
+
+export function getRateLimit(ip: string): { count: number; reset_at: number } | undefined {
+  return db.prepare("SELECT count, reset_at FROM rate_limits WHERE ip = ?").get(ip) as { count: number; reset_at: number } | undefined;
+}
+
+export function upsertRateLimit(ip: string, count: number, resetAt: number): void {
+  db.prepare(`
+    INSERT INTO rate_limits (ip, count, reset_at) VALUES (?, ?, ?)
+    ON CONFLICT(ip) DO UPDATE SET count = excluded.count, reset_at = excluded.reset_at
+  `).run(ip, count, resetAt);
+}
+
+export function cleanupExpiredRateLimits(): void {
+  db.prepare("DELETE FROM rate_limits WHERE reset_at < ?").run(Date.now());
+}
+
+// ── Security: Persistent Failed Key Tracking ──
+
+export function getFailedKeyAttempts(ip: string): { count: number; last_attempt: number; keys_json: string } | undefined {
+  return db.prepare("SELECT count, last_attempt, keys_json FROM failed_key_attempts WHERE ip = ?").get(ip) as { count: number; last_attempt: number; keys_json: string } | undefined;
+}
+
+export function upsertFailedKeyAttempt(ip: string, count: number, lastAttempt: number, keysJson: string): void {
+  db.prepare(`
+    INSERT INTO failed_key_attempts (ip, count, last_attempt, keys_json) VALUES (?, ?, ?, ?)
+    ON CONFLICT(ip) DO UPDATE SET count = excluded.count, last_attempt = excluded.last_attempt, keys_json = excluded.keys_json
+  `).run(ip, count, lastAttempt, keysJson);
+}
+
+export function deleteFailedKeyAttempts(ip: string): void {
+  db.prepare("DELETE FROM failed_key_attempts WHERE ip = ?").run(ip);
+}
+
+export function cleanupExpiredFailedAttempts(): void {
+  // Remove entries older than 2 minutes
+  db.prepare("DELETE FROM failed_key_attempts WHERE last_attempt < ?").run(Date.now() - 120_000);
+}
+
+// ── Security: Key Locks (brute-force protection) ──
+
+export function isKeyLocked(key: string): boolean {
+  const row = db.prepare("SELECT 1 FROM key_locks WHERE key = ? AND locked_until > ?").get(key, Date.now());
+  return !!row;
+}
+
+export function lockKey(key: string, durationMs: number, reason: string): void {
+  const lockedUntil = Date.now() + durationMs;
+  db.prepare(`
+    INSERT INTO key_locks (key, locked_until, reason) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET locked_until = excluded.locked_until, reason = excluded.reason
+  `).run(key, lockedUntil, reason);
+}
+
+export function cleanupExpiredKeyLocks(): void {
+  db.prepare("DELETE FROM key_locks WHERE locked_until < ?").run(Date.now());
+}
+
+// ── Security: Global Key Failure Tracking (across all IPs) ──
+
+// Uses a special key in bot_settings to track per-key failure counts
+export function getGlobalKeyFailures(key: string): { count: number; firstFailure: number } {
+  const row = db.prepare("SELECT value FROM bot_settings WHERE key = ?").get(`keyfail:${key}`) as { value: string } | undefined;
+  if (!row) return { count: 0, firstFailure: Date.now() };
+  try {
+    const parsed = JSON.parse(row.value) as { count: number; firstFailure: number };
+    return parsed;
+  } catch {
+    return { count: 0, firstFailure: Date.now() };
+  }
+}
+
+export function upsertGlobalKeyFailure(key: string, count: number, firstFailure: number): void {
+  db.prepare(`
+    INSERT INTO bot_settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(`keyfail:${key}`, JSON.stringify({ count, firstFailure }));
+}
+
+export function deleteGlobalKeyFailure(key: string): void {
+  db.prepare("DELETE FROM bot_settings WHERE key = ?").run(`keyfail:${key}`);
 }
 

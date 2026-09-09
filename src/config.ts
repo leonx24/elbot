@@ -20,7 +20,13 @@ const schema = z.object({
   TICKET_REVIEW_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   GROQ_API_KEY: z.string().optional().or(z.literal("")),
   AI_CHANNEL_ID: z.string().optional().or(z.literal("")),
-  SECURITY_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
+  SECURITY_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  TRUST_PROXY: z.string().optional().or(z.literal("")),
+  DEBUG: z.string().optional().or(z.literal("")),
+  EXECUTION_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  MONITORED_UPDATE_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  RULES_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  WELCOME_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
 });
 
 export const config = schema.parse(process.env);

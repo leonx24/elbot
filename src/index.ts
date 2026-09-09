@@ -20,7 +20,7 @@ import {
 import { buildV2Container, buildMultiV2Containers } from "./components-v2.js";
 import { buildSupportedGamesV2 } from "./supported-games.js";
 import { buildLicensePanelV2, buildUserKeyEphemeral, buildKeyInfoEphemeral } from "./license-panel.js";
-import { handleSecurityCheck, recordFailedKeyAttempt, getClientIp } from "./security.js";
+import { handleSecurityCheck, recordFailedKeyAttempt, getClientIp, startSecurityCleanup } from "./security.js";
 import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
@@ -40,7 +40,9 @@ import {
   unbanIp,
   isIpBanned,
   getBannedIps,
-  getUserKeyInfo
+  getUserKeyInfo,
+  isKeyLocked,
+  sanitizeInput
 } from "./database.js";
 import {
   createTicketPanel,
@@ -104,17 +106,14 @@ const cooldowns = new Map<string, number>();
 const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
 const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
 
+// Fix #11: Whitelist-only role check (no name-based matching, no hardcoded ID fallback)
 function isUserOwnerOrAdmin(userId: string, member?: GuildMember | null): boolean {
   if (userId === config.OWNER_ID) return true;
   if (!member) return false;
-  const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
-  if (member.roles.cache.has(ownerRoleId) || member.roles.cache.has("1515320851656872066")) return true;
+  if (config.OWNER_ROLE_ID && member.roles.cache.has(config.OWNER_ROLE_ID)) return true;
   if (member.permissions && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (member.permissions && member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
-  return member.roles.cache.some(r => {
-    const name = r.name.toLowerCase();
-    return name.includes("owner") || name.includes("developer") || name.includes("founder") || name.includes("admin") || name.includes("co-owner") || name.includes("staff");
-  });
+  return false;
 }
 
 function isStaff(member?: GuildMember | null): boolean {
@@ -719,10 +718,15 @@ async function ensureVerificationPanel(): Promise<void> {
 }
 
 async function ensureTicketPanel(): Promise<void> {
-  const ticketChannelId = config.TICKET_CHANNEL_ID || "1519681008834842724";
-  const channel = await client.channels.fetch(ticketChannelId);
+  const ticketChannelId = config.TICKET_CHANNEL_ID;
+  if (!ticketChannelId) {
+    console.log("[Tickets] TICKET_CHANNEL_ID tidak dikonfigurasi, lewati panel ticket.");
+    return;
+  }
+  const channel = await client.channels.fetch(ticketChannelId).catch(() => null);
   if (!channel?.isTextBased() || !channel.isSendable() || channel.isDMBased()) {
-    throw new Error("TICKET_CHANNEL_ID bukan channel teks server yang dapat dikirimi pesan.");
+    console.warn("[Tickets] TICKET_CHANNEL_ID bukan channel teks server yang dapat dikirimi pesan.");
+    return;
   }
 
   const settingKey = `ticket_panel_message:${config.GUILD_ID}`;
@@ -794,7 +798,8 @@ async function updateVoiceChannelStatus(status?: string): Promise<void> {
 }
 
 async function checkMonitoredPlaces(): Promise<void> {
-  const monitoredChannelId = "1519980835116286053";
+  const monitoredChannelId = config.MONITORED_UPDATE_CHANNEL_ID;
+  if (!monitoredChannelId) return;
   try {
     const list = db.prepare("SELECT * FROM monitored_places").all() as Array<{
       place_id: string;
@@ -876,6 +881,8 @@ async function checkMonitoredPlaces(): Promise<void> {
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Bot aktif sebagai ${readyClient.user.tag}`);
+  // Fix #9: Start security cleanup
+  startSecurityCleanup();
   await ensureVerificationPanel().catch((error) => {
     console.error("Gagal membuat panel verifikasi:", error);
   });
@@ -1805,14 +1812,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "changelog") {
         const sub = interaction.options.getSubcommand();
         if (sub === "publish") {
-          const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
           const isOwner =
-            (interaction.member instanceof GuildMember && (
-              (ownerRoleId ? interaction.member.roles.cache.has(ownerRoleId) : false) ||
-              interaction.member.roles.cache.some(r => r.name.toLowerCase().includes("owner")) ||
-              interaction.member.permissions.has(PermissionFlagsBits.Administrator) ||
-              interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)
-            )) ||
+            (interaction.member instanceof GuildMember && isUserOwnerOrAdmin(interaction.user.id, interaction.member)) ||
             interaction.guild?.ownerId === interaction.user.id ||
             interaction.user.id === config.OWNER_ID;
 
@@ -1927,13 +1928,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
             );
           }
 
-          const ticketChannelId = config.TICKET_CHANNEL_ID || "1519681008834842724";
-          buttonsList.push(
-            new ButtonBuilder()
-              .setLabel("Support")
-              .setStyle(ButtonStyle.Secondary)
-              .setCustomId(`changelog:support:${ticketChannelId}`)
-          );
+          if (config.TICKET_CHANNEL_ID) {
+            buttonsList.push(
+              new ButtonBuilder()
+                .setLabel("Support")
+                .setStyle(ButtonStyle.Secondary)
+                .setCustomId(`changelog:support:${config.TICKET_CHANNEL_ID}`)
+            );
+          }
 
           if (config.BUG_REPORT_CHANNEL_ID) {
             buttonsList.push(
@@ -2615,7 +2617,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
-        const channelId = "1515261709147705537";
+        const channelId = config.RULES_CHANNEL_ID;
+        if (!channelId) {
+          await interaction.reply({
+            content: "❌ Gagal: RULES_CHANNEL_ID belum dikonfigurasi di environment variables.",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
         const channel = await client.channels.fetch(channelId).catch(() => null);
 
         if (!channel || !channel.isTextBased() || !channel.isSendable()) {
@@ -2808,7 +2817,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             // Jalankan deteksi
             await checkMonitoredPlaces();
 
-            await interaction.editReply(`✅ Berhasil mensimulasikan update untuk **${item.name}**! Silakan periksa channel <#1519980835116286053>.`);
+            await interaction.editReply(`✅ Berhasil mensimulasikan update untuk **${item.name}**!${config.MONITORED_UPDATE_CHANNEL_ID ? ` Silakan periksa channel <#${config.MONITORED_UPDATE_CHANNEL_ID}>.` : ""}`);
           } catch (error) {
             console.error("Gagal menjalankan simulasi update:", error);
             await interaction.editReply("❌ Terjadi kesalahan saat mensimulasikan update.");
@@ -3512,7 +3521,9 @@ async function handleTicketAiResponse(
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   const channelName = "name" in message.channel ? message.channel.name : "DM/Private";
-  console.log(`[DEBUG] Message received from ${message.author.tag} in channel #${channelName} (${message.channel.id}): "${message.content}"`);
+  if (config.DEBUG === "true") {
+    console.log(`[DEBUG] Message received from ${message.author.tag} in channel #${channelName} (${message.channel.id}): "${message.content}"`);
+  }
 
   if (!message.guild) return;
 
@@ -3534,13 +3545,7 @@ client.on(Events.MessageCreate, async (message) => {
 
     // $help
     if (cmd === "help") {
-      const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
-      const isOwner =
-        (ownerRoleId ? member.roles.cache.has(ownerRoleId) : false) ||
-        member.roles.cache.some(r => r.name.toLowerCase().includes("owner")) ||
-        member.permissions.has(PermissionFlagsBits.Administrator) ||
-        member.permissions.has(PermissionFlagsBits.ManageGuild) ||
-        message.guild.ownerId === member.id;
+      const isOwner = isUserOwnerOrAdmin(message.author.id, member);
 
       const sections = [
         {
@@ -3807,13 +3812,7 @@ client.on(Events.MessageCreate, async (message) => {
 
     // $stats (admin / owner only)
     if (cmd === "stats") {
-      const ownerRoleId = config.OWNER_ROLE_ID || "1515320851656872066";
-      const isOwner =
-        (ownerRoleId ? member.roles.cache.has(ownerRoleId) : false) ||
-        member.roles.cache.some(r => r.name.toLowerCase().includes("owner")) ||
-        member.permissions.has(PermissionFlagsBits.Administrator) ||
-        member.permissions.has(PermissionFlagsBits.ManageGuild) ||
-        message.guild.ownerId === member.id;
+      const isOwner = isUserOwnerOrAdmin(message.author.id, member);
 
       if (!isOwner) {
         await message.reply("❌ Anda tidak memiliki izin untuk melihat statistik admin.");
@@ -4313,13 +4312,100 @@ async function getRobloxAvatarUrl(robloxId: string): Promise<string | null> {
   return null;
 }
 
-// Spin up a lightweight stats HTTP server for web dashboard integration
+// ── HTTP Server for Lua Loader & Web Dashboard Integration ──
+// NOTE: For production deployments, this server should be hosted behind a TLS-terminating reverse proxy (e.g. Cloudflare, Nginx, or Caddy).
 const serverPort = process.env.PORT || 3000;
+
+// Fix #1: Domain allowlist for CORS
+const ALLOWED_ORIGINS = new Set([
+  "https://script.leonthings.my.id",
+  "https://leonthings.my.id"
+]);
+
+// Fix #8: Rate limit trackers for OAuth endpoints (/api/my-key, /api/reset-my-hwid)
+const oauthIpRateLimits = new Map<string, { count: number; resetAt: number }>();
+const userResetCooldown = new Map<string, number>();
+
+function checkOauthIpRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const current = oauthIpRateLimits.get(ip);
+  if (!current || now > current.resetAt) {
+    oauthIpRateLimits.set(ip, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (current.count >= 10) {
+    return false;
+  }
+  current.count += 1;
+  return true;
+}
+
+// Fix #9: In-memory Map cleanup interval (every 30 minutes)
+setInterval(() => {
+  try {
+    const now = Date.now();
+    for (const [key, expires] of cooldowns.entries()) {
+      if (expires <= now) {
+        cooldowns.delete(key);
+      }
+    }
+    for (const [userId, data] of userSpamCache.entries()) {
+      const latest = data.timestamps.length > 0 ? Math.max(...data.timestamps) : 0;
+      if (now - latest > 60_000) {
+        userSpamCache.delete(userId);
+      }
+    }
+    for (const [ip, data] of oauthIpRateLimits.entries()) {
+      if (now > data.resetAt) {
+        oauthIpRateLimits.delete(ip);
+      }
+    }
+    for (const [userId, lastReset] of userResetCooldown.entries()) {
+      if (now - lastReset > 10 * 60 * 1000) {
+        userResetCooldown.delete(userId);
+      }
+    }
+  } catch (err) {
+    console.error("[Cleanup] Error during in-memory cache cleanup:", err);
+  }
+}, 30 * 60 * 1000);
+
+// Fix #14: Helper function to collect request body with size limit (default 100KB)
+function collectBody(req: http.IncomingMessage, maxBytes: number = 100_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    let receivedBytes = 0;
+
+    req.on("data", (chunk: Buffer | string) => {
+      receivedBytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+      if (receivedBytes > maxBytes) {
+        req.destroy(new Error("PAYLOAD_TOO_LARGE"));
+        return;
+      }
+      body += chunk;
+    });
+
+    req.on("end", () => resolve(body));
+    req.on("error", (err) => reject(err));
+  });
+}
+
 http.createServer(async (req, res) => {
-  // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // Fix #1: Mandatory Security Headers on ALL responses
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Cache-Control", "no-store");
+
+  // Fix #1: CORS Origin Allowlist Check
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Content-Type", "application/json");
 
   if (req.method === "OPTIONS") {
@@ -4333,37 +4419,62 @@ http.createServer(async (req, res) => {
   if (!isAllowed) return;
 
   // Parse path and query params
-  const urlObj = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
+  const urlObj = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const pathname = urlObj.pathname;
+
   if (pathname === "/loader.lua" && req.method === "GET") {
-    const loaderPath = path.join(process.cwd(), "lua", "loader.lua");
+    // Fix #13: Path Traversal Protection
+    const luaDir = path.resolve(process.cwd(), "lua");
+    const loaderPath = path.resolve(luaDir, "loader.lua");
+
+    if (!loaderPath.startsWith(luaDir) || !fs.existsSync(loaderPath)) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`warn("Gagal memuat script loader: file loader.lua tidak ditemukan di server.")`);
+      return;
+    }
+
     try {
-      if (fs.existsSync(loaderPath)) {
-        const content = fs.readFileSync(loaderPath, "utf8");
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(content);
-      } else {
-        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(`warn("Gagal memuat script loader: file loader.lua tidak ditemukan di server.")`);
-      }
-    } catch (error: any) {
+      const content = fs.readFileSync(loaderPath, "utf8");
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(content);
+    } catch (error) {
+      // Fix #2: Generic error message, no leak
+      console.error("Gagal membaca loader.lua:", error);
       res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`warn("Internal server error: ${error.message.replace(/"/g, '\\"')}")`);
+      res.end(`warn("Internal server error")`);
     }
   }
   else if (pathname === "/load.php" && req.method === "GET") {
-    const key = urlObj.searchParams.get("key");
-    const robloxId = urlObj.searchParams.get("roblox_id") || undefined;
-    const hwid = urlObj.searchParams.get("hwid") || undefined;
-    const username = urlObj.searchParams.get("username") || "Unknown";
-    const executor = urlObj.searchParams.get("executor") || "Unknown";
-    const placeId = urlObj.searchParams.get("place_id") || "Unknown";
-
-    if (!key) {
+    const rawKey = urlObj.searchParams.get("key");
+    if (!rawKey) {
       res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
       res.end(`game:GetService("Players").LocalPlayer:Kick("Parameter 'key' wajib diisi.")`);
       return;
     }
+    const key = rawKey.trim();
+
+    // Fix #5: Check if key is temporarily locked
+    if (isKeyLocked(key)) {
+      res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Key ini sementara dikunci karena terlalu banyak percobaan gagal. Silakan coba beberapa saat lagi.")`);
+      return;
+    }
+
+    // Fix #6: Input validation & sanitization
+    const rawRobloxId = urlObj.searchParams.get("roblox_id");
+    const robloxId = sanitizeInput(rawRobloxId, 20, /^\d+$/, "") || undefined;
+
+    const rawHwid = urlObj.searchParams.get("hwid");
+    const hwid = sanitizeInput(rawHwid, 64, /^[a-zA-Z0-9_-]+$/, "") || undefined;
+
+    const rawUsername = urlObj.searchParams.get("username");
+    const username = sanitizeInput(rawUsername, 30, /^[a-zA-Z0-9_]+$/, "Unknown");
+
+    const rawExecutor = urlObj.searchParams.get("executor");
+    const executor = sanitizeInput(rawExecutor, 50, /^[a-zA-Z0-9 ]+$/, "Unknown");
+
+    const rawPlaceId = urlObj.searchParams.get("place_id");
+    const placeId = sanitizeInput(rawPlaceId, 20, /^\d+$/, "Unknown");
 
     try {
       const result = validateUserKey(key, robloxId, hwid);
@@ -4401,58 +4512,75 @@ http.createServer(async (req, res) => {
         console.error("Gagal mencatat log eksekusi ke database:", dbErr);
       }
 
-      // Kirim log eksekusi ke channel Discord
-      const logChannelId = "1521734378877616289";
-      try {
-        const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
-        if (logChannel?.isSendable()) {
-          const v2ExecLog = buildV2Container({
-            title: "📊 In-Game Script Executed!",
-            description: `Script loader baru saja dieksekusi di dalam game Roblox!`,
-            sections: [
-              {
-                title: "🎮 Detail Eksekusi",
-                content:
-                  `• \`Discord User:\` ${result.discordId ? `<@${result.discordId}>` : "Unknown"}\n` +
-                  `• \`Roblox User:\` [${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)\n` +
-                  `• \`Place ID:\` [${placeId}](https://www.roblox.com/games/${placeId})\n` +
-                  `• \`Executor:\` \`${executor}\`\n` +
-                  `• \`Perangkat (HWID):\` \`${hwid || "N/A"}\``
-              }
-            ],
-            footer: "LeonX Hub • Execution Log"
-          });
-          await logChannel.send(v2ExecLog);
+      // Kirim log eksekusi ke channel Discord (Fix #10: gunakan config.EXECUTION_LOG_CHANNEL_ID)
+      const logChannelId = config.EXECUTION_LOG_CHANNEL_ID;
+      if (logChannelId) {
+        try {
+          const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+          if (logChannel?.isSendable()) {
+            const v2ExecLog = buildV2Container({
+              title: "📊 In-Game Script Executed!",
+              description: `Script loader baru saja dieksekusi di dalam game Roblox!`,
+              sections: [
+                {
+                  title: "🎮 Detail Eksekusi",
+                  content:
+                    `• \`Discord User:\` ${result.discordId ? `<@${result.discordId}>` : "Unknown"}\n` +
+                    `• \`Roblox User:\` [${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)\n` +
+                    `• \`Place ID:\` [${placeId}](https://www.roblox.com/games/${placeId})\n` +
+                    `• \`Executor:\` \`${executor}\`\n` +
+                    `• \`Perangkat (HWID):\` \`${hwid || "N/A"}\``
+                }
+              ],
+              footer: "LeonX Hub • Execution Log"
+            });
+            await logChannel.send(v2ExecLog);
+          }
+        } catch (logErr) {
+          console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
         }
-      } catch (logErr) {
-        console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
       }
 
-      // Serve the main.lua file
-      const mainLuaPath = path.join(process.cwd(), "lua", "main.lua");
-      if (fs.existsSync(mainLuaPath)) {
-        const content = fs.readFileSync(mainLuaPath, "utf8");
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(content);
-      } else {
+      // Serve the main.lua file (Fix #13: path traversal check)
+      const luaDir = path.resolve(process.cwd(), "lua");
+      const mainLuaPath = path.resolve(luaDir, "main.lua");
+      if (!mainLuaPath.startsWith(luaDir) || !fs.existsSync(mainLuaPath)) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
         res.end(`warn("Gagal memuat script utama: file main.lua tidak ditemukan di server.")`);
+        return;
       }
-    } catch (error: any) {
+      const content = fs.readFileSync(mainLuaPath, "utf8");
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(content);
+    } catch (error) {
+      // Fix #2: Generic error message, no internal leak
+      console.error("Error in /load.php:", error);
       res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`game:GetService("Players").LocalPlayer:Kick("Internal server error: ${error.message.replace(/"/g, '\\"')}")`);
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Internal server error")`);
     }
   }
   else if (pathname === "/api/validate-key" && req.method === "GET") {
-    const key = urlObj.searchParams.get("key");
-    const robloxId = urlObj.searchParams.get("roblox_id") || undefined;
-    const hwid = urlObj.searchParams.get("hwid") || undefined;
-
-    if (!key) {
+    const rawKey = urlObj.searchParams.get("key");
+    if (!rawKey) {
       res.writeHead(400);
       res.end(JSON.stringify({ valid: false, error: "Parameter 'key' wajib diisi." }));
       return;
     }
+    const key = rawKey.trim();
+
+    // Fix #5: Check if key is locked
+    if (isKeyLocked(key)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ valid: false, error: "Key ini sementara dikunci karena terlalu banyak percobaan gagal. Silakan coba lagi nanti." }));
+      return;
+    }
+
+    // Fix #6: Input validation
+    const rawRobloxId = urlObj.searchParams.get("roblox_id");
+    const robloxId = sanitizeInput(rawRobloxId, 20, /^\d+$/, "") || undefined;
+
+    const rawHwid = urlObj.searchParams.get("hwid");
+    const hwid = sanitizeInput(rawHwid, 64, /^[a-zA-Z0-9_-]+$/, "") || undefined;
 
     try {
       const result = validateUserKey(key, robloxId, hwid);
@@ -4482,21 +4610,34 @@ http.createServer(async (req, res) => {
 
       res.writeHead(200);
       res.end(JSON.stringify({ valid: true, message: result.message }));
-    } catch (error: any) {
+    } catch (error) {
+      // Fix #2: Generic error message
+      console.error("Error in /api/validate-key:", error);
       res.writeHead(500);
-      res.end(JSON.stringify({ valid: false, error: error.message }));
+      res.end(JSON.stringify({ valid: false, error: "Internal server error" }));
     }
   }
   else if (pathname === "/api/my-key" && req.method === "GET") {
-    const token = urlObj.searchParams.get("token") || req.headers.authorization?.replace("Bearer ", "");
+    // Fix #8: Rate limit 10 req / min / IP
+    const clientIp = getClientIp(req);
+    if (!checkOauthIpRateLimit(clientIp)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ hasKey: false, error: "Too many requests. Please try again in a minute." }));
+      return;
+    }
+
+    // Fix #8: Token ONLY via Authorization: Bearer header (no query param)
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
     if (!token) {
-      res.writeHead(400);
-      res.end(JSON.stringify({ hasKey: false, error: "Access token is required." }));
+      res.writeHead(401);
+      res.end(JSON.stringify({ hasKey: false, error: "Authorization header with Bearer token is required." }));
       return;
     }
 
     try {
-      const discordRes = await fetch("https://discord.com/api/users/@me", {
+      // Fix #8: Validate token scope and expiry via Discord OAuth2 endpoint
+      const discordRes = await fetch("https://discord.com/api/oauth2/@me", {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!discordRes.ok) {
@@ -4505,7 +4646,25 @@ http.createServer(async (req, res) => {
         return;
       }
 
-      const user = await discordRes.json() as { id: string; username: string };
+      const oauthData = await discordRes.json() as {
+        scopes?: string[];
+        expires?: string;
+        user?: { id: string; username: string };
+      };
+
+      if (!oauthData.scopes?.includes("identify") || !oauthData.user) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ hasKey: false, error: "Invalid token scope. 'identify' scope is required." }));
+        return;
+      }
+
+      if (oauthData.expires && new Date(oauthData.expires).getTime() <= Date.now()) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ hasKey: false, error: "Access token has expired." }));
+        return;
+      }
+
+      const user = oauthData.user;
       const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(user.id) as {
         key: string;
         roblox_id: string | null;
@@ -4557,21 +4716,37 @@ http.createServer(async (req, res) => {
         cooldownRemainingMinutes,
         cooldownRemainingHours
       }));
-    } catch (error: any) {
+    } catch (error) {
+      // Fix #2: Generic error message
+      console.error("Error in /api/my-key:", error);
       res.writeHead(500);
-      res.end(JSON.stringify({ hasKey: false, error: error.message }));
+      res.end(JSON.stringify({ hasKey: false, error: "Internal server error" }));
     }
   }
   else if (pathname === "/api/reset-my-hwid" && req.method === "POST") {
-    const token = urlObj.searchParams.get("token") || req.headers.authorization?.replace("Bearer ", "");
+    // Fix #8: Rate limit 10 req / min / IP
+    const clientIp = getClientIp(req);
+    if (!checkOauthIpRateLimit(clientIp)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ success: false, error: "Too many requests. Please try again in a minute." }));
+      return;
+    }
+
+    // Fix #8: Token ONLY via Authorization: Bearer header
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
     if (!token) {
-      res.writeHead(400);
-      res.end(JSON.stringify({ success: false, error: "Access token is required." }));
+      res.writeHead(401);
+      res.end(JSON.stringify({ success: false, error: "Authorization header with Bearer token is required." }));
       return;
     }
 
     try {
-      const discordRes = await fetch("https://discord.com/api/users/@me", {
+      // Fix #14: Enforce body size limit
+      await collectBody(req, 100_000);
+
+      // Fix #8: Validate token scope and expiry via Discord OAuth2 endpoint
+      const discordRes = await fetch("https://discord.com/api/oauth2/@me", {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!discordRes.ok) {
@@ -4580,12 +4755,47 @@ http.createServer(async (req, res) => {
         return;
       }
 
-      const user = await discordRes.json() as { id: string };
+      const oauthData = await discordRes.json() as {
+        scopes?: string[];
+        expires?: string;
+        user?: { id: string; username: string };
+      };
+
+      if (!oauthData.scopes?.includes("identify") || !oauthData.user) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ success: false, error: "Invalid token scope. 'identify' scope is required." }));
+        return;
+      }
+
+      if (oauthData.expires && new Date(oauthData.expires).getTime() <= Date.now()) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ success: false, error: "Access token has expired." }));
+        return;
+      }
+
+      const user = oauthData.user;
       const guild = client.guilds.cache.get(config.GUILD_ID);
       const member = await guild?.members.fetch(user.id).catch(() => null);
       const isOwner = isUserOwnerOrAdmin(user.id, member);
+
+      // Fix #8: User-based rate limit: 1 reset / 10 min / discord_id
+      if (!isOwner) {
+        const now = Date.now();
+        const lastReset = userResetCooldown.get(user.id);
+        if (lastReset && now - lastReset < 10 * 60 * 1000) {
+          const remainingMinutes = Math.ceil((10 * 60 * 1000 - (now - lastReset)) / 60000);
+          res.writeHead(429);
+          res.end(JSON.stringify({
+            success: false,
+            error: `Anda hanya dapat mereset HWID sekali setiap 10 menit. Silakan coba lagi dalam ${remainingMinutes} menit.`
+          }));
+          return;
+        }
+      }
+
       const result = resetUserKeyBinding(user.id, isOwner);
       if (result.success) {
+        userResetCooldown.set(user.id, Date.now());
         res.writeHead(200);
         res.end(JSON.stringify({ success: true, message: result.message }));
       } else {
@@ -4593,8 +4803,14 @@ http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, error: result.message }));
       }
     } catch (error: any) {
+      console.error("Error in /api/reset-my-hwid:", error);
+      if (error?.message === "PAYLOAD_TOO_LARGE") {
+        res.writeHead(413);
+        res.end(JSON.stringify({ success: false, error: "Payload too large" }));
+        return;
+      }
       res.writeHead(500);
-      res.end(JSON.stringify({ success: false, error: error.message }));
+      res.end(JSON.stringify({ success: false, error: "Internal server error" }));
     }
   }
   else if (pathname === "/api/stats" && req.method === "GET") {
@@ -4653,7 +4869,7 @@ http.createServer(async (req, res) => {
   } 
   else if (pathname === "/api/changelogs" && req.method === "GET") {
     try {
-      const params = new URL(req.url || "", `http://${req.headers.host}`).searchParams;
+      const params = new URL(req.url || "", `http://${req.headers.host || "localhost"}`).searchParams;
       const page = Math.max(1, parseInt(params.get("page") || "1", 10));
       const limit = Math.min(20, Math.max(1, parseInt(params.get("limit") || "3", 10)));
       const offset = (page - 1) * limit;
@@ -4666,37 +4882,43 @@ http.createServer(async (req, res) => {
         "SELECT id, title, content, author_id, created_at FROM changelogs ORDER BY id DESC LIMIT ? OFFSET ?"
       ).all(limit, offset) as { id: number; title: string; content: string; author_id: string; created_at: string }[];
 
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200);
       res.end(JSON.stringify({ success: true, changelogs: rows, page, totalPages, totalCount }));
-    } catch (error: any) {
-      res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({ success: false, error: error.message }));
+    } catch (error) {
+      // Fix #2: Generic error message
+      console.error("Error in /api/changelogs:", error);
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: "Internal server error" }));
     }
   }
   else if (pathname === "/api/blacklist" && req.method === "POST") {
-    let body = "";
-    req.on("data", chunk => { body += chunk; });
-    req.on("end", () => {
-      try {
-        const data = JSON.parse(body);
-        if (!data.discordId && !data.robloxId) {
-          res.writeHead(400);
-          res.end(JSON.stringify({ error: "discordId or robloxId required" }));
-          return;
-        }
-        addToBlacklist({
-          discordId: data.discordId,
-          robloxId: data.robloxId,
-          hwid: data.hwid,
-          reason: data.reason || "Banned from Web Panel"
-        });
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true }));
-      } catch (err: any) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: err.message }));
+    try {
+      // Fix #14: Enforce body limit
+      const body = await collectBody(req, 100_000);
+      const data = JSON.parse(body);
+      if (!data.discordId && !data.robloxId) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "discordId or robloxId required" }));
+        return;
       }
-    });
+      addToBlacklist({
+        discordId: data.discordId,
+        robloxId: data.robloxId,
+        hwid: data.hwid,
+        reason: data.reason || "Banned from Web Panel"
+      });
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true }));
+    } catch (err: any) {
+      console.error("Error in /api/blacklist (POST):", err);
+      if (err?.message === "PAYLOAD_TOO_LARGE") {
+        res.writeHead(413);
+        res.end(JSON.stringify({ error: "Payload too large" }));
+        return;
+      }
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
   } 
   else if (pathname === "/api/blacklist" && req.method === "DELETE") {
     const discordId = urlObj.searchParams.get("discord_id");
@@ -4713,9 +4935,10 @@ http.createServer(async (req, res) => {
       }
       res.writeHead(200);
       res.end(JSON.stringify({ success: true }));
-    } catch (err: any) {
+    } catch (err) {
+      console.error("Error in /api/blacklist (DELETE):", err);
       res.writeHead(500);
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: "Internal server error" }));
     }
   } 
   else if (pathname === "/api/proxy" && req.method === "GET") {
@@ -4735,9 +4958,10 @@ http.createServer(async (req, res) => {
       const body = await response.text();
       res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") || "application/json" });
       res.end(body);
-    } catch (err: any) {
+    } catch (err) {
+      console.error("Error in /api/proxy:", err);
       res.writeHead(500);
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: "Internal server error" }));
     }
   }
   else {
@@ -4749,7 +4973,7 @@ http.createServer(async (req, res) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
-  const welcomeChannelId = "1515741307534966784";
+  const welcomeChannelId = config.WELCOME_CHANNEL_ID;
 
   // ── Auto-ban akun yang umurnya kurang dari 1 bulan ──
   try {
@@ -4795,9 +5019,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
         }
       }
 
-      const welcomeChannel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
-      if (welcomeChannel?.isSendable()) {
-        await welcomeChannel.send(v2BanLog);
+      if (welcomeChannelId) {
+        const welcomeChannel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
+        if (welcomeChannel?.isSendable()) {
+          await welcomeChannel.send(v2BanLog);
+        }
       }
 
       return; // Jangan kirim welcome message
@@ -4807,6 +5033,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
   }
 
   // ── Welcome message (canvas card) ──
+  if (!welcomeChannelId) return;
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
@@ -4839,7 +5066,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 client.on(Events.GuildMemberRemove, async (member) => {
-  const welcomeChannelId = "1515741307534966784";
+  const welcomeChannelId = config.WELCOME_CHANNEL_ID;
+  if (!welcomeChannelId) return;
   try {
     const channel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
     if (channel?.isSendable()) {
