@@ -25,6 +25,7 @@ import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import {
   db,
   trackCommand,
@@ -4322,9 +4323,69 @@ const ALLOWED_ORIGINS = new Set([
   "https://leonthings.my.id"
 ]);
 
-// Fix #8: Rate limit trackers for OAuth endpoints (/api/my-key, /api/reset-my-hwid)
-const oauthIpRateLimits = new Map<string, { count: number; resetAt: number }>();
-const userResetCooldown = new Map<string, number>();
+// Fix #9: Bounded LRU Map to prevent unbounded memory growth
+class BoundedMap<K, V> extends Map<K, V> {
+  private readonly maxSize: number;
+
+  constructor(maxSize: number = 5000) {
+    super();
+    this.maxSize = maxSize;
+  }
+
+  set(key: K, value: V): this {
+    if (this.size >= this.maxSize && !this.has(key)) {
+      const oldestKey = this.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.delete(oldestKey);
+      }
+    }
+    return super.set(key, value);
+  }
+}
+
+// Fix #8 & #9: Bounded rate limit trackers for OAuth endpoints (/api/my-key, /api/reset-my-hwid)
+const oauthIpRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(5000);
+const userResetCooldown = new BoundedMap<string, number>(5000);
+
+// Fix #1: Cryptographically signed short-lived session tokens for script loading
+const SCRIPT_TOKEN_SECRET = process.env.SCRIPT_SIGNING_SECRET || crypto.randomBytes(32).toString("hex");
+
+function generateScriptSessionToken(key: string, hwid?: string, robloxId?: string): { token: string; expiresAt: number } {
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes short-lived
+  const payload = `${key}:${hwid || ""}:${robloxId || ""}:${expiresAt}`;
+  const signature = crypto.createHmac("sha256", SCRIPT_TOKEN_SECRET).update(payload).digest("hex");
+  const token = Buffer.from(JSON.stringify({ key, hwid: hwid || "", robloxId: robloxId || "", expiresAt, sig: signature })).toString("base64url");
+  return { token, expiresAt };
+}
+
+function verifyScriptSessionToken(token: string): { valid: boolean; key?: string; hwid?: string; robloxId?: string } {
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf8");
+    const data = JSON.parse(raw) as { key: string; hwid: string; robloxId: string; expiresAt: number; sig: string };
+    if (!data.key || !data.expiresAt || !data.sig) return { valid: false };
+    if (Date.now() > data.expiresAt) return { valid: false };
+
+    const payload = `${data.key}:${data.hwid}:${data.robloxId}:${data.expiresAt}`;
+    const expectedSig = crypto.createHmac("sha256", SCRIPT_TOKEN_SECRET).update(payload).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(data.sig, "hex"), Buffer.from(expectedSig, "hex"))) {
+      return { valid: false };
+    }
+    return { valid: true, key: data.key, hwid: data.hwid, robloxId: data.robloxId };
+  } catch {
+    return { valid: false };
+  }
+}
+
+// Fix #6: Full Lua string escaping helper preventing Lua code injection
+function escapeLuaString(str: string): string {
+  return str
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t")
+    .replace(/\0/g, "\\0");
+}
 
 function checkOauthIpRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -4445,12 +4506,24 @@ function collectBody(req: http.IncomingMessage, maxBytes: number = 100_000): Pro
 }
 
 http.createServer(async (req, res) => {
-  // Fix #1: Mandatory Security Headers on ALL responses
+  // Fix #1, #7, #8: Mandatory Security Headers on ALL responses
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Cache-Control", "no-store");
+
+  // Fix #16: Enforce HTTPS behind reverse proxy in production
+  if (config.TRUST_PROXY === "true") {
+    const proto = req.headers["x-forwarded-proto"];
+    if (proto && proto === "http" && process.env.NODE_ENV === "production") {
+      res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
+      res.end();
+      return;
+    }
+  }
 
   // Fix #1: CORS Origin Allowlist Check
   const origin = req.headers.origin;
@@ -4499,10 +4572,33 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/load.php" && req.method === "GET") {
+    // Fix #1: Check for short-lived session token (from /api/validate-key)
+    const rawToken = urlObj.searchParams.get("token") || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : null);
+    if (rawToken) {
+      const verified = verifyScriptSessionToken(rawToken);
+      if (!verified.valid) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
+        return;
+      }
+      // Valid session token: serve main.lua directly
+      const luaDir = path.resolve(process.cwd(), "lua");
+      const mainLuaPath = path.resolve(luaDir, "main.lua");
+      if (!mainLuaPath.startsWith(luaDir) || !fs.existsSync(mainLuaPath)) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`warn("Gagal memuat script utama: file main.lua tidak ditemukan di server.")`);
+        return;
+      }
+      const content = fs.readFileSync(mainLuaPath, "utf8");
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(content);
+      return;
+    }
+
     const rawKey = urlObj.searchParams.get("key");
     if (!rawKey) {
       res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`game:GetService("Players").LocalPlayer:Kick("Parameter 'key' wajib diisi.")`);
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
       return;
     }
     const key = rawKey.trim();
@@ -4534,8 +4630,9 @@ http.createServer(async (req, res) => {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
         await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId, username });
+        // Fix #10: Return generic error message without revealing key state/HWID details
         res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: ${result.message.replace(/"/g, '\\"')}")`);
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
         return;
       }
 
@@ -4662,8 +4759,15 @@ http.createServer(async (req, res) => {
         }
       }
 
+      // Fix #1: Generate short-lived HMAC session token for client script payload fetch
+      const session = generateScriptSessionToken(key, hwid, robloxId);
       res.writeHead(200);
-      res.end(JSON.stringify({ valid: true, message: result.message }));
+      res.end(JSON.stringify({
+        valid: true,
+        message: result.message,
+        token: session.token,
+        expiresAt: session.expiresAt
+      }));
     } catch (error) {
       // Fix #2: Generic error message
       console.error("Error in /api/validate-key:", error);
@@ -5015,11 +5119,25 @@ http.createServer(async (req, res) => {
     }
 
     const discordId = urlObj.searchParams.get("discord_id");
-    const id = urlObj.searchParams.get("id");
+    const rawId = urlObj.searchParams.get("id");
     try {
       if (discordId) {
-        db.prepare("DELETE FROM blacklist WHERE discord_id = ?").run(discordId);
-      } else if (id) {
+        const cleanDiscordId = discordId.trim();
+        // Fix #12: Validate Discord snowflake ID format
+        if (!/^\d{17,20}$/.test(cleanDiscordId)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: "Invalid Discord ID format" }));
+          return;
+        }
+        db.prepare("DELETE FROM blacklist WHERE discord_id = ?").run(cleanDiscordId);
+      } else if (rawId) {
+        // Fix #12: Strictly parse and validate numeric ID
+        const id = parseInt(rawId.trim(), 10);
+        if (isNaN(id) || id <= 0) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: "Invalid numeric ID" }));
+          return;
+        }
         db.prepare("DELETE FROM blacklist WHERE id = ?").run(id);
       } else {
         res.writeHead(400);
@@ -5070,20 +5188,65 @@ http.createServer(async (req, res) => {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
       });
-      const body = await response.text();
-      res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") || "application/json" });
-      res.end(body);
+
+      // Fix #2: Limit response payload to max 500KB and stream safely to prevent memory exhaustion
+      const MAX_PROXY_BYTES = 500_000;
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      if (contentLength > MAX_PROXY_BYTES) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Upstream response payload exceeds 500KB limit" }));
+        return;
+      }
+
+      if (!response.body) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({}));
+        return;
+      }
+
+      let totalBytes = 0;
+      const chunks: Buffer[] = [];
+      const reader = response.body.getReader();
+      let exceeded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.length;
+        if (totalBytes > MAX_PROXY_BYTES) {
+          exceeded = true;
+          reader.cancel().catch(() => {});
+          break;
+        }
+        chunks.push(Buffer.from(value));
+      }
+
+      if (exceeded) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Upstream response exceeded 500KB limit" }));
+        return;
+      }
+
+      const bodyBuffer = Buffer.concat(chunks);
+      // Fix #11: Normalize status codes and sanitize upstream headers
+      const status = response.ok ? 200 : (response.status === 404 ? 404 : 502);
+      const contentType = response.headers.get("content-type") || "application/json";
+      res.writeHead(status, {
+        "Content-Type": contentType.includes("json") ? "application/json; charset=utf-8" : "text/plain; charset=utf-8"
+      });
+      res.end(bodyBuffer);
     } catch (err) {
       console.error("Error in /api/proxy:", err);
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: "Proxy request failed" }));
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Proxy upstream failure" }));
     }
   }
   else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: "Not Found" }));
   }
-}).listen(Number(serverPort), "0.0.0.0", () => {
+  // Fix #15: Configurable bind address (BIND_IP or HOST)
+}).listen(Number(serverPort), process.env.BIND_IP || process.env.HOST || "0.0.0.0", () => {
   console.log(`[HTTP] stats server listening on port ${serverPort}`);
 });
 

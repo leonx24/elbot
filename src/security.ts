@@ -36,29 +36,27 @@ const MALICIOUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\/(setup|install|xmlrpc|telescope|actuator)\.php/i, reason: "Vulnerability probe" }
 ];
 
+const IP_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+
 /**
  * Get the real client IP address.
- * Only trusts proxy headers (cf-connecting-ip, x-forwarded-for, x-real-ip)
- * when TRUST_PROXY=true is set in the environment config.
+ * Strictly trusts CF-Connecting-IP when TRUST_PROXY=true to prevent IP spoofing,
+ * and validates the IP syntax before returning.
  */
 export function getClientIp(req: IncomingMessage): string {
   if (config.TRUST_PROXY === "true") {
     const cfIp = req.headers["cf-connecting-ip"];
-    if (typeof cfIp === "string" && cfIp.trim()) return cfIp.trim();
-
-    const forwarded = req.headers["x-forwarded-for"];
-    if (typeof forwarded === "string" && forwarded.trim()) {
-      const parts = forwarded.split(",");
-      if (parts[0]) return parts[0].trim();
+    if (typeof cfIp === "string") {
+      const trimmed = cfIp.trim();
+      if (IP_REGEX.test(trimmed)) return trimmed;
     }
-
-    const xRealIp = req.headers["x-real-ip"];
-    if (typeof xRealIp === "string" && xRealIp.trim()) return xRealIp.trim();
   }
 
   const remoteAddress = req.socket?.remoteAddress;
   if (remoteAddress) {
-    return remoteAddress.replace(/^.*:/, "") || "127.0.0.1";
+    const clean = remoteAddress.replace(/^.*:/, "");
+    if (clean && IP_REGEX.test(clean)) return clean;
+    return "127.0.0.1";
   }
 
   return "Unknown IP";
@@ -202,11 +200,19 @@ export async function recordFailedKeyAttempt(
     const newCount = globalTracker.count + 1;
     upsertGlobalKeyFailure(key, newCount, globalTracker.firstFailure);
 
-    // If key fails >5 times in 10 minutes globally, lock it for 30 minutes
+    // If key fails >5 times globally, lock it with progressive escalation
     if (newCount > 5 && !isKeyLocked(key)) {
-      const lockReason = `Key locked: ${newCount}x global failed attempts in 10 minutes`;
-      lockKey(key, 30 * 60 * 1000, lockReason); // 30 minutes
-      deleteGlobalKeyFailure(key);
+      let lockDuration = 30 * 60 * 1000; // 30 minutes default
+      if (newCount > 15) {
+        lockDuration = 24 * 60 * 60 * 1000; // 24 hours
+      } else if (newCount > 10) {
+        lockDuration = 2 * 60 * 60 * 1000; // 2 hours
+      }
+
+      const lockDurationText = lockDuration >= 86400000 ? "24 hours" : (lockDuration >= 7200000 ? "2 hours" : "30 minutes");
+      const lockReason = `Key locked: ${newCount}x global failed attempts (${lockDurationText})`;
+      lockKey(key, lockDuration, lockReason);
+      // Fix #14: Do NOT delete global failure counter on lock to prevent lock-wait-repeat attack cycle
 
       if (client) {
         await sendSecurityAlert(client, {
@@ -216,7 +222,7 @@ export async function recordFailedKeyAttempt(
           pathname: "/api/validate-key or /load.php",
           hwid: details?.hwid,
           robloxId: details?.robloxId,
-          actionTaken: "🔒 Key Locked for 30 minutes (multi-IP brute-force)"
+          actionTaken: `🔒 Key Locked for ${lockDurationText} (multi-IP brute-force)`
         });
       }
     }

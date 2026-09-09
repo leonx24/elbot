@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import crypto from "node:crypto";
 
 const dbPath = process.env.DATABASE_PATH || "data/bot.db";
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -123,6 +124,13 @@ db.exec(`
     reason TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_key_locks_until ON key_locks(locked_until);
+
+  CREATE TABLE IF NOT EXISTS global_key_failures (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL,
+    first_failure INTEGER NOT NULL,
+    last_failure INTEGER NOT NULL
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
@@ -247,7 +255,10 @@ export function getBlacklistList(): Array<{
 
 export function generateUniqueKey(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const segment = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  const segment = () => {
+    const bytes = crypto.randomBytes(4);
+    return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+  };
   return `LEONX-${segment()}-${segment()}-${segment()}`;
 }
 
@@ -292,53 +303,57 @@ export function validateUserKey(
   robloxId?: string,
   hwid?: string
 ): { valid: boolean; message: string; discordId?: string } {
-  const row = db.prepare("SELECT * FROM user_keys WHERE key = ?").get(key) as {
-    discord_id: string;
-    key: string;
-    roblox_id: string | null;
-    hwid: string | null;
-    created_at: string;
-  } | undefined;
+  const runValidation = db.transaction(() => {
+    const row = db.prepare("SELECT * FROM user_keys WHERE key = ?").get(key) as {
+      discord_id: string;
+      key: string;
+      roblox_id: string | null;
+      hwid: string | null;
+      created_at: string;
+    } | undefined;
 
-  if (!row) {
-    return { valid: false, message: "Key tidak valid atau tidak terdaftar." };
-  }
-
-  // If key already has hwid registered, it must match
-  if (row.hwid && hwid && row.hwid !== hwid) {
-    return { valid: false, message: "Key ini sudah terdaftar untuk perangkat (HWID) lain." };
-  }
-
-  // HWID cross-user check: jika hwid belum bound ke key ini, cek apakah sudah dipakai discord_id lain
-  if (!row.hwid && hwid) {
-    const existingHwid = db.prepare(
-      "SELECT 1 FROM user_keys WHERE hwid = ? AND discord_id != ?"
-    ).get(hwid, row.discord_id);
-    if (existingHwid) {
-      return { valid: false, message: "Perangkat (HWID) ini sudah terdaftar oleh pengguna lain." };
+    if (!row) {
+      return { valid: false, message: "Key tidak valid atau tidak terdaftar." };
     }
-  }
 
-  // Bind key to hwid if not yet bound, and update robloxId if it changed or was not set (without restricting)
-  const updates: string[] = [];
-  const params: any[] = [];
+    // If key already has hwid registered, it must match
+    if (row.hwid && hwid && row.hwid !== hwid) {
+      return { valid: false, message: "Key ini sudah terdaftar untuk perangkat (HWID) lain." };
+    }
 
-  if (robloxId && row.roblox_id !== robloxId) {
-    updates.push("roblox_id = ?");
-    params.push(robloxId);
-  }
-  if (!row.hwid && hwid) {
-    updates.push("hwid = ?");
-    params.push(hwid);
-  }
+    // HWID cross-user check: jika hwid belum bound ke key ini, cek apakah sudah dipakai discord_id lain
+    if (!row.hwid && hwid) {
+      const existingHwid = db.prepare(
+        "SELECT 1 FROM user_keys WHERE hwid = ? AND discord_id != ?"
+      ).get(hwid, row.discord_id);
+      if (existingHwid) {
+        return { valid: false, message: "Perangkat (HWID) ini sudah terdaftar oleh pengguna lain." };
+      }
+    }
 
-  if (updates.length > 0) {
-    params.push(key);
-    db.prepare(`UPDATE user_keys SET ${updates.join(", ")} WHERE key = ?`).run(...params);
-    return { valid: true, message: "Key berhasil divalidasi dan dikaitkan ke perangkat Anda.", discordId: row.discord_id };
-  }
+    // Bind key to hwid if not yet bound, and update robloxId if it changed or was not set (without restricting)
+    const updates: string[] = [];
+    const params: any[] = [];
 
-  return { valid: true, message: "Key valid.", discordId: row.discord_id };
+    if (robloxId && row.roblox_id !== robloxId) {
+      updates.push("roblox_id = ?");
+      params.push(robloxId);
+    }
+    if (!row.hwid && hwid) {
+      updates.push("hwid = ?");
+      params.push(hwid);
+    }
+
+    if (updates.length > 0) {
+      params.push(key);
+      db.prepare(`UPDATE user_keys SET ${updates.join(", ")} WHERE key = ?`).run(...params);
+      return { valid: true, message: "Key berhasil divalidasi dan dikaitkan ke perangkat Anda.", discordId: row.discord_id };
+    }
+
+    return { valid: true, message: "Key valid.", discordId: row.discord_id };
+  });
+
+  return runValidation();
 }
 
 export function resetUserKeyBinding(discordId: string, bypassCooldown: boolean = false): { success: boolean; message: string } {
@@ -495,26 +510,20 @@ export function cleanupExpiredKeyLocks(): void {
 
 // ── Security: Global Key Failure Tracking (across all IPs) ──
 
-// Uses a special key in bot_settings to track per-key failure counts
 export function getGlobalKeyFailures(key: string): { count: number; firstFailure: number } {
-  const row = db.prepare("SELECT value FROM bot_settings WHERE key = ?").get(`keyfail:${key}`) as { value: string } | undefined;
+  const row = db.prepare("SELECT count, first_failure FROM global_key_failures WHERE key = ?").get(key) as { count: number; first_failure: number } | undefined;
   if (!row) return { count: 0, firstFailure: Date.now() };
-  try {
-    const parsed = JSON.parse(row.value) as { count: number; firstFailure: number };
-    return parsed;
-  } catch {
-    return { count: 0, firstFailure: Date.now() };
-  }
+  return { count: row.count, firstFailure: row.first_failure };
 }
 
 export function upsertGlobalKeyFailure(key: string, count: number, firstFailure: number): void {
   db.prepare(`
-    INSERT INTO bot_settings (key, value) VALUES (?, ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(`keyfail:${key}`, JSON.stringify({ count, firstFailure }));
+    INSERT INTO global_key_failures (key, count, first_failure, last_failure) VALUES (?, ?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET count = excluded.count, last_failure = excluded.last_failure
+  `).run(key, count, firstFailure, Date.now());
 }
 
 export function deleteGlobalKeyFailure(key: string): void {
-  db.prepare("DELETE FROM bot_settings WHERE key = ?").run(`keyfail:${key}`);
+  db.prepare("DELETE FROM global_key_failures WHERE key = ?").run(key);
 }
 
