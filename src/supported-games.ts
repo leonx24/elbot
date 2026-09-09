@@ -18,6 +18,7 @@ export interface SupportedGame {
   status: GameStatus;
   category?: string;
   note?: string;
+  placeIds?: (number | string)[];
 }
 
 export const STATUS: Record<GameStatus, { emoji: string; label: string }> = {
@@ -42,6 +43,13 @@ export const DEFAULT_SUPPORTED_GAMES: SupportedGame[] = [
     name: "Violence District",
     status: "WORK",
     category: "Roblox",
+  },
+  {
+    id: "sniper-arena",
+    name: "Sniper Arena",
+    status: "WORK",
+    category: "Roblox",
+    placeIds: [122446657157717],
   },
   {
     id: "fish-and-monster",
