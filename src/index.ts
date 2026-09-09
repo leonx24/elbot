@@ -4340,6 +4340,60 @@ function checkOauthIpRateLimit(ip: string): boolean {
   return true;
 }
 
+/**
+ * Security: Verify a Discord OAuth2 Bearer token belongs to a bot owner/admin.
+ * Rejects invalid/expired tokens, tokens missing the 'identify' scope,
+ * and users without the owner role / OWNER_ID.
+ */
+async function requireAdminAuth(req: http.IncomingMessage): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (!token) {
+    return { ok: false, status: 401, error: "Authorization header with Bearer token is required." };
+  }
+
+  const discordRes = await fetch("https://discord.com/api/oauth2/@me", {
+    headers: { Authorization: `Bearer ${token}` }
+  }).catch(() => null);
+  if (!discordRes || !discordRes.ok) {
+    return { ok: false, status: 401, error: "Unauthorized access token." };
+  }
+
+  const oauthData = await discordRes.json() as {
+    scopes?: string[];
+    expires?: string;
+    user?: { id: string };
+  };
+
+  if (!oauthData.scopes?.includes("identify") || !oauthData.user) {
+    return { ok: false, status: 403, error: "Invalid token scope. 'identify' scope is required." };
+  }
+
+  if (oauthData.expires && new Date(oauthData.expires).getTime() <= Date.now()) {
+    return { ok: false, status: 401, error: "Access token has expired." };
+  }
+
+  const guild = client.guilds.cache.get(config.GUILD_ID);
+  const member = await guild?.members.fetch(oauthData.user.id).catch(() => null);
+  if (!isUserOwnerOrAdmin(oauthData.user.id, member)) {
+    return { ok: false, status: 403, error: "Insufficient permissions. Owner/Admin access required." };
+  }
+
+  return { ok: true, userId: oauthData.user.id };
+}
+
+// Security: /api/proxy may only reach these public CDN/API hostnames (blocks SSRF to internal networks)
+const PROXY_ALLOWED_HOSTS = new Set([
+  "thumbnails.roblox.com",
+  "users.roblox.com",
+  "games.roblox.com",
+  "apis.roblox.com",
+  "www.roblox.com",
+  "discord.com",
+  "cdn.discordapp.com",
+  "media.discordapp.net"
+]);
+
 // Fix #9: In-memory Map cleanup interval (every 30 minutes)
 setInterval(() => {
   try {
@@ -4814,6 +4868,14 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/stats" && req.method === "GET") {
+    // Security: admin-only. Requires Discord OAuth2 owner/admin token.
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
     const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
     
     // Retrieve tables dynamically from SQLite database
@@ -4893,6 +4955,14 @@ http.createServer(async (req, res) => {
   }
   else if (pathname === "/api/blacklist" && req.method === "POST") {
     try {
+      // Security: admin-only. Requires Discord OAuth2 owner/admin token.
+      const adminCheck = await requireAdminAuth(req);
+      if (!adminCheck.ok) {
+        res.writeHead(adminCheck.status);
+        res.end(JSON.stringify({ error: adminCheck.error }));
+        return;
+      }
+
       // Fix #14: Enforce body limit
       const body = await collectBody(req, 100_000);
       if (!body || !body.trim()) {
@@ -4936,6 +5006,14 @@ http.createServer(async (req, res) => {
     }
   } 
   else if (pathname === "/api/blacklist" && req.method === "DELETE") {
+    // Security: admin-only. Requires Discord OAuth2 owner/admin token.
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
     const discordId = urlObj.searchParams.get("discord_id");
     const id = urlObj.searchParams.get("id");
     try {
@@ -4963,9 +5041,31 @@ http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "url parameter is required" }));
       return;
     }
-    
+
+    // Security: prevent SSRF — https-only and strict domain allowlist.
+    let parsedUrl: URL;
     try {
-      const response = await fetch(targetUrl, {
+      parsedUrl = new URL(targetUrl);
+    } catch {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Invalid URL" }));
+      return;
+    }
+
+    if (parsedUrl.protocol !== "https:") {
+      res.writeHead(403);
+      res.end(JSON.stringify({ error: "Only HTTPS URLs are allowed" }));
+      return;
+    }
+
+    if (!PROXY_ALLOWED_HOSTS.has(parsedUrl.hostname)) {
+      res.writeHead(403);
+      res.end(JSON.stringify({ error: "Domain not in allowlist" }));
+      return;
+    }
+
+    try {
+      const response = await fetch(parsedUrl.toString(), {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -4976,7 +5076,7 @@ http.createServer(async (req, res) => {
     } catch (err) {
       console.error("Error in /api/proxy:", err);
       res.writeHead(500);
-      res.end(JSON.stringify({ error: "Internal server error" }));
+      res.end(JSON.stringify({ error: "Proxy request failed" }));
     }
   }
   else {
