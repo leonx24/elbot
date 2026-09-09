@@ -23,6 +23,7 @@ const schema = z.object({
   SECURITY_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   TRUST_PROXY: z.string().optional().or(z.literal("")),
   DEBUG: z.string().optional().or(z.literal("")),
+  SCRIPT_SIGNING_SECRET: z.string().optional().or(z.literal("")),
   EXECUTION_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   MONITORED_UPDATE_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   RULES_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
