@@ -4895,27 +4895,42 @@ http.createServer(async (req, res) => {
     try {
       // Fix #14: Enforce body limit
       const body = await collectBody(req, 100_000);
-      const data = JSON.parse(body);
-      if (!data.discordId && !data.robloxId) {
+      if (!body || !body.trim()) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "Request body cannot be empty" }));
+        return;
+      }
+
+      let data: any;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "Invalid JSON body format" }));
+        return;
+      }
+
+      if (!data || typeof data !== "object" || (!data.discordId && !data.robloxId)) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: "discordId or robloxId required" }));
         return;
       }
+
       addToBlacklist({
-        discordId: data.discordId,
-        robloxId: data.robloxId,
-        hwid: data.hwid,
-        reason: data.reason || "Banned from Web Panel"
+        discordId: data.discordId ? String(data.discordId).trim() : undefined,
+        robloxId: data.robloxId ? String(data.robloxId).trim() : undefined,
+        hwid: data.hwid ? String(data.hwid).trim() : undefined,
+        reason: data.reason ? String(data.reason).trim() : "Banned from Web Panel"
       });
       res.writeHead(200);
       res.end(JSON.stringify({ success: true }));
     } catch (err: any) {
-      console.error("Error in /api/blacklist (POST):", err);
       if (err?.message === "PAYLOAD_TOO_LARGE") {
         res.writeHead(413);
         res.end(JSON.stringify({ error: "Payload too large" }));
         return;
       }
+      console.error("Error in /api/blacklist (POST):", err);
       res.writeHead(500);
       res.end(JSON.stringify({ error: "Internal server error" }));
     }
