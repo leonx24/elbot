@@ -10,6 +10,7 @@ import {
   ButtonStyle,
   MessageFlags,
 } from "discord.js";
+import { buildV2Container } from "./components-v2.js";
 
 // Configuration for self-service actions
 export const SERVICES = [
@@ -127,12 +128,35 @@ export function buildLicensePanelV2(iconUrl?: string) {
 }
 
 /**
- * Membangun respon ephemeral untuk menampilkan Key user
+ * Membangun payload Dual-Platform Script Loader (Components V2)
+ * Menyediakan versi Mobile (1-tap copy) dan versi PC (multi-line codeblock),
+ * beserta tombol interaktif untuk Versi Mobile, Versi PC, dan Reset HWID.
  */
-export function buildUserKeyEphemeral(key: string, username: string) {
+export function buildDualPlatformScriptPayload(
+  key: string,
+  options?: {
+    userId?: string;
+    isEng?: boolean;
+    ephemeral?: boolean;
+    iconUrl?: string;
+    customTitle?: string;
+  }
+) {
+  const isEng = options?.isEng ?? false;
   const singleLineLoader = `_G.Key = "${key}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+  const pcScript = `_G.Key = "${key}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
 
   const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("script_mode_mobile")
+      .setLabel(isEng ? "Mobile Version" : "Versi Mobile")
+      .setEmoji("📱")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("script_mode_pc")
+      .setLabel(isEng ? "PC Version" : "Versi PC")
+      .setEmoji("💻")
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId("reset_hwid")
       .setLabel("Reset HWID")
@@ -140,22 +164,76 @@ export function buildUserKeyEphemeral(key: string, username: string) {
       .setStyle(ButtonStyle.Secondary)
   );
 
+  const title =
+    options?.customTitle ||
+    (isEng
+      ? "🔑 LeonX Hub — Script Loader & License"
+      : "🔑 LeonX Hub — Script Loader & License");
+
+  const description = options?.userId
+    ? (isEng
+        ? `Hello <@${options.userId}>, here is your script loader and license key:`
+        : `Halo <@${options.userId}>, berikut adalah script loader dan license key Anda:`)
+    : (isEng
+        ? "Here is your official LeonX Hub script loader and license key:"
+        : "Berikut adalah script loader dan license key resmi LeonX Hub Anda:");
+
+  const v2Payload = buildV2Container({
+    title,
+    description,
+    thumbnailUrl: options?.iconUrl,
+    sections: [
+      {
+        title: isEng ? "📱 Mobile Version (Tap to Copy)" : "📱 Versi Mobile (Klik Langsung Ter-copy)",
+        content: isEng
+          ? `**Tap the script below once to copy automatically (do not hold):**\n\n` +
+            `\`${singleLineLoader}\`\n\n` +
+            `**Tap license key below to copy key only:**\n\n` +
+            `\`${key}\``
+          : `**Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:**\n\n` +
+            `\`${singleLineLoader}\`\n\n` +
+            `**Klik key di bawah untuk salin key lisensi saja:**\n\n` +
+            `\`${key}\``,
+      },
+      {
+        title: isEng ? "💻 PC Version (Multi-line Script)" : "💻 Versi PC (Script Multi-line)",
+        content:
+          (isEng
+            ? "**Full script for PC executors (Wave, Solara, Synapse, etc.):**\n\n"
+            : "**Script lengkap untuk executor PC (Wave, Solara, Synapse, dll):**\n\n") +
+          `\`\`\`lua\n${pcScript}\n\`\`\``,
+      },
+      {
+        title: isEng ? "💡 Device Binding & Tips" : "💡 Panduan & Pengikatan HWID",
+        content: isEng
+          ? "• Key binds automatically to your device (HWID) on first Roblox execution.\n• Tap the buttons below for fast single-tap copying or to reset HWID."
+          : "• Key otomatis terikat ke perangkat (HWID) saat pertama kali dieksekusi di Roblox.\n• Gunakan tombol di bawah jika ingin salin cepat per format atau reset HWID perangkat.",
+      },
+    ],
+    footer: "LeonX Hub • Dual-Platform Loader System",
+    actionRows: [actionRow],
+  });
+
   return {
-    content:
-      `## 🔑 License Key & Script Loader — LeonX Hub\n` +
-      `Halo <@${username}>, berikut adalah script loader dan license key Anda:\n\n` +
-      `**Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:**\n\n` +
-      `\`${singleLineLoader}\`\n\n` +
-      `**Klik key di bawah untuk salin key lisensi saja:**\n\n` +
-      `\`${key}\`\n\n` +
-      `*💡 Catatan: Key akan otomatis terikat ke perangkat (HWID) pertama kali saat dieksekusi di Roblox.*`,
-    components: [actionRow],
-    flags: MessageFlags.Ephemeral as any
+    ...v2Payload,
+    flags: (options?.ephemeral
+      ? MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+      : MessageFlags.IsComponentsV2) as any,
   };
 }
 
 /**
- * Membangun respon ephemeral untuk informasi detail Key user
+ * Membangun respon ephemeral untuk menampilkan Key user
+ */
+export function buildUserKeyEphemeral(key: string, username: string) {
+  return buildDualPlatformScriptPayload(key, {
+    userId: username,
+    ephemeral: true,
+  });
+}
+
+/**
+ * Membangun respon ephemeral untuk informasi detail Key user (Components V2)
  */
 export function buildKeyInfoEphemeral(info: {
   key: string;
@@ -166,6 +244,7 @@ export function buildKeyInfoEphemeral(info: {
   execution_count: number;
 }, discordId: string) {
   const singleLineLoader = `_G.Key = "${info.key}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+  const pcScript = `_G.Key = "${info.key}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
 
   const hwidStatus = info.hwid
     ? `\`Terikat\` (\`${info.hwid.slice(0, 16)}...\`)`
@@ -181,27 +260,57 @@ export function buildKeyInfoEphemeral(info: {
 
   const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
+      .setCustomId("script_mode_mobile")
+      .setLabel("Versi Mobile")
+      .setEmoji("📱")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("script_mode_pc")
+      .setLabel("Versi PC")
+      .setEmoji("💻")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId("reset_hwid")
       .setLabel("Reset HWID")
       .setEmoji("🔄")
       .setStyle(ButtonStyle.Secondary)
   );
 
+  const v2Payload = buildV2Container({
+    title: "📊 Informasi Lisensi Script — LeonX Hub",
+    description: `Informasi data akun dan perangkat lisensi untuk <@${discordId}>:`,
+    sections: [
+      {
+        title: "🔑 Detail Lisensi & Perangkat",
+        content:
+          `• **License Key:** \`${info.key}\`\n` +
+          `• **Status Perangkat (HWID):** ${hwidStatus}\n` +
+          `• **Roblox ID Terakhir:** ${robloxStatus}\n` +
+          `• **Total Eksekusi In-Game:** \`${info.execution_count} kali\`\n` +
+          `• **Terakhir Reset HWID:** ${lastReset}\n` +
+          `• **Tanggal Dibuat:** \`${info.created_at}\``,
+      },
+      {
+        title: "📱 Versi Mobile (Klik Langsung Ter-copy)",
+        content:
+          `**Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:**\n\n` +
+          `\`${singleLineLoader}\`\n\n` +
+          `**Klik key di bawah untuk salin key lisensi saja:**\n\n` +
+          `\`${info.key}\``,
+      },
+      {
+        title: "💻 Versi PC (Script Multi-line)",
+        content:
+          `**Script lengkap untuk executor PC (Wave, Solara, dll):**\n\n` +
+          `\`\`\`lua\n${pcScript}\n\`\`\``,
+      },
+    ],
+    footer: "LeonX Hub • License System",
+    actionRows: [actionRow],
+  });
+
   return {
-    content:
-      `## 📊 Informasi Lisensi Script — LeonX Hub\n` +
-      `Informasi data akun dan perangkat lisensi untuk <@${discordId}>:\n\n` +
-      `• **License Key:** \`${info.key}\`\n` +
-      `• **Status Perangkat (HWID):** ${hwidStatus}\n` +
-      `• **Roblox ID Terakhir:** ${robloxStatus}\n` +
-      `• **Total Eksekusi In-Game:** \`${info.execution_count} kali\`\n` +
-      `• **Terakhir Reset HWID:** ${lastReset}\n` +
-      `• **Tanggal Dibuat:** \`${info.created_at}\`\n\n` +
-      `**Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:**\n\n` +
-      `\`${singleLineLoader}\`\n\n` +
-      `**Klik key di bawah untuk salin key lisensi saja:**\n\n` +
-      `\`${info.key}\``,
-    components: [actionRow],
-    flags: MessageFlags.Ephemeral as any
+    ...v2Payload,
+    flags: (MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral) as any,
   };
 }

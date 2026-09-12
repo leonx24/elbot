@@ -19,7 +19,7 @@ import {
 } from "discord.js";
 import { buildV2Container, buildMultiV2Containers } from "./components-v2.js";
 import { buildSupportedGamesV2 } from "./supported-games.js";
-import { buildLicensePanelV2, buildUserKeyEphemeral, buildKeyInfoEphemeral } from "./license-panel.js";
+import { buildLicensePanelV2, buildUserKeyEphemeral, buildKeyInfoEphemeral, buildDualPlatformScriptPayload } from "./license-panel.js";
 import { handleSecurityCheck, recordFailedKeyAttempt, getClientIp, startSecurityCleanup } from "./security.js";
 import { config } from "./config.js";
 import http from "node:http";
@@ -1020,23 +1020,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userKey = getOrCreateUserKey(interaction.user.id);
-        const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
-
-        const messageText =
-          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-          `\`${scriptCode}\`\n\n` +
-          `Klik key lisensi di bawah untuk salin key saja:\n\n` +
-          `\`${userKey}\``;
+        const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+        const v2Payload = buildDualPlatformScriptPayload(userKey, {
+          userId: interaction.user.id,
+          ephemeral: true,
+          iconUrl: guildIcon,
+        });
 
         try {
-          await interaction.user.send(messageText);
+          const dmPayload = buildDualPlatformScriptPayload(userKey, {
+            userId: interaction.user.id,
+            ephemeral: false,
+            iconUrl: guildIcon,
+          });
+          await interaction.user.send(dmPayload);
+
+          const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+          await interaction.user.send(
+            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n` +
+            `\`${singleLineLoader}\`\n\n` +
+            `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+            `\`${userKey}\``
+          );
         } catch {
           // Abaikan jika DM ditutup
         }
 
-        await interaction.editReply({
-          content: messageText
-        });
+        await interaction.editReply(v2Payload);
       }
 
       if (interaction.commandName === "resethwid") {
@@ -1128,7 +1138,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }).join("\n");
         }
 
-        const scriptCode = `_G.Key = "${keyData.key}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+        const singleLineLoader = `_G.Key = "${keyData.key}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+        const pcScript = `_G.Key = "${keyData.key}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+
+        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("script_mode_mobile")
+            .setLabel("Versi Mobile")
+            .setEmoji("📱")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId("script_mode_pc")
+            .setLabel("Versi PC")
+            .setEmoji("💻")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("reset_hwid")
+            .setLabel("Reset HWID")
+            .setEmoji("🔄")
+            .setStyle(ButtonStyle.Secondary)
+        );
 
         const embed = new EmbedBuilder()
           .setTitle("🔑 Informasi Key & Lisensi Anda")
@@ -1141,8 +1170,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
             `• \`Cooldown Reset:\` ${cooldownText}\n` +
             `• \`Total Eksekusi:\` \`${totalExec}\` kali\n` +
             `• \`Dibuat Pada:\` \`${new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" })}\`\n\n` +
-            "**Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:**\n\n" +
-            `\`${scriptCode}\`\n\n` +
+            "**📱 Versi Mobile (Klik Langsung Ter-copy):**\n" +
+            "Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n" +
+            `\`${singleLineLoader}\`\n\n` +
+            "**💻 Versi PC (Multi-line Loader):**\n" +
+            "```lua\n" +
+            `${pcScript}\n` +
+            "```\n\n" +
             "**Klik key lisensi di bawah untuk salin key saja:**\n\n" +
             `\`${keyData.key}\`\n\n` +
             "**📜 Riwayat 5 Eksekusi Terakhir**\n" +
@@ -1151,7 +1185,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setFooter({ text: "LeonX Hub • License System" })
           .setTimestamp();
 
-        await interaction.editReply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed], components: [actionRow] });
       }
 
       if (interaction.commandName === "lookup") {
@@ -1327,12 +1361,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 } else {
                   try {
                     const userKey = getOrCreateUserKey(interaction.user.id);
-                    const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+                    const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+                    const dmPayload = buildDualPlatformScriptPayload(userKey, {
+                      userId: interaction.user.id,
+                      isEng,
+                      ephemeral: false,
+                      iconUrl: guildIcon,
+                    });
+                    await interaction.user.send(dmPayload);
+
+                    const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
                     await interaction.user.send(
-                      `**LeonX Hub Loader & Key**\n\n` +
-                      `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-                      `\`${scriptCode}\`\n\n` +
-                      `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+                      (isEng
+                        ? `Tap the script below once to copy automatically (do not hold):\n\n`
+                        : `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n`) +
+                      `\`${singleLineLoader}\`\n\n` +
+                      (isEng
+                        ? `Tap the license key below to copy key only:\n\n`
+                        : `Klik key lisensi di bawah untuk salin key saja:\n\n`) +
                       `\`${userKey}\``
                     );
                     finalReply = finalReply.replace(
@@ -1510,29 +1556,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "generatekey") {
         const user = interaction.options.getUser("user", true);
         const newKey = forceGenerateUserKey(user.id);
-        const scriptCode = `_G.Key = "${newKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+        const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
 
-        await interaction.reply({
-          content:
-            `🔑 **Key Baru Berhasil Dihasilkan!**\nPengguna: <@${user.id}>\n\n` +
-            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-            `\`${scriptCode}\`\n\n` +
-            `Klik key lisensi di bawah untuk salin key saja:\n\n` +
-            `\`${newKey}\`\n\n` +
-            `*Catatan: Key lama telah dinonaktifkan, dan semua data binding telah di-reset.*`,
-          flags: MessageFlags.Ephemeral
+        const v2Payload = buildDualPlatformScriptPayload(newKey, {
+          userId: user.id,
+          ephemeral: true,
+          iconUrl: guildIcon,
+          customTitle: "🔑 Key Baru Berhasil Dihasilkan!",
         });
+
+        await interaction.reply(v2Payload);
 
         // Kirim DM ke pengguna
         try {
-          const dmContent = 
-            `**LeonX Hub Loader (Key Baru)**\n` +
-            `Administrator telah membuatkan key baru untuk Anda:\n\n` +
-            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-            `\`${scriptCode}\`\n\n` +
+          const dmPayload = buildDualPlatformScriptPayload(newKey, {
+            userId: user.id,
+            ephemeral: false,
+            iconUrl: guildIcon,
+            customTitle: "🔑 LeonX Hub Loader (Key Baru)",
+          });
+          await user.send(dmPayload);
+
+          const singleLineLoader = `_G.Key = "${newKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+          await user.send(
+            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n` +
+            `\`${singleLineLoader}\`\n\n` +
             `Klik key lisensi di bawah untuk salin key saja:\n\n` +
-            `\`${newKey}\``;
-          await user.send(dmContent);
+            `\`${newKey}\``
+          );
         } catch {
           // Abaikan jika DM ditutup
         }
@@ -2968,11 +3019,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isButton() && (interaction.customId === "copy_loader" || interaction.customId === "license:copy_loader")) {
       const userKey = getOrCreateUserKey(interaction.user.id);
-      const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+      const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+      const payload = buildDualPlatformScriptPayload(userKey, {
+        userId: interaction.user.id,
+        ephemeral: true,
+        iconUrl: guildIcon,
+      });
+      await interaction.reply(payload);
+      return;
+    }
+
+    if (interaction.isButton() && (
+      interaction.customId === "script_mode_mobile" ||
+      interaction.customId === "license:script_mobile" ||
+      interaction.customId === "copy_mobile_script" ||
+      interaction.customId === "license:copy_mobile_script"
+    )) {
+      const userKey = getOrCreateUserKey(interaction.user.id);
+      const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
       await interaction.reply({
         content:
-          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-          `\`${scriptCode}\`\n\n` +
+          `📱 **LeonX Hub Loader — Versi Mobile (Tap to Copy)**\n\n` +
+          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n` +
+          `\`${singleLineLoader}\`\n\n` +
           `Klik key lisensi di bawah untuk salin key saja:\n\n` +
           `\`${userKey}\``,
         flags: MessageFlags.Ephemeral
@@ -2980,13 +3049,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.isButton() && (interaction.customId === "copy_mobile_script" || interaction.customId === "license:copy_mobile_script")) {
+    if (interaction.isButton() && (
+      interaction.customId === "script_mode_pc" ||
+      interaction.customId === "license:script_pc" ||
+      interaction.customId === "copy_pc_script" ||
+      interaction.customId === "license:copy_pc_script"
+    )) {
       const userKey = getOrCreateUserKey(interaction.user.id);
-      const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+      const pcScript = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
       await interaction.reply({
         content:
-          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-          `\`${scriptCode}\``,
+          `💻 **LeonX Hub Loader — Versi PC (Multi-line)**\n\n` +
+          `Salin script loader lengkap di bawah ini untuk executor PC (Wave, Solara, Synapse, dll):\n\n` +
+          `\`\`\`lua\n${pcScript}\n\`\`\`\n\n` +
+          `Key lisensi Anda:\n` +
+          `\`${userKey}\``,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -3984,12 +4061,24 @@ client.on(Events.MessageCreate, async (message) => {
             } else {
               try {
                 const userKey = getOrCreateUserKey(message.author.id);
-                const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+                const guildIcon = message.guild?.iconURL() ?? client.user?.displayAvatarURL();
+                const dmPayload = buildDualPlatformScriptPayload(userKey, {
+                  userId: message.author.id,
+                  isEng,
+                  ephemeral: false,
+                  iconUrl: guildIcon,
+                });
+                await message.author.send(dmPayload);
+
+                const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
                 await message.author.send(
-                  `**LeonX Hub Loader & Key**\n\n` +
-                  `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
-                  `\`${scriptCode}\`\n\n` +
-                  `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+                  (isEng
+                    ? `Tap the script below once to copy automatically (do not hold):\n\n`
+                    : `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n`) +
+                  `\`${singleLineLoader}\`\n\n` +
+                  (isEng
+                    ? `Tap the license key below to copy key only:\n\n`
+                    : `Klik key lisensi di bawah untuk salin key saja:\n\n`) +
                   `\`${userKey}\``
                 );
                 finalReply = finalReply.replace(
