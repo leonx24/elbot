@@ -66,7 +66,7 @@ pcall(function()
 end)
 
 local BASE = (getgenv and getgenv().LeonX_BaseUrl) or "https://gitlab.com/affavanleon/leonx/-/raw/main/"
-local AUTH_KEY = (getgenv and getgenv().LeonX_AuthKey) or ""
+local AUTH_KEY = (getgenv and getgenv().LeonX_SessionToken) or ""
 
 local function secureFetch(path)
     local fullUrl = BASE .. path .. (BASE:find("%?") and "&t=" or "?t=") .. tostring(os.time())

@@ -19,12 +19,13 @@ import {
 } from "discord.js";
 import { buildV2Container, buildMultiV2Containers } from "./components-v2.js";
 import { buildSupportedGamesV2 } from "./supported-games.js";
-import { buildLicensePanelV2, buildUserKeyEphemeral, buildKeyInfoEphemeral } from "./license-panel.js";
+import { buildLicensePanelV2, buildUserKeyEphemeral, buildKeyInfoEphemeral, buildDualPlatformScriptPayload } from "./license-panel.js";
 import { handleSecurityCheck, recordFailedKeyAttempt, getClientIp, startSecurityCleanup } from "./security.js";
 import { config } from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import {
   db,
   trackCommand,
@@ -102,8 +103,28 @@ const client = new Client({
   ]
 });
 
-const cooldowns = new Map<string, number>();
-const ticketDeleteTimers = new Map<string, NodeJS.Timeout>();
+// Fix #8 & #9: Bounded LRU Map to prevent unbounded memory growth
+class BoundedMap<K, V> extends Map<K, V> {
+  private readonly maxSize: number;
+
+  constructor(maxSize: number = 5000) {
+    super();
+    this.maxSize = maxSize;
+  }
+
+  set(key: K, value: V): this {
+    if (this.size >= this.maxSize && !this.has(key)) {
+      const oldestKey = this.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.delete(oldestKey);
+      }
+    }
+    return super.set(key, value);
+  }
+}
+
+const cooldowns = new BoundedMap<string, number>(5000);
+const ticketDeleteTimers = new BoundedMap<string, NodeJS.Timeout>(1000);
 const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
 
 // Fix #11: Whitelist-only role check (no name-based matching, no hardcoded ID fallback)
@@ -176,7 +197,7 @@ async function callGroqAPI(messages: Array<{ role: string; content: string }>): 
         if ((response.status === 503 || response.status === 429) && attempt < GROQ_MAX_RETRIES) {
           const backoffMs = Math.min(
             30000,
-            Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+            Math.pow(2, attempt) * 1000 + crypto.randomInt(0, 1000)
           );
           console.warn(`[Groq] ${response.status} on ${model} attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
           await new Promise(r => setTimeout(r, backoffMs));
@@ -191,7 +212,7 @@ async function callGroqAPI(messages: Array<{ role: string; content: string }>): 
         if (isTimeout && attempt < GROQ_MAX_RETRIES) {
           const backoffMs = Math.min(
             30000,
-            Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000)
+            Math.pow(2, attempt) * 1000 + crypto.randomInt(0, 1000)
           );
           console.warn(`[Groq] Timeout on attempt ${attempt}/${GROQ_MAX_RETRIES}, retrying in ${backoffMs}ms...`);
           await new Promise(r => setTimeout(r, backoffMs));
@@ -920,14 +941,15 @@ client.once(Events.ClientReady, async (readyClient) => {
           if (!alreadySent) {
             try {
               const userKey = getOrCreateUserKey(memberId);
+              const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
               const dmContent = 
-                `**LeonX Hub Loader**\n` +
-                `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script khusus dan key lisensi Anda:\n` +
-                `\`\`\`lua\n` +
-                `_G.Key = "${userKey}"\n` +
-                `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n` +
-                `\`\`\`\n` +
-                `Jangan bagikan key ini kepada siapapun!`;
+                `**LeonX Hub Loader & License Key**\n` +
+                `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script dan key lisensi Anda:\n\n` +
+                `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+                `\`${scriptCode}\`\n\n` +
+                `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+                `\`${userKey}\`\n\n` +
+                `*Jangan bagikan key ini kepada siapapun!*`;
                 
               await member.send(dmContent);
               console.log(`[STARTUP] Successfully DMed key to ${member.user.tag}`);
@@ -998,23 +1020,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userKey = getOrCreateUserKey(interaction.user.id);
-        const v2DmScript = buildV2Container({
-          title: "🔑 LeonX Hub Loader & Key",
-          description: "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
-          sections: [
-            {
-              title: "📜 Script Loader (Lua)",
-              content:
-                "```lua\n" +
-                `_G.Key = "${userKey}"\n` +
-                'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n' +
-                "```"
-            }
-          ],
-          footer: "LeonX Hub • License System"
+        const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+        const v2Payload = buildDualPlatformScriptPayload(userKey, {
+          userId: interaction.user.id,
+          ephemeral: true,
+          iconUrl: guildIcon,
         });
-        await interaction.user.send(v2DmScript);
-        await interaction.editReply("Script loader dan key khusus berhasil dikirim melalui DM.");
+
+        try {
+          const dmPayload = buildDualPlatformScriptPayload(userKey, {
+            userId: interaction.user.id,
+            ephemeral: false,
+            iconUrl: guildIcon,
+          });
+          await interaction.user.send(dmPayload);
+
+          const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+          await interaction.user.send(
+            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n` +
+            `\`${singleLineLoader}\`\n\n` +
+            `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+            `\`${userKey}\``
+          );
+        } catch {
+          // Abaikan jika DM ditutup
+        }
+
+        await interaction.editReply(v2Payload);
       }
 
       if (interaction.commandName === "resethwid") {
@@ -1106,24 +1138,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }).join("\n");
         }
 
+        const singleLineLoader = `_G.Key = "${keyData.key}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+        const pcScript = `_G.Key = "${keyData.key}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+
+        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("script_mode_mobile")
+            .setLabel("Versi Mobile")
+            .setEmoji("📱")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId("script_mode_pc")
+            .setLabel("Versi PC")
+            .setEmoji("💻")
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("reset_hwid")
+            .setLabel("Reset HWID")
+            .setEmoji("🔄")
+            .setStyle(ButtonStyle.Secondary)
+        );
+
         const embed = new EmbedBuilder()
           .setTitle("🔑 Informasi Key & Lisensi Anda")
           .setDescription(
             "Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.\n\n" +
             "**🔑 Informasi Lisensi**\n" +
-            `• \`Key Lisensi:\` \`||${keyData.key}||\` *(Klik untuk menyalin)*\n` +
+            `• \`Key Lisensi:\` \`${keyData.key}\`\n` +
             `• \`Akun Roblox:\` ${keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
             `• \`Perangkat (HWID):\` ${keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut"}\n` +
             `• \`Cooldown Reset:\` ${cooldownText}\n` +
             `• \`Total Eksekusi:\` \`${totalExec}\` kali\n` +
             `• \`Dibuat Pada:\` \`${new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" })}\`\n\n` +
+            "**📱 Versi Mobile (Klik Langsung Ter-copy):**\n" +
+            "Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n" +
+            `\`${singleLineLoader}\`\n\n` +
+            "**💻 Versi PC (Multi-line Loader):**\n" +
+            "```lua\n" +
+            `${pcScript}\n` +
+            "```\n\n" +
+            "**Klik key lisensi di bawah untuk salin key saja:**\n\n" +
+            `\`${keyData.key}\`\n\n` +
             "**📜 Riwayat 5 Eksekusi Terakhir**\n" +
             historyText
           )
           .setFooter({ text: "LeonX Hub • License System" })
           .setTimestamp();
 
-        await interaction.editReply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed], components: [actionRow] });
       }
 
       if (interaction.commandName === "lookup") {
@@ -1299,28 +1361,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 } else {
                   try {
                     const userKey = getOrCreateUserKey(interaction.user.id);
-                    const v2DmScript = buildV2Container({
-                      title: "🔑 LeonX Hub Loader & Key",
-                      description: isEng
-                        ? "Here is your personal script loader. *Do not share this key with anyone!*"
-                        : "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
-                      sections: [
-                        {
-                          title: "📜 Script Loader (Lua)",
-                          content:
-                            "```lua\n" +
-                            `_G.Key = "${userKey}"\n` +
-                            'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n' +
-                            "```"
-                        }
-                      ],
-                      footer: "LeonX Hub • License System"
+                    const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+                    const dmPayload = buildDualPlatformScriptPayload(userKey, {
+                      userId: interaction.user.id,
+                      isEng,
+                      ephemeral: false,
+                      iconUrl: guildIcon,
                     });
-                    await interaction.user.send(v2DmScript);
+                    await interaction.user.send(dmPayload);
+
+                    const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+                    await interaction.user.send(
+                      (isEng
+                        ? `Tap the script below once to copy automatically (do not hold):\n\n`
+                        : `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n`) +
+                      `\`${singleLineLoader}\`\n\n` +
+                      (isEng
+                        ? `Tap the license key below to copy key only:\n\n`
+                        : `Klik key lisensi di bawah untuk salin key saja:\n\n`) +
+                      `\`${userKey}\``
+                    );
                     finalReply = finalReply.replace(
                       actionSendScriptRegex,
                       isEng
-                        ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs privately. Please check your inbox.`
+                        ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs. Please check your inbox.`
                         : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`
                     );
                   } catch (dmErr) {
@@ -1451,6 +1515,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
                       footer: "LeonX Hub • License Privacy"
                     });
                     await interaction.user.send(v2DmKeyInfo);
+                    await interaction.user.send({
+                      content: `Klik key lisensi di bawah untuk salin key saja:\n\n\`${row.key}\``
+                    });
                   } catch (dmErr) {
                     console.log(`Failed to DM key info to ${interaction.user.tag}:`, dmErr);
                   }
@@ -1489,22 +1556,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "generatekey") {
         const user = interaction.options.getUser("user", true);
         const newKey = forceGenerateUserKey(user.id);
+        const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
 
-        await interaction.reply({
-          content: `🔑 **Key Baru Berhasil Dihasilkan!**\nPengguna: <@${user.id}>\nKey: \`${newKey}\`\n\n*Catatan: Key lama (jika ada) telah dinonaktifkan, dan semua data binding (Roblox ID & HWID) untuk pengguna ini telah di-reset.*`,
-          flags: MessageFlags.Ephemeral
+        const v2Payload = buildDualPlatformScriptPayload(newKey, {
+          userId: user.id,
+          ephemeral: true,
+          iconUrl: guildIcon,
+          customTitle: "🔑 Key Baru Berhasil Dihasilkan!",
         });
+
+        await interaction.reply(v2Payload);
 
         // Kirim DM ke pengguna
         try {
-          const dmContent = 
-            `**LeonX Hub Loader (Key Baru)**\n` +
-            `Administrator telah membuatkan/memperbarui key baru untuk Anda. Jangan bagikan key ini kepada siapapun!\n` +
-            `\`\`\`lua\n` +
-            `_G.Key = "${newKey}"\n` +
-            `loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n` +
-            `\`\`\``;
-          await user.send(dmContent);
+          const dmPayload = buildDualPlatformScriptPayload(newKey, {
+            userId: user.id,
+            ephemeral: false,
+            iconUrl: guildIcon,
+            customTitle: "🔑 LeonX Hub Loader (Key Baru)",
+          });
+          await user.send(dmPayload);
+
+          const singleLineLoader = `_G.Key = "${newKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+          await user.send(
+            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n` +
+            `\`${singleLineLoader}\`\n\n` +
+            `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+            `\`${newKey}\``
+          );
         } catch {
           // Abaikan jika DM ditutup
         }
@@ -2940,9 +3019,67 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isButton() && (interaction.customId === "copy_loader" || interaction.customId === "license:copy_loader")) {
       const userKey = getOrCreateUserKey(interaction.user.id);
-      const code = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+      const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
+      const payload = buildDualPlatformScriptPayload(userKey, {
+        userId: interaction.user.id,
+        ephemeral: true,
+        iconUrl: guildIcon,
+      });
+      await interaction.reply(payload);
+      return;
+    }
+
+    if (interaction.isButton() && (
+      interaction.customId === "script_mode_mobile" ||
+      interaction.customId === "license:script_mobile" ||
+      interaction.customId === "copy_mobile_script" ||
+      interaction.customId === "license:copy_mobile_script"
+    )) {
+      const userKey = getOrCreateUserKey(interaction.user.id);
+      const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
       await interaction.reply({
-        content: `📋 **Script Loader Siap Pakai:**\n\`\`\`lua\n${code}\n\`\`\``,
+        content:
+          `📱 **LeonX Hub Loader — Versi Mobile (Tap to Copy)**\n\n` +
+          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n` +
+          `\`${singleLineLoader}\`\n\n` +
+          `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+          `\`${userKey}\``,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    if (interaction.isButton() && (
+      interaction.customId === "script_mode_pc" ||
+      interaction.customId === "license:script_pc" ||
+      interaction.customId === "copy_pc_script" ||
+      interaction.customId === "license:copy_pc_script"
+    )) {
+      const userKey = getOrCreateUserKey(interaction.user.id);
+      const pcScript = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+      await interaction.reply({
+        content:
+          `💻 **LeonX Hub Loader — Versi PC (Multi-line)**\n\n` +
+          `Salin script loader lengkap di bawah ini untuk executor PC (Wave, Solara, Synapse, dll):\n\n` +
+          `\`\`\`lua\n${pcScript}\n\`\`\`\n\n` +
+          `Key lisensi Anda:\n` +
+          `\`${userKey}\``,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    if (interaction.isButton() && (
+      interaction.customId === "copy_mobile_key" ||
+      interaction.customId === "license:copy_mobile_key" ||
+      interaction.customId === "copy_key" ||
+      interaction.customId === "license:copy_key"
+    )) {
+      const userKey = getOrCreateUserKey(interaction.user.id);
+      await interaction.reply({
+        content:
+          `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+          `\`${userKey}\``,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -3278,11 +3415,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-const userSpamCache = new Map<string, {
+const userSpamCache = new BoundedMap<string, {
   timestamps: number[];
   lastContent: string;
   repeatCount: number;
-}>();
+}>(5000);
 
 const FAQ_RULES = [
   {
@@ -3718,16 +3855,16 @@ client.on(Events.MessageCreate, async (message) => {
 
     // $key
     if (cmd === "key") {
-      const keyData = db.prepare("SELECT * FROM license_keys WHERE discord_id = ?").get(message.author.id) as any;
+      const keyData = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(message.author.id) as any;
       if (!keyData) {
         await message.reply("❌ Anda belum memiliki key lisensi. Gunakan `/script` untuk mendapatkan key.");
         return;
       }
 
-      const totalExec = (db.prepare("SELECT COUNT(*) AS count FROM execution_logs WHERE key = ?").get(keyData.key) as { count: number }).count;
+      const totalExec = (db.prepare("SELECT COUNT(*) AS count FROM script_executions WHERE key = ?").get(keyData.key) as { count: number }).count;
       let cooldownText = "✅ Ready";
-      if (keyData.last_reset) {
-        const lastReset = new Date(keyData.last_reset + " UTC").getTime();
+      if (keyData.last_reset_at) {
+        const lastReset = new Date(keyData.last_reset_at + " UTC").getTime();
         const now = Date.now();
         const diff = 24 * 60 * 60 * 1000 - (now - lastReset);
         if (diff > 0) {
@@ -3737,7 +3874,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
       }
 
-      const last5 = db.prepare("SELECT * FROM execution_logs WHERE key = ? ORDER BY executed_at DESC LIMIT 5").all(keyData.key) as any[];
+      const last5 = db.prepare("SELECT * FROM script_executions WHERE key = ? ORDER BY executed_at DESC LIMIT 5").all(keyData.key) as any[];
       let historyText = "Belum ada riwayat eksekusi.";
       if (last5.length > 0) {
         historyText = last5.map(ex => {
@@ -3924,28 +4061,30 @@ client.on(Events.MessageCreate, async (message) => {
             } else {
               try {
                 const userKey = getOrCreateUserKey(message.author.id);
-                const v2DmScript = buildV2Container({
-                  title: isEng ? "🔑 LeonX Hub Loader & Key" : "🔑 LeonX Hub Loader & Key",
-                  description: isEng
-                    ? "Here is your exclusive script loader. *Do not share this key with anyone!*"
-                    : "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
-                  sections: [
-                    {
-                      title: isEng ? "📜 Script Loader (Lua)" : "📜 Script Loader (Lua)",
-                      content:
-                        "```lua\n" +
-                        `_G.Key = "${userKey}"\n` +
-                        'loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()\n' +
-                        "```"
-                    }
-                  ],
-                  footer: "LeonX Hub • License System"
+                const guildIcon = message.guild?.iconURL() ?? client.user?.displayAvatarURL();
+                const dmPayload = buildDualPlatformScriptPayload(userKey, {
+                  userId: message.author.id,
+                  isEng,
+                  ephemeral: false,
+                  iconUrl: guildIcon,
                 });
-                await message.author.send(v2DmScript);
+                await message.author.send(dmPayload);
+
+                const singleLineLoader = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+                await message.author.send(
+                  (isEng
+                    ? `Tap the script below once to copy automatically (do not hold):\n\n`
+                    : `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:\n\n`) +
+                  `\`${singleLineLoader}\`\n\n` +
+                  (isEng
+                    ? `Tap the license key below to copy key only:\n\n`
+                    : `Klik key lisensi di bawah untuk salin key saja:\n\n`) +
+                  `\`${userKey}\``
+                );
                 finalReply = finalReply.replace(
                   actionSendScriptRegex,
                   isEng
-                    ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs privately. Please check your inbox.`
+                    ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs. Please check your inbox.`
                     : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`
                 );
               } catch (dmErr) {
@@ -4102,6 +4241,9 @@ client.on(Events.MessageCreate, async (message) => {
                     `• **HWID**: \`${row.hwid || "Belum Terikat (Not Bound)"}\`\n` +
                     `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
                 await message.author.send(dmContent);
+                await message.author.send({
+                  content: `Klik key lisensi di bawah untuk salin key saja:\n\n\`${row.key}\``
+                });
               } catch (dmErr) {
                 console.log(`Failed to DM key info to ${message.author.tag}:`, dmErr);
               }
@@ -4322,9 +4464,57 @@ const ALLOWED_ORIGINS = new Set([
   "https://leonthings.my.id"
 ]);
 
-// Fix #8: Rate limit trackers for OAuth endpoints (/api/my-key, /api/reset-my-hwid)
-const oauthIpRateLimits = new Map<string, { count: number; resetAt: number }>();
-const userResetCooldown = new Map<string, number>();
+// Fix #8 & #9: Bounded rate limit trackers for OAuth and API endpoints
+const oauthIpRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(5000);
+const userResetCooldown = new BoundedMap<string, number>(5000);
+const apiRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(10000);
+
+function checkApiRateLimit(endpoint: string, ip: string, maxRequests: number = 30, windowMs: number = 60_000): boolean {
+  const key = `${endpoint}:${ip}`;
+  const now = Date.now();
+  const current = apiRateLimits.get(key);
+  if (!current || now > current.resetAt) {
+    apiRateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= maxRequests) {
+    return false;
+  }
+  current.count += 1;
+  return true;
+}
+
+// Fix #1: Cryptographically signed short-lived session tokens for script loading
+const SCRIPT_TOKEN_SECRET = process.env.SCRIPT_SIGNING_SECRET || crypto.randomBytes(32).toString("hex");
+if (!process.env.SCRIPT_SIGNING_SECRET) {
+  console.warn("[SECURITY] SCRIPT_SIGNING_SECRET is not set. Session tokens will be invalidated on every restart — set this env var in production.");
+}
+
+function generateScriptSessionToken(key: string, hwid?: string, robloxId?: string): { token: string; expiresAt: number } {
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes short-lived
+  const payload = `${key}:${hwid || ""}:${robloxId || ""}:${expiresAt}`;
+  const signature = crypto.createHmac("sha256", SCRIPT_TOKEN_SECRET).update(payload).digest("hex");
+  const token = Buffer.from(JSON.stringify({ key, hwid: hwid || "", robloxId: robloxId || "", expiresAt, sig: signature })).toString("base64url");
+  return { token, expiresAt };
+}
+
+function verifyScriptSessionToken(token: string): { valid: boolean; key?: string; hwid?: string; robloxId?: string } {
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf8");
+    const data = JSON.parse(raw) as { key: string; hwid: string; robloxId: string; expiresAt: number; sig: string };
+    if (!data.key || !data.expiresAt || !data.sig) return { valid: false };
+    if (Date.now() > data.expiresAt) return { valid: false };
+
+    const payload = `${data.key}:${data.hwid}:${data.robloxId}:${data.expiresAt}`;
+    const expectedSig = crypto.createHmac("sha256", SCRIPT_TOKEN_SECRET).update(payload).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(data.sig, "hex"), Buffer.from(expectedSig, "hex"))) {
+      return { valid: false };
+    }
+    return { valid: true, key: data.key, hwid: data.hwid, robloxId: data.robloxId };
+  } catch {
+    return { valid: false };
+  }
+}
 
 function checkOauthIpRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -4419,6 +4609,11 @@ setInterval(() => {
         userResetCooldown.delete(userId);
       }
     }
+    for (const [key, data] of apiRateLimits.entries()) {
+      if (now > data.resetAt) {
+        apiRateLimits.delete(key);
+      }
+    }
   } catch (err) {
     console.error("[Cleanup] Error during in-memory cache cleanup:", err);
   }
@@ -4445,12 +4640,24 @@ function collectBody(req: http.IncomingMessage, maxBytes: number = 100_000): Pro
 }
 
 http.createServer(async (req, res) => {
-  // Fix #1: Mandatory Security Headers on ALL responses
+  // Fix #1, #7, #8: Mandatory Security Headers on ALL responses
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Cache-Control", "no-store");
+
+  // Fix #16: Enforce HTTPS behind reverse proxy in production
+  if (config.TRUST_PROXY === "true") {
+    const proto = req.headers["x-forwarded-proto"];
+    if (proto && proto === "http" && process.env.NODE_ENV === "production") {
+      res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
+      res.end();
+      return;
+    }
+  }
 
   // Fix #1: CORS Origin Allowlist Check
   const origin = req.headers.origin;
@@ -4483,7 +4690,7 @@ http.createServer(async (req, res) => {
 
     if (!loaderPath.startsWith(luaDir) || !fs.existsSync(loaderPath)) {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`warn("Gagal memuat script loader: file loader.lua tidak ditemukan di server.")`);
+      res.end(`warn("Akses ditolak")`);
       return;
     }
 
@@ -4495,14 +4702,48 @@ http.createServer(async (req, res) => {
       // Fix #2: Generic error message, no leak
       console.error("Gagal membaca loader.lua:", error);
       res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`warn("Internal server error")`);
+      res.end(`warn("Akses ditolak")`);
     }
   }
   else if (pathname === "/load.php" && req.method === "GET") {
+    // Fix #1: Check for short-lived session token (from /api/validate-key)
+    const rawToken = urlObj.searchParams.get("token") || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : null);
+    if (rawToken) {
+      const verified = verifyScriptSessionToken(rawToken);
+      if (!verified.valid) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
+        return;
+      }
+
+      // Fix: Re-validate HWID binding via database before serving the script.
+      // A session token alone is not sufficient — the key must still be valid
+      // and the HWID in the token must match the stored record.
+      const recheck = validateUserKey(verified.key || "", verified.robloxId, verified.hwid);
+      if (!recheck.valid) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
+        return;
+      }
+
+      // Valid session token with confirmed HWID binding: serve main.lua
+      const luaDir = path.resolve(process.cwd(), "lua");
+      const mainLuaPath = path.resolve(luaDir, "main.lua");
+      if (!mainLuaPath.startsWith(luaDir) || !fs.existsSync(mainLuaPath)) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
+        return;
+      }
+      const content = fs.readFileSync(mainLuaPath, "utf8");
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(content);
+      return;
+    }
+
     const rawKey = urlObj.searchParams.get("key");
     if (!rawKey) {
       res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`game:GetService("Players").LocalPlayer:Kick("Parameter 'key' wajib diisi.")`);
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
       return;
     }
     const key = rawKey.trim();
@@ -4510,7 +4751,7 @@ http.createServer(async (req, res) => {
     // Fix #5: Check if key is temporarily locked
     if (isKeyLocked(key)) {
       res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`game:GetService("Players").LocalPlayer:Kick("Key ini sementara dikunci karena terlalu banyak percobaan gagal. Silakan coba beberapa saat lagi.")`);
+      res.end(`game:GetService("Players").LocalPlayer:Kick("Key dikunci sementara. Silakan coba lagi nanti.")`);
       return;
     }
 
@@ -4534,8 +4775,9 @@ http.createServer(async (req, res) => {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
         await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId, username });
+        // Fix #10: Return generic error message without revealing key state/HWID details
         res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: ${result.message.replace(/"/g, '\\"')}")`);
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
         return;
       }
 
@@ -4545,13 +4787,13 @@ http.createServer(async (req, res) => {
 
         if (!member) {
           res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak ditemukan di server Discord.")`);
+          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
           return;
         }
 
         if (config.VERIFIED_ROLE_ID && !member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
           res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi.")`);
+          res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
           return;
         }
       }
@@ -4600,7 +4842,7 @@ http.createServer(async (req, res) => {
       const mainLuaPath = path.resolve(luaDir, "main.lua");
       if (!mainLuaPath.startsWith(luaDir) || !fs.existsSync(mainLuaPath)) {
         res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(`warn("Gagal memuat script utama: file main.lua tidak ditemukan di server.")`);
+        res.end(`game:GetService("Players").LocalPlayer:Kick("Akses ditolak")`);
         return;
       }
       const content = fs.readFileSync(mainLuaPath, "utf8");
@@ -4640,8 +4882,9 @@ http.createServer(async (req, res) => {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
         await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId });
+        // Fix: Return generic error message to prevent key-enumeration side-channel
         res.writeHead(403);
-        res.end(JSON.stringify({ valid: false, error: result.message }));
+        res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
         return;
       }
 
@@ -4651,19 +4894,26 @@ http.createServer(async (req, res) => {
 
         if (!member) {
           res.writeHead(403);
-          res.end(JSON.stringify({ valid: false, error: "Akses ditolak: Pengguna tidak ditemukan di server Discord." }));
+          res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
           return;
         }
 
         if (config.VERIFIED_ROLE_ID && !member.roles.cache.has(config.VERIFIED_ROLE_ID)) {
           res.writeHead(403);
-          res.end(JSON.stringify({ valid: false, error: "Akses ditolak: Pengguna tidak lagi memiliki role terverifikasi." }));
+          res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
           return;
         }
       }
 
+      // Fix #1: Generate short-lived HMAC session token for client script payload fetch
+      const session = generateScriptSessionToken(key, hwid, robloxId);
       res.writeHead(200);
-      res.end(JSON.stringify({ valid: true, message: result.message }));
+      res.end(JSON.stringify({
+        valid: true,
+        message: result.message,
+        token: session.token,
+        expiresAt: session.expiresAt
+      }));
     } catch (error) {
       // Fix #2: Generic error message
       console.error("Error in /api/validate-key:", error);
@@ -4868,6 +5118,53 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/stats" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/stats", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
+    
+    // Security: Return ONLY high-level counters, never sensitive database records to public callers
+    let totalTickets = 0;
+    let totalWarnings = 0;
+
+    try {
+      const ticketsRow = db.prepare("SELECT COUNT(*) as count FROM tickets").get() as { count: number };
+      totalTickets = ticketsRow?.count || 0;
+      
+      const warningsRow = db.prepare("SELECT COUNT(*) as count FROM warnings").get() as { count: number };
+      totalWarnings = warningsRow?.count || 0;
+    } catch (e: any) {
+      console.error("Database query failed inside HTTP server:", e);
+    }
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      status: "ONLINE",
+      ping: client.ws.ping || 14,
+      guilds: client.guilds.cache.size,
+      users: client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0),
+      uptime: client.uptime || 0,
+      memory: memoryUsageMB,
+      stats: {
+        tickets: totalTickets,
+        warnings: totalWarnings
+      },
+      avatar: client.user?.displayAvatarURL({ size: 128 }) || null,
+      botTag: client.user?.tag || "El Bot#8981"
+    }));
+  }
+  else if (pathname === "/api/admin/dashboard-stats" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/admin/dashboard-stats", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     // Security: admin-only. Requires Discord OAuth2 owner/admin token.
     const adminCheck = await requireAdminAuth(req);
     if (!adminCheck.ok) {
@@ -4877,8 +5174,6 @@ http.createServer(async (req, res) => {
     }
 
     const memoryUsageMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024 * 100) / 100;
-    
-    // Retrieve tables dynamically from SQLite database
     let totalTickets = 0;
     let totalWarnings = 0;
     let commandUsage: any[] = [];
@@ -4898,7 +5193,7 @@ http.createServer(async (req, res) => {
       recentTickets = db.prepare("SELECT * FROM tickets ORDER BY id DESC LIMIT 10").all();
       recentWarnings = db.prepare("SELECT * FROM warnings ORDER BY id DESC LIMIT 10").all();
     } catch (e: any) {
-      console.error("Database query failed inside HTTP server:", e);
+      console.error("Database query failed inside admin stats:", e);
     }
 
     const guildsList = client.guilds.cache.map(guild => ({
@@ -4930,6 +5225,13 @@ http.createServer(async (req, res) => {
     }));
   } 
   else if (pathname === "/api/changelogs" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/changelogs", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     try {
       const params = new URL(req.url || "", `http://${req.headers.host || "localhost"}`).searchParams;
       const page = Math.max(1, parseInt(params.get("page") || "1", 10));
@@ -4954,6 +5256,13 @@ http.createServer(async (req, res) => {
     }
   }
   else if (pathname === "/api/blacklist" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/blacklist", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     try {
       // Security: admin-only. Requires Discord OAuth2 owner/admin token.
       const adminCheck = await requireAdminAuth(req);
@@ -5006,6 +5315,13 @@ http.createServer(async (req, res) => {
     }
   } 
   else if (pathname === "/api/blacklist" && req.method === "DELETE") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/blacklist", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     // Security: admin-only. Requires Discord OAuth2 owner/admin token.
     const adminCheck = await requireAdminAuth(req);
     if (!adminCheck.ok) {
@@ -5015,11 +5331,25 @@ http.createServer(async (req, res) => {
     }
 
     const discordId = urlObj.searchParams.get("discord_id");
-    const id = urlObj.searchParams.get("id");
+    const rawId = urlObj.searchParams.get("id");
     try {
       if (discordId) {
-        db.prepare("DELETE FROM blacklist WHERE discord_id = ?").run(discordId);
-      } else if (id) {
+        const cleanDiscordId = discordId.trim();
+        // Fix #12: Validate Discord snowflake ID format
+        if (!/^\d{17,20}$/.test(cleanDiscordId)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: "Invalid Discord ID format" }));
+          return;
+        }
+        db.prepare("DELETE FROM blacklist WHERE discord_id = ?").run(cleanDiscordId);
+      } else if (rawId) {
+        // Fix #12: Strictly parse and validate numeric ID
+        const id = parseInt(rawId.trim(), 10);
+        if (isNaN(id) || id <= 0) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: "Invalid numeric ID" }));
+          return;
+        }
         db.prepare("DELETE FROM blacklist WHERE id = ?").run(id);
       } else {
         res.writeHead(400);
@@ -5033,8 +5363,185 @@ http.createServer(async (req, res) => {
       res.writeHead(500);
       res.end(JSON.stringify({ error: "Internal server error" }));
     }
+  }
+  else if (pathname === "/api/blacklist" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/blacklist", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    // Security: admin-only. Requires Discord OAuth2 owner/admin token.
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
+    try {
+      const list = db.prepare("SELECT * FROM blacklist ORDER BY id DESC").all();
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, blacklist: list }));
+    } catch (err) {
+      console.error("Error in /api/blacklist (GET):", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/auth/me" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/auth/me", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    if (!token) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Bearer token required" }));
+      return;
+    }
+
+    try {
+      const discordRes = await fetch("https://discord.com/api/users/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ error: "Invalid Discord token" }));
+        return;
+      }
+      const user = await discordRes.json() as { id: string; username: string; avatar: string | null };
+
+      const guild = client.guilds.cache.get(config.GUILD_ID);
+      const member = await guild?.members.fetch(user.id).catch(() => null);
+
+      const isOwner = user.id === config.OWNER_ID || (config.OWNER_ROLE_ID && member?.roles.cache.has(config.OWNER_ROLE_ID)) || false;
+      const hasAllowedRole = isOwner || (config.VERIFIED_ROLE_ID && member?.roles.cache.has(config.VERIFIED_ROLE_ID)) || false;
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        id: user.id,
+        username: user.username,
+        avatar: user.avatar,
+        isOwner,
+        hasAllowedRole
+      }));
+    } catch (err) {
+      console.error("Error in /api/auth/me:", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/webhooks/send" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/webhooks/send", clientIp, 10)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
+    try {
+      const rawBody = await collectBody(req, 50_000);
+      const data = JSON.parse(rawBody);
+
+      const serverWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
+      if (serverWebhookUrl) {
+        await fetch(serverWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        }).catch(e => console.error("Server webhook forward failed:", e));
+      } else {
+        const targetChannelId = config.LOG_CHANNEL_ID || config.SECURITY_LOG_CHANNEL_ID;
+        if (targetChannelId) {
+          const ch = client.channels.cache.get(targetChannelId) as TextChannel | undefined;
+          if (ch?.isSendable()) {
+            await ch.send({
+              content: data.content || (data.message ? `[Dashboard Alert] ${data.message}` : "📢 Dashboard Alert Notification")
+            }).catch(() => {});
+          }
+        }
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, message: "Webhook dispatch processed server-side." }));
+    } catch (err: any) {
+      console.error("Error in /api/webhooks/send:", err);
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Invalid webhook dispatch payload" }));
+    }
+  }
+  else if (pathname === "/api/oauth2/token" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/oauth2/token", clientIp, 10)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    try {
+      const rawBody = await collectBody(req, 20_000);
+      const data = JSON.parse(rawBody) as { code: string; redirect_uri: string; code_verifier?: string };
+      if (!data.code || !data.redirect_uri) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "code and redirect_uri required" }));
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.append("client_id", config.CLIENT_ID);
+      const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+      if (clientSecret) {
+        params.append("client_secret", clientSecret);
+      }
+      params.append("grant_type", "authorization_code");
+      params.append("code", data.code);
+      params.append("redirect_uri", data.redirect_uri);
+      if (data.code_verifier) {
+        params.append("code_verifier", data.code_verifier);
+      }
+
+      const discordRes = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+      });
+
+      const tokenData = await discordRes.json();
+      if (!discordRes.ok) {
+        res.writeHead(discordRes.status);
+        res.end(JSON.stringify(tokenData));
+        return;
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify(tokenData));
+    } catch (err) {
+      console.error("Error in /api/oauth2/token:", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
   } 
   else if (pathname === "/api/proxy" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/proxy", clientIp, 30)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
     const targetUrl = urlObj.searchParams.get("url");
     if (!targetUrl) {
       res.writeHead(400);
@@ -5070,20 +5577,65 @@ http.createServer(async (req, res) => {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
       });
-      const body = await response.text();
-      res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") || "application/json" });
-      res.end(body);
+
+      // Fix #2: Limit response payload to max 500KB and stream safely to prevent memory exhaustion
+      const MAX_PROXY_BYTES = 500_000;
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      if (contentLength > MAX_PROXY_BYTES) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Upstream response payload exceeds 500KB limit" }));
+        return;
+      }
+
+      if (!response.body) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({}));
+        return;
+      }
+
+      let totalBytes = 0;
+      const chunks: Buffer[] = [];
+      const reader = response.body.getReader();
+      let exceeded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.length;
+        if (totalBytes > MAX_PROXY_BYTES) {
+          exceeded = true;
+          reader.cancel().catch(() => {});
+          break;
+        }
+        chunks.push(Buffer.from(value));
+      }
+
+      if (exceeded) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Upstream response exceeded 500KB limit" }));
+        return;
+      }
+
+      const bodyBuffer = Buffer.concat(chunks);
+      // Fix #11: Normalize status codes and sanitize upstream headers
+      const status = response.ok ? 200 : (response.status === 404 ? 404 : 502);
+      const contentType = response.headers.get("content-type") || "application/json";
+      res.writeHead(status, {
+        "Content-Type": contentType.includes("json") ? "application/json; charset=utf-8" : "text/plain; charset=utf-8"
+      });
+      res.end(bodyBuffer);
     } catch (err) {
       console.error("Error in /api/proxy:", err);
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: "Proxy request failed" }));
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Proxy upstream failure" }));
     }
   }
   else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: "Not Found" }));
   }
-}).listen(Number(serverPort), "0.0.0.0", () => {
+  // Fix #15: Configurable bind address (BIND_IP or HOST)
+}).listen(Number(serverPort), process.env.BIND_IP || process.env.HOST || "0.0.0.0", () => {
   console.log(`[HTTP] stats server listening on port ${serverPort}`);
 });
 
