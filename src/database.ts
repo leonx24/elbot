@@ -176,6 +176,37 @@ if (!existingUserKeyColumns.has("last_reset_at")) {
   console.log("Database migration: user_keys.last_reset_at ditambahkan");
 }
 
+// Auto-purge any accidentally banned private / internal IPs (Railway internal CGNAT 100.64.0.0/10, localhost, etc.)
+try {
+  const purgeRes = db.exec(`
+    DELETE FROM banned_ips 
+    WHERE ip LIKE '100.64.%' 
+       OR ip LIKE '100.65.%'
+       OR ip LIKE '100.66.%'
+       OR ip LIKE '100.67.%'
+       OR ip LIKE '100.68.%'
+       OR ip LIKE '100.69.%'
+       OR ip LIKE '100.7%'
+       OR ip LIKE '100.8%'
+       OR ip LIKE '100.9%'
+       OR ip LIKE '100.1%'
+       OR ip LIKE '10.%' 
+       OR ip LIKE '127.%' 
+       OR ip LIKE '172.16.%' 
+       OR ip LIKE '172.17.%' 
+       OR ip LIKE '172.18.%' 
+       OR ip LIKE '172.19.%' 
+       OR ip LIKE '172.2%' 
+       OR ip LIKE '172.30.%' 
+       OR ip LIKE '172.31.%' 
+       OR ip LIKE '192.168.%' 
+       OR ip = '::1'
+       OR ip = 'localhost'
+  `);
+} catch (err) {
+  // ignore
+}
+
 export function trackCommand(command: string): void {
   db.prepare(`
     INSERT INTO command_usage (command, uses) VALUES (?, 1)
@@ -386,14 +417,52 @@ export function resetUserKeyBinding(discordId: string, bypassCooldown: boolean =
   return runReset();
 }
 
+export function isPrivateOrInternalIp(ip: string): boolean {
+  if (!ip) return true;
+  const clean = ip.trim();
+  if (clean === "127.0.0.1" || clean === "::1" || clean === "localhost") return true;
+
+  const parts = clean.split(".");
+  if (parts.length === 4) {
+    const p0 = parts[0];
+    const p1 = parts[1];
+    if (p0 !== undefined && p1 !== undefined) {
+      const a = parseInt(p0, 10);
+      const b = parseInt(p1, 10);
+
+      // 127.0.0.0/8 (Loopback)
+      if (a === 127) return true;
+      // 10.0.0.0/8 (Private network)
+      if (a === 10) return true;
+      // 172.16.0.0/12 (Private network: 172.16.0.0 - 172.31.255.255)
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      // 192.168.0.0/16 (Private network)
+      if (a === 192 && b === 168) return true;
+      // 100.64.0.0/10 (Carrier-Grade NAT / Railway internal routing: 100.64.0.0 - 100.127.255.255)
+      if (a === 100 && b >= 64 && b <= 127) return true;
+      // 169.254.0.0/16 (Link-local)
+      if (a === 169 && b === 254) return true;
+      // 0.0.0.0
+      if (a === 0) return true;
+    }
+  }
+
+  // IPv6 unique local / link-local / loopback
+  if (clean.startsWith("fe80:") || clean.startsWith("fc00:") || clean.startsWith("fd00:")) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isIpBanned(ip: string): boolean {
-  if (!ip) return false;
+  if (!ip || isPrivateOrInternalIp(ip)) return false;
   const row = db.prepare("SELECT 1 FROM banned_ips WHERE ip = ?").get(ip);
   return !!row;
 }
 
 export function banIp(ip: string, reason: string): void {
-  if (!ip) return;
+  if (!ip || isPrivateOrInternalIp(ip)) return;
   db.prepare(`
     INSERT INTO banned_ips (ip, reason, banned_at)
     VALUES (?, ?, datetime('now'))
@@ -405,6 +474,11 @@ export function unbanIp(ip: string): boolean {
   if (!ip) return false;
   const res = db.prepare("DELETE FROM banned_ips WHERE ip = ?").run(ip);
   return res.changes > 0;
+}
+
+export function clearAllBannedIps(): number {
+  const res = db.prepare("DELETE FROM banned_ips").run();
+  return res.changes;
 }
 
 export function getBannedIps(): Array<{ ip: string; reason: string; banned_at: string }> {

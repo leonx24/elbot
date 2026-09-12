@@ -312,6 +312,9 @@ export const commands = [
         .addStringOption((o) => o.setName("ip").setDescription("IP address yang ingin diblokir").setRequired(true))
         .addStringOption((o) => o.setName("alasan").setDescription("Alasan pemblokiran").setRequired(true))
     )
+    .addSubcommand((sub) =>
+      sub.setName("clear-all-bans").setDescription("Hapus semua IP yang diblokir sekaligus")
+    )
 ].map((command) => command.toJSON());
 
 export type CommandData = {

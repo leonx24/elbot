@@ -3,6 +3,7 @@ import { Client, ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } fr
 import {
   banIp,
   isIpBanned,
+  isPrivateOrInternalIp,
   getRateLimit,
   upsertRateLimit,
   cleanupExpiredRateLimits,
@@ -40,24 +41,46 @@ const IP_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2
 
 /**
  * Get the real client IP address.
- * Strictly trusts CF-Connecting-IP header (validated against IPv4/IPv6 syntax)
- * to prevent IP spoofing via X-Forwarded-For or untrusted proxy headers.
+ * Prioritizes CF-Connecting-IP, X-Real-IP, and X-Forwarded-For (from Railway / Cloudflare),
+ * filtering out internal private networks (e.g. Railway CGNAT 100.64.0.0/10, localhost).
  */
 export function getClientIp(req: IncomingMessage): string {
+  // 1. Cloudflare header (if present and public)
   const cfIp = req.headers["cf-connecting-ip"];
   if (typeof cfIp === "string") {
     const trimmed = cfIp.trim();
-    if (IP_REGEX.test(trimmed)) return trimmed;
+    if (IP_REGEX.test(trimmed) && !isPrivateOrInternalIp(trimmed)) return trimmed;
   }
 
+  // 2. X-Real-IP header
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string") {
+    const trimmed = realIp.trim();
+    if (IP_REGEX.test(trimmed) && !isPrivateOrInternalIp(trimmed)) return trimmed;
+  }
+
+  // 3. X-Forwarded-For header (Railway edge proxy passes real client IP here)
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    const list = forwarded.split(",");
+    for (const raw of list) {
+      const trimmed = raw.trim();
+      if (IP_REGEX.test(trimmed) && !isPrivateOrInternalIp(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+
+  // 4. Remote socket address fallback
   const remoteAddress = req.socket?.remoteAddress;
   if (remoteAddress) {
-    if (remoteAddress.startsWith("::ffff:")) {
-      const ipv4 = remoteAddress.slice(7);
-      if (IP_REGEX.test(ipv4)) return ipv4;
+    let clean = remoteAddress;
+    if (clean.startsWith("::ffff:")) {
+      clean = clean.slice(7);
     }
-    if (IP_REGEX.test(remoteAddress)) return remoteAddress;
-    return "127.0.0.1";
+    if (IP_REGEX.test(clean) && !isPrivateOrInternalIp(clean)) {
+      return clean;
+    }
   }
 
   return "127.0.0.1";

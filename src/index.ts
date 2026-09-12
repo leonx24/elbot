@@ -39,6 +39,7 @@ import {
   resetUserKeyBinding,
   banIp,
   unbanIp,
+  clearAllBannedIps,
   isIpBanned,
   getBannedIps,
   getUserKeyInfo,
@@ -2214,6 +2215,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const reason = interaction.options.getString("alasan", true).trim();
           banIp(ip, `Manual Admin Ban: ${reason}`);
           await interaction.reply({ content: `⛔ Berhasil memblokir IP \`${ip}\` dengan alasan: **${reason}**.`, flags: MessageFlags.Ephemeral });
+        } else if (sub === "clear-all-bans") {
+          const count = clearAllBannedIps();
+          await interaction.reply({ content: `✅ Berhasil menghapus dan membuka blokir semua IP (${count} IP telah dibersihkan).`, flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -4760,7 +4764,7 @@ http.createServer(async (req, res) => {
     const robloxId = sanitizeInput(rawRobloxId, 20, /^\d+$/, "") || undefined;
 
     const rawHwid = urlObj.searchParams.get("hwid");
-    const hwid = sanitizeInput(rawHwid, 64, /^[a-zA-Z0-9_-]+$/, "") || undefined;
+    const hwid = sanitizeInput(rawHwid, 128, /^[a-zA-Z0-9_\-\{\}\.:=~ ]+$/, "") || undefined;
 
     const rawUsername = urlObj.searchParams.get("username");
     const username = sanitizeInput(rawUsername, 30, /^[a-zA-Z0-9_]+$/, "Unknown");
@@ -4876,7 +4880,7 @@ http.createServer(async (req, res) => {
     const robloxId = sanitizeInput(rawRobloxId, 20, /^\d+$/, "") || undefined;
 
     const rawHwid = urlObj.searchParams.get("hwid");
-    const hwid = sanitizeInput(rawHwid, 64, /^[a-zA-Z0-9_-]+$/, "") || undefined;
+    const hwid = sanitizeInput(rawHwid, 128, /^[a-zA-Z0-9_\-\{\}\.:=~ ]+$/, "") || undefined;
 
     try {
       const result = validateUserKey(key, robloxId, hwid);
