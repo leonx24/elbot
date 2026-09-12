@@ -4643,6 +4643,61 @@ function collectBody(req: http.IncomingMessage, maxBytes: number = 100_000): Pro
   });
 }
 
+// Helper function untuk mencatat dan mengirim log eksekusi in-game
+async function recordAndSendExecutionLog(params: {
+  discordId?: string | null;
+  username?: string;
+  robloxId?: string;
+  placeId?: string;
+  executor?: string;
+  hwid?: string;
+}) {
+  const username = params.username || "Unknown";
+  const robloxId = params.robloxId || null;
+  const placeId = params.placeId || "Unknown";
+  const executor = params.executor || "Unknown";
+  const hwid = params.hwid || "N/A";
+
+  // 1. Catat log eksekusi ke database SQLite
+  try {
+    db.prepare(`
+      INSERT INTO script_executions (discord_id, roblox_username, roblox_id, place_id, executor, executed_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(params.discordId || null, username, robloxId, placeId, executor);
+  } catch (dbErr) {
+    console.error("Gagal mencatat log eksekusi ke database:", dbErr);
+  }
+
+  // 2. Kirim log eksekusi ke channel Discord
+  const logChannelId = config.EXECUTION_LOG_CHANNEL_ID;
+  if (logChannelId) {
+    try {
+      const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
+      if (logChannel?.isSendable()) {
+        const v2ExecLog = buildV2Container({
+          title: "📊 In-Game Script Executed!",
+          description: `Script loader baru saja dieksekusi di dalam game Roblox!`,
+          sections: [
+            {
+              title: "🎮 Detail Eksekusi",
+              content:
+                `• \`Discord User:\` ${params.discordId ? `<@${params.discordId}>` : "Unknown"}\n` +
+                `• \`Roblox User:\` [${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)\n` +
+                `• \`Place ID:\` [${placeId}](https://www.roblox.com/games/${placeId})\n` +
+                `• \`Executor:\` \`${executor}\`\n` +
+                `• \`Perangkat (HWID):\` \`${hwid}\``
+            }
+          ],
+          footer: "LeonX Hub • Execution Log"
+        });
+        await logChannel.send(v2ExecLog);
+      }
+    } catch (logErr) {
+      console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
+    }
+  }
+}
+
 http.createServer(async (req, res) => {
   // Fix #1, #7, #8: Mandatory Security Headers on ALL responses
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -4802,44 +4857,15 @@ http.createServer(async (req, res) => {
         }
       }
 
-      // Catat log eksekusi ke database SQLite
-      try {
-        db.prepare(`
-          INSERT INTO script_executions (discord_id, roblox_username, roblox_id, place_id, executor, executed_at)
-          VALUES (?, ?, ?, ?, ?, datetime('now'))
-        `).run(result.discordId || null, username, robloxId || null, placeId, executor);
-      } catch (dbErr) {
-        console.error("Gagal mencatat log eksekusi ke database:", dbErr);
-      }
-
-      // Kirim log eksekusi ke channel Discord (Fix #10: gunakan config.EXECUTION_LOG_CHANNEL_ID)
-      const logChannelId = config.EXECUTION_LOG_CHANNEL_ID;
-      if (logChannelId) {
-        try {
-          const logChannel = await client.channels.fetch(logChannelId).catch(() => null);
-          if (logChannel?.isSendable()) {
-            const v2ExecLog = buildV2Container({
-              title: "📊 In-Game Script Executed!",
-              description: `Script loader baru saja dieksekusi di dalam game Roblox!`,
-              sections: [
-                {
-                  title: "🎮 Detail Eksekusi",
-                  content:
-                    `• \`Discord User:\` ${result.discordId ? `<@${result.discordId}>` : "Unknown"}\n` +
-                    `• \`Roblox User:\` [${username}](https://www.roblox.com/users/${robloxId || 0}/profile) (\`${robloxId || "N/A"}\`)\n` +
-                    `• \`Place ID:\` [${placeId}](https://www.roblox.com/games/${placeId})\n` +
-                    `• \`Executor:\` \`${executor}\`\n` +
-                    `• \`Perangkat (HWID):\` \`${hwid || "N/A"}\``
-                }
-              ],
-              footer: "LeonX Hub • Execution Log"
-            });
-            await logChannel.send(v2ExecLog);
-          }
-        } catch (logErr) {
-          console.error("Gagal mengirim log eksekusi ke Discord:", logErr);
-        }
-      }
+      // Catat log eksekusi ke database dan kirim log ke Discord
+      await recordAndSendExecutionLog({
+        discordId: result.discordId,
+        username,
+        robloxId,
+        placeId,
+        executor,
+        hwid
+      });
 
       // Serve the main.lua file (Fix #13: path traversal check)
       const luaDir = path.resolve(process.cwd(), "lua");
@@ -4882,10 +4908,19 @@ http.createServer(async (req, res) => {
     const rawHwid = urlObj.searchParams.get("hwid");
     const hwid = sanitizeInput(rawHwid, 128, /^[a-zA-Z0-9_\-\{\}\.:=~ ]+$/, "") || undefined;
 
+    const rawUsername = urlObj.searchParams.get("username");
+    const username = sanitizeInput(rawUsername, 30, /^[a-zA-Z0-9_]+$/, "Unknown");
+
+    const rawExecutor = urlObj.searchParams.get("executor");
+    const executor = sanitizeInput(rawExecutor, 50, /^[a-zA-Z0-9 ]+$/, "Unknown");
+
+    const rawPlaceId = urlObj.searchParams.get("place_id");
+    const placeId = sanitizeInput(rawPlaceId, 20, /^\d+$/, "Unknown");
+
     try {
       const result = validateUserKey(key, robloxId, hwid);
       if (!result.valid) {
-        await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId });
+        await recordFailedKeyAttempt(getClientIp(req), key, client, { hwid, robloxId, username });
         // Fix: Return generic error message to prevent key-enumeration side-channel
         res.writeHead(403);
         res.end(JSON.stringify({ valid: false, error: "Akses ditolak" }));
@@ -4908,6 +4943,16 @@ http.createServer(async (req, res) => {
           return;
         }
       }
+
+      // Catat log eksekusi ke database dan kirim log ke Discord
+      await recordAndSendExecutionLog({
+        discordId: result.discordId,
+        username,
+        robloxId,
+        placeId,
+        executor,
+        hwid
+      });
 
       // Fix #1: Generate short-lived HMAC session token for client script payload fetch
       const session = generateScriptSessionToken(key, hwid, robloxId);

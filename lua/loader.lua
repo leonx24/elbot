@@ -41,10 +41,30 @@ local function getHWID()
     return id ~= "" and id or tostring(lp.UserId)
 end
 
+local function getExecutorName()
+    local name = "Unknown"
+    pcall(function()
+        if identifyexecutor then name = identifyexecutor()
+        elseif getexecutorname then name = getexecutorname() end
+    end)
+    return name
+end
+
 local function checkKeyOnline(key, rId, hwid)
+    local uName = lp and lp.Name or "Unknown"
+    local pId = tostring(game.PlaceId or 0)
+    local execName = getExecutorName()
+
+    local queryParams = "&roblox_id=" .. HttpService:UrlEncode(rId)
+        .. "&hwid=" .. HttpService:UrlEncode(hwid)
+        .. "&username=" .. HttpService:UrlEncode(uName)
+        .. "&place_id=" .. HttpService:UrlEncode(pId)
+        .. "&executor=" .. HttpService:UrlEncode(execName)
+        .. "&t=" .. tostring(os.time())
+
     local urls = {
-        "https://elbot-production.up.railway.app/api/validate-key?key=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time()),
-        GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+        "https://elbot-production.up.railway.app/api/validate-key?key=" .. HttpService:UrlEncode(key) .. queryParams,
+        GATEWAY_URL .. "/check?k=" .. HttpService:UrlEncode(key) .. queryParams
     }
     for _, u in ipairs(urls) do
         local ok, res = pcall(function() return game:HttpGet(u, true) end)
