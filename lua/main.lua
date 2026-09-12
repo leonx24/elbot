@@ -424,7 +424,7 @@ local function load(p)
             return result
         end
         if attempt < MAX_RETRIES then
-            local delay = attempt * 3
+            local delay = attempt
             warn("[LeonX] RETRY " .. attempt .. "/" .. MAX_RETRIES .. ": " .. tostring(p) .. " — " .. tostring(result) .. " (waiting " .. delay .. "s)")
             pcall(function()
                 SplashStatus.Text = "Retrying " .. shortName .. "... (" .. attempt .. "/" .. MAX_RETRIES .. ")"
@@ -450,48 +450,113 @@ pcall(function()
     -- AntiDetect:Enable()  -- DISABLED: testing if Adonis kick comes from our code or executor itself
 end)
 
-local ConfigMgr   = load("modules/core/configmanager.lua"); setSplashProgress(0.10)
-local Fly         = load("modules/movements/fly.lua");       setSplashProgress(0.14)
-local Speed       = load("modules/movements/speed.lua");     setSplashProgress(0.18)
-local InfJump     = load("modules/movements/infinitejump.lua"); setSplashProgress(0.22)
-local Noclip      = load("modules/movements/noclip.lua");    setSplashProgress(0.26)
-local AntiRagdoll = load("modules/movements/antiragdoll.lua"); setSplashProgress(0.30)
-local Invisible   = load("modules/movements/invisible.lua"); setSplashProgress(0.34)
-local FreeCam     = load("modules/movements/freecam.lua");   setSplashProgress(0.38)
-local ClickTP     = load("modules/movements/clickteleport.lua"); setSplashProgress(0.42)
-local WalkOnWater = load("modules/movements/walkonwater.lua");  setSplashProgress(0.44)
-local ESP         = load("modules/visuals/esp.lua");         setSplashProgress(0.46)
-local Tracer      = load("modules/visuals/tracer.lua");      setSplashProgress(0.50)
-local FullBright  = load("modules/visuals/fullbright.lua");  setSplashProgress(0.54)
-local PerfStats   = load("modules/visuals/perfstats.lua");   setSplashProgress(0.58)
-local RemoveFog   = load("modules/visuals/removefog.lua");   setSplashProgress(0.62)
-local AntiAFK     = load("modules/player/antiafk.lua");      setSplashProgress(0.66)
-local InfStamina  = load("modules/player/infinitestamina.lua"); setSplashProgress(0.70)
-local AntiFling   = load("modules/player/antifling.lua");    setSplashProgress(0.72)
-local Rejoin      = load("modules/player/rejoin.lua");       setSplashProgress(0.74)
-local ServerHop   = load("modules/player/serverhop.lua");    setSplashProgress(0.75)
-local Teleport    = load("modules/player/teleport.lua");     setSplashProgress(0.76)
-local HitboxExp   = load("modules/player/hitboxexpander.lua"); setSplashProgress(0.78)
-local Waypoint    = load("modules/player/waypoint.lua");     setSplashProgress(0.82)
-local GodMode     = load("modules/player/godmode.lua");      setSplashProgress(0.84)
-local NoFallDmg   = load("modules/player/nofalldamage.lua"); setSplashProgress(0.86)
-local InstantKill = load("modules/player/instantkill.lua");  setSplashProgress(0.88)
-local KillAura    = load("modules/combat/killaura.lua");     setSplashProgress(0.90)
-local AutoClicker = load("modules/auto/autoclicker.lua");    setSplashProgress(0.91)
-local QuickSwitch = load("modules/combat/quickswitch.lua");  setSplashProgress(0.92)
-local MacroRec    = load("modules/movements/macrorecorder.lua"); setSplashProgress(0.93)
-local Backtracker = load("modules/movements/backtracker.lua");   setSplashProgress(0.935)
-local AntiVoid    = load("modules/player/antivoid.lua");     setSplashProgress(0.94)
-local GamepassSpoof = load("modules/player/gamepassspoofer.lua"); setSplashProgress(0.95)
-local AvatarSpoof = load("modules/player/avatarspoofer.lua");      setSplashProgress(0.96)
-local MobileOverlay = load("modules/core/mobileoverlay.lua");     setSplashProgress(0.97)
-local PerfBooster   = load("modules/visuals/perfbooster.lua");     setSplashProgress(0.955)
-local WebhookLogger = load("modules/core/webhooklogger.lua");     setSplashProgress(0.96)
-local ServerUtils   = load("modules/core/serverutils.lua");       setSplashProgress(0.965)
-local FOVMod        = load("modules/visuals/fovmodifier.lua");     setSplashProgress(0.97)
-local InstantPrompts = load("modules/auto/instantprompts.lua");    setSplashProgress(0.975)
-local Orbit          = load("modules/movements/orbit.lua");        setSplashProgress(0.98)
-local Radar          = load("modules/visuals/radar.lua");          setSplashProgress(0.99)
+-- Parallel module loader: fetch+compile all modules concurrently.
+-- Splash waits only for the slowest one instead of ~42× sequential HTTP RTTs.
+local MODULES_TO_LOAD = {
+    { key = "ConfigMgr",      path = "modules/core/configmanager.lua" },
+    { key = "Fly",            path = "modules/movements/fly.lua" },
+    { key = "Speed",          path = "modules/movements/speed.lua" },
+    { key = "InfJump",        path = "modules/movements/infinitejump.lua" },
+    { key = "Noclip",         path = "modules/movements/noclip.lua" },
+    { key = "AntiRagdoll",    path = "modules/movements/antiragdoll.lua" },
+    { key = "Invisible",      path = "modules/movements/invisible.lua" },
+    { key = "FreeCam",        path = "modules/movements/freecam.lua" },
+    { key = "ClickTP",        path = "modules/movements/clickteleport.lua" },
+    { key = "WalkOnWater",    path = "modules/movements/walkonwater.lua" },
+    { key = "ESP",            path = "modules/visuals/esp.lua" },
+    { key = "Tracer",         path = "modules/visuals/tracer.lua" },
+    { key = "FullBright",     path = "modules/visuals/fullbright.lua" },
+    { key = "PerfStats",      path = "modules/visuals/perfstats.lua" },
+    { key = "RemoveFog",      path = "modules/visuals/removefog.lua" },
+    { key = "AntiAFK",        path = "modules/player/antiafk.lua" },
+    { key = "InfStamina",     path = "modules/player/infinitestamina.lua" },
+    { key = "AntiFling",      path = "modules/player/antifling.lua" },
+    { key = "Rejoin",         path = "modules/player/rejoin.lua" },
+    { key = "ServerHop",      path = "modules/player/serverhop.lua" },
+    { key = "Teleport",       path = "modules/player/teleport.lua" },
+    { key = "HitboxExp",      path = "modules/player/hitboxexpander.lua" },
+    { key = "Waypoint",       path = "modules/player/waypoint.lua" },
+    { key = "GodMode",        path = "modules/player/godmode.lua" },
+    { key = "NoFallDmg",      path = "modules/player/nofalldamage.lua" },
+    { key = "InstantKill",    path = "modules/player/instantkill.lua" },
+    { key = "KillAura",       path = "modules/combat/killaura.lua" },
+    { key = "AutoClicker",    path = "modules/auto/autoclicker.lua" },
+    { key = "QuickSwitch",    path = "modules/combat/quickswitch.lua" },
+    { key = "MacroRec",       path = "modules/movements/macrorecorder.lua" },
+    { key = "Backtracker",    path = "modules/movements/backtracker.lua" },
+    { key = "AntiVoid",       path = "modules/player/antivoid.lua" },
+    { key = "GamepassSpoof",  path = "modules/player/gamepassspoofer.lua" },
+    { key = "AvatarSpoof",    path = "modules/player/avatarspoofer.lua" },
+    { key = "MobileOverlay",  path = "modules/core/mobileoverlay.lua" },
+    { key = "PerfBooster",    path = "modules/visuals/perfbooster.lua" },
+    { key = "WebhookLogger",  path = "modules/core/webhooklogger.lua" },
+    { key = "ServerUtils",    path = "modules/core/serverutils.lua" },
+    { key = "FOVMod",         path = "modules/visuals/fovmodifier.lua" },
+    { key = "InstantPrompts", path = "modules/auto/instantprompts.lua" },
+    { key = "Orbit",          path = "modules/movements/orbit.lua" },
+    { key = "Radar",          path = "modules/visuals/radar.lua" },
+}
+local moduleResults = {}
+local moduleDone = 0
+local MODULES_TOTAL = #MODULES_TO_LOAD
+local function moduleProgress()
+    moduleDone = moduleDone + 1
+    setSplashProgress(0.05 + 0.90 * (moduleDone / MODULES_TOTAL))
+end
+for _, item in ipairs(MODULES_TO_LOAD) do
+    local key, path = item.key, item.path
+    task.spawn(function()
+        local m = load(path)
+        moduleResults[key] = m
+        moduleProgress()
+    end)
+end
+while moduleDone < MODULES_TOTAL do
+    task.wait()
+end
+
+local ConfigMgr      = moduleResults.ConfigMgr
+local Fly            = moduleResults.Fly
+local Speed          = moduleResults.Speed
+local InfJump        = moduleResults.InfJump
+local Noclip         = moduleResults.Noclip
+local AntiRagdoll    = moduleResults.AntiRagdoll
+local Invisible      = moduleResults.Invisible
+local FreeCam        = moduleResults.FreeCam
+local ClickTP        = moduleResults.ClickTP
+local WalkOnWater    = moduleResults.WalkOnWater
+local ESP            = moduleResults.ESP
+local Tracer         = moduleResults.Tracer
+local FullBright     = moduleResults.FullBright
+local PerfStats      = moduleResults.PerfStats
+local RemoveFog      = moduleResults.RemoveFog
+local AntiAFK        = moduleResults.AntiAFK
+local InfStamina     = moduleResults.InfStamina
+local AntiFling      = moduleResults.AntiFling
+local Rejoin         = moduleResults.Rejoin
+local ServerHop      = moduleResults.ServerHop
+local Teleport       = moduleResults.Teleport
+local HitboxExp      = moduleResults.HitboxExp
+local Waypoint       = moduleResults.Waypoint
+local GodMode        = moduleResults.GodMode
+local NoFallDmg      = moduleResults.NoFallDmg
+local InstantKill    = moduleResults.InstantKill
+local KillAura       = moduleResults.KillAura
+local AutoClicker    = moduleResults.AutoClicker
+local QuickSwitch    = moduleResults.QuickSwitch
+local MacroRec       = moduleResults.MacroRec
+local Backtracker    = moduleResults.Backtracker
+local AntiVoid       = moduleResults.AntiVoid
+local GamepassSpoof  = moduleResults.GamepassSpoof
+local AvatarSpoof    = moduleResults.AvatarSpoof
+local MobileOverlay  = moduleResults.MobileOverlay
+local PerfBooster    = moduleResults.PerfBooster
+local WebhookLogger  = moduleResults.WebhookLogger
+local ServerUtils    = moduleResults.ServerUtils
+local FOVMod         = moduleResults.FOVMod
+local InstantPrompts = moduleResults.InstantPrompts
+local Orbit          = moduleResults.Orbit
+local Radar          = moduleResults.Radar
 
 
 -- Dummy stub for any module that failed to load
@@ -596,6 +661,9 @@ local GAME_REGISTRY = {
 local ActiveGameModule = nil
 local curPlaceId = tostring(game.PlaceId)
 local curGameId  = tostring(game.GameId)
+
+-- DEV: log current game IDs so new games can be added to GAME_REGISTRY
+warn("[LeonX] DEV PlaceId=" .. curPlaceId .. " | GameId=" .. curGameId)
 
 for _, gameDef in ipairs(GAME_REGISTRY) do
     local isMatch = false
