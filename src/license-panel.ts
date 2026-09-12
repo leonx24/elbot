@@ -1,4 +1,5 @@
 import {
+  ActionRowBuilder,
   ContainerBuilder,
   SectionBuilder,
   TextDisplayBuilder,
@@ -15,7 +16,7 @@ export const SERVICES = [
   {
     emoji: "🔑",
     title: "Get My Key",
-    desc: "Dapatkan atau lihat License Key pribadi Anda.",
+    desc: "Dapatkan atau lihat License Key & Script Loader pribadi Anda.",
     customId: "get_my_key",
     style: ButtonStyle.Success,
   },
@@ -37,7 +38,7 @@ export const SERVICES = [
   {
     emoji: "📋",
     title: "Copy Loader",
-    desc: "Ambil script loader siap eksekusi di Roblox.",
+    desc: "Ambil script loader & key siap salin langsung di HP (Mobile Copy).",
     customId: "copy_loader",
     style: ButtonStyle.Secondary,
   },
@@ -136,9 +137,9 @@ export function buildUserKeyEphemeral(key: string, username: string) {
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
       `## 🔑 License Key Anda — LeonX Hub\n` +
-      `Halo <@!${username}>, berikut adalah license key resmi milik Anda:\n\n` +
-      `**License Key:**\n\`\`\`text\n${key}\n\`\`\`\n` +
-      `**Script Loader (Siap Eksekusi):**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
+      `Halo <@!${username}>, berikut adalah license key & loader resmi milik Anda:\n\n` +
+      `**📜 Script Loader (Siap Eksekusi):**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
+      `**🔑 License Key Saja:**\n\`\`\`text\n${key}\n\`\`\`\n` +
       `*💡 Catatan: Key akan otomatis terikat ke perangkat (HWID) pertama kali saat dieksekusi di Roblox.*`
     )
   );
@@ -147,8 +148,32 @@ export function buildUserKeyEphemeral(key: string, username: string) {
     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
   );
 
+  // Action row for instant mobile copy & HWID reset
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("copy_mobile_script")
+      .setLabel("Salin Script (Mobile)")
+      .setEmoji("📜")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("copy_mobile_key")
+      .setLabel("Salin Key (Mobile)")
+      .setEmoji("🔑")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("reset_hwid")
+      .setLabel("Reset HWID")
+      .setEmoji("🔄")
+      .setStyle(ButtonStyle.Secondary)
+  );
+  container.addActionRowComponents(actionRow);
+
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+  );
+
   container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("-# Rahasiakan key Anda. Satu key hanya dapat digunakan pada satu perangkat terdaftar.")
+    new TextDisplayBuilder().setContent("-# 📱 Mobile Tips: Klik tombol 'Salin Script' atau 'Salin Key' di atas untuk pesan instan siap salin tanpa format.")
   );
 
   return {
@@ -168,6 +193,7 @@ export function buildKeyInfoEphemeral(info: {
   created_at: string;
   execution_count: number;
 }, discordId: string) {
+  const loaderCode = `_G.Key = "${info.key}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
   const container = new ContainerBuilder();
 
   const hwidStatus = info.hwid
@@ -191,7 +217,10 @@ export function buildKeyInfoEphemeral(info: {
       `• **Roblox ID Terakhir:** ${robloxStatus}\n` +
       `• **Total Eksekusi In-Game:** \`${info.execution_count} kali\`\n` +
       `• **Terakhir Reset HWID:** ${lastReset}\n` +
-      `• **Tanggal Dibuat:** \`${info.created_at}\``
+      `• **Tanggal Dibuat:** \`${info.created_at}\`\n\n` +
+      `### 📱 Mobile Copy\n` +
+      `**📜 Script Loader:**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
+      `**🔑 Key Lisensi:**\n\`\`\`text\n${info.key}\n\`\`\``
     )
   );
 
@@ -199,8 +228,31 @@ export function buildKeyInfoEphemeral(info: {
     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
   );
 
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("copy_mobile_script")
+      .setLabel("Salin Script (Mobile)")
+      .setEmoji("📜")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("copy_mobile_key")
+      .setLabel("Salin Key (Mobile)")
+      .setEmoji("🔑")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("reset_hwid")
+      .setLabel("Reset HWID")
+      .setEmoji("🔄")
+      .setStyle(ButtonStyle.Secondary)
+  );
+  container.addActionRowComponents(actionRow);
+
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+  );
+
   container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("-# Jika ingin berpindah device/HP, gunakan tombol 'Reset HWID' di panel dashboard.")
+    new TextDisplayBuilder().setContent("-# Jika ingin berpindah device/HP, gunakan tombol 'Reset HWID'.")
   );
 
   return {
