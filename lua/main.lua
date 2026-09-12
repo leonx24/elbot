@@ -66,7 +66,7 @@ pcall(function()
 end)
 
 local BASE = (getgenv and getgenv().LeonX_BaseUrl) or "https://gitlab.com/affavanleon/leonx/-/raw/main/"
-local AUTH_KEY = (getgenv and getgenv().LeonX_SessionToken) or ""
+local AUTH_KEY = (getgenv and getgenv().LeonX_AuthKey) or ""
 
 local function secureFetch(path)
     local fullUrl = BASE .. path .. (BASE:find("%?") and "&t=" or "?t=") .. tostring(os.time())
@@ -654,6 +654,7 @@ local GAME_REGISTRY = {
     {
         Name = "Sniper Arena",
         PlaceIds = { 122446657157717 },
+        GameIds = { 9534705677 },
         Path = "modules/games/sniperarena.lua"
     },
 }
@@ -826,6 +827,7 @@ if ActiveGameModule then
     -- AutoLoad config for game module
     task.delay(1.5, function()
         ConfigMgr:AutoLoad()
+        ConfigMgr:StartAutoSave()
     end)
 
     -- Character respawn handler
