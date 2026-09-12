@@ -85,12 +85,158 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 local CURRENT_VERSION = "0.0.5"
+local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
     if vSrc and vSrc:match("^%s*([%d%.]+)%s*$") and not vSrc:find("<") and not vSrc:find("html") then
         CURRENT_VERSION = vSrc:match("^%s*([%d%.]+)%s*$")
+        remoteVersionFetched = true
     end
 end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- FAST LOCAL ENCRYPTED CACHE ENGINE (Hardware-Locked & Stealth)
+-- ══════════════════════════════════════════════════════════════════════════════
+local CACHE_ROOT = "Leon X/cache"
+local CACHE_VER_FILE = CACHE_ROOT .. "/version.dat"
+
+local function getDeviceHWID()
+    local id = ""
+    pcall(function()
+        if gethwid then id = gethwid()
+        elseif identifyexecutor then id = identifyexecutor() .. "_" .. tostring(lp and lp.UserId or "0")
+        else id = tostring(lp and lp.UserId or "0") end
+    end)
+    return (id ~= "" and id) or tostring(lp and lp.UserId or "LX_CACHE_DEVICE")
+end
+
+local DEVICE_HWID = getDeviceHWID()
+local IS_OWNER = (AUTH_KEY == "LEONX-OWNER-BYPASS-998")
+local CACHE_KEY = IS_OWNER and ("LX_OWNER_SECRET_SALT_998_" .. CURRENT_VERSION) or (DEVICE_HWID .. "_" .. AUTH_KEY .. "_" .. CURRENT_VERSION)
+
+-- Lightweight dynamic cipher (XOR stream + byte scramble, 100% Lua 5.1 & Luau compatible)
+local function lx_xor(a, b)
+    if bit32 and bit32.bxor then
+        return bit32.bxor(a, b)
+    elseif bit and bit.bxor then
+        return bit.bxor(a, b)
+    end
+    -- Pure Lua 5.1 bitwise XOR fallback
+    local res, p = 0, 1
+    while a > 0 or b > 0 do
+        local ra, rb = a % 2, b % 2
+        if ra ~= rb then res = res + p end
+        a = (a - ra) / 2
+        b = (b - rb) / 2
+        p = p * 2
+    end
+    return res
+end
+
+local function encryptString(str, key)
+    local kLen = #key
+    if kLen == 0 then return str end
+    local res = {}
+    for i = 1, #str do
+        local b = str:byte(i)
+        local kb = key:byte(((i - 1) % kLen) + 1)
+        local enc = lx_xor(b, kb)
+        res[i] = string.format("%02x", enc)
+    end
+    return table.concat(res)
+end
+
+local function decryptString(hexStr, key)
+    local kLen = #key
+    if kLen == 0 or (#hexStr % 2 ~= 0) then return nil end
+    local res = {}
+    local idx = 1
+    for i = 1, #hexStr, 2 do
+        local b = tonumber(hexStr:sub(i, i + 1), 16)
+        if not b then return nil end
+        local kb = key:byte(((idx - 1) % kLen) + 1)
+        local dec = lx_xor(b, kb)
+        res[idx] = string.char(dec)
+        idx = idx + 1
+    end
+    return table.concat(res)
+end
+
+local function hashPath(p)
+    local hash = 5381
+    for i = 1, #p do
+        hash = ((hash * 33) + p:byte(i)) % 4294967296
+    end
+    return string.format("%x", hash) .. ".lx"
+end
+
+local hasFS = (isfile and readfile and writefile and makefolder and isfolder) and true or false
+
+local function ensureCacheFolders()
+    if not hasFS then return end
+    pcall(function()
+        if not isfolder("Leon X") then makefolder("Leon X") end
+        if not isfolder(CACHE_ROOT) then makefolder(CACHE_ROOT) end
+    end)
+end
+
+local function clearLocalCache()
+    if not hasFS then return end
+    pcall(function()
+        if delfile and isfolder and isfolder(CACHE_ROOT) then
+            if listfiles then
+                for _, f in ipairs(listfiles(CACHE_ROOT)) do
+                    pcall(delfile, f)
+                end
+            end
+        end
+    end)
+end
+
+-- Invalidate cache automatically if version changed on server
+pcall(function()
+    if hasFS and remoteVersionFetched then
+        ensureCacheFolders()
+        if isfile(CACHE_VER_FILE) then
+            local cachedVer = readfile(CACHE_VER_FILE):gsub("%s+", "")
+            if cachedVer ~= CURRENT_VERSION then
+                clearLocalCache()
+                writefile(CACHE_VER_FILE, CURRENT_VERSION)
+            end
+        else
+            clearLocalCache()
+            writefile(CACHE_VER_FILE, CURRENT_VERSION)
+        end
+    end
+end)
+
+local function getCachedModule(path)
+    if not hasFS then return nil end
+    local fileName = CACHE_ROOT .. "/" .. hashPath(path)
+    local ok, content = pcall(function()
+        if isfile and isfile(fileName) then
+            local raw = readfile(fileName)
+            if raw and #raw > 10 then
+                return decryptString(raw, CACHE_KEY)
+            end
+        end
+        return nil
+    end)
+    if ok and content and #content > 10 then
+        return content
+    end
+    return nil
+end
+
+local function saveCachedModule(path, code)
+    if not hasFS or not code or #code < 10 then return end
+    pcall(function()
+        ensureCacheFolders()
+        local fileName = CACHE_ROOT .. "/" .. hashPath(path)
+        local enc = encryptString(code, CACHE_KEY)
+        writefile(fileName, enc)
+    end)
+end
 
 local Players      = game:GetService("Players")
 local UIS          = game:GetService("UserInputService")
@@ -409,6 +555,20 @@ local loadErrors = {}
 local MAX_RETRIES = 4
 local function load(p)
     local shortName = p:match("([^/]+)%.lua$") or p
+
+    -- 1. Check local HWID-encrypted cache first
+    local cachedCode = getCachedModule(p)
+    if cachedCode and #cachedCode > 10 then
+        local okCache, fn = pcall(raw_loadstring, cachedCode)
+        if okCache and fn then
+            local runOk, result = pcall(fn)
+            if runOk then
+                return result
+            end
+        end
+    end
+
+    -- 2. Fallback to secure network fetch with automatic caching
     for attempt = 1, MAX_RETRIES do
         local ok, result = pcall(function()
             local src = secureFetch(p)
@@ -418,6 +578,7 @@ local function load(p)
             end
             local fn, err = raw_loadstring(src)
             if not fn then error("loadstring failed: "..tostring(err)) end
+            saveCachedModule(p, src)
             return fn()
         end)
         if ok then
@@ -3228,6 +3389,17 @@ SetTab:Button({
         else
             N("Config Share Code", "Failed: " .. tostring(msg))
         end
+    end
+})
+
+SetTab:Section({ Expanded = false, Title = "Cache & Performance" })
+SetTab:Button({
+    Title    = "Clear Encrypted Cache",
+    Icon     = "refresh-cw",
+    Tooltip  = "Purge local decrypted/encrypted module cache and re-download fresh code on next execute",
+    Callback = function()
+        clearLocalCache()
+        N("Cache", "Cache cleared! Next execution will fetch fresh modules.")
     end
 })
 

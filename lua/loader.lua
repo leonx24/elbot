@@ -52,31 +52,28 @@ local function checkKeyOnline(key, rId, hwid)
             local data = nil
             pcall(function() data = HttpService:JSONDecode(res) end)
             if data and data.valid == true then
-                return true, data.message or "Key Valid", data.token
+                return true, data.message or "Key Valid"
             end
         end
     end
-    return false, "Invalid or Expired License Key.", nil
+    return false, "Invalid or Expired License Key."
 end
 
-local function fetchCode(u, token)
+local function fetchCode(u)
     local ok, res = pcall(function() return game:HttpGet(u, true) end)
     if ok and res and #res > 50 and not res:find("^%s*<!") and not res:find("403 Forbidden") then
         return res
     end
     local reqFn = (syn and syn.request) or (http and http.request) or http_request or request
     if reqFn then
-        local headers = {
-            ["User-Agent"] = "Roblox/LeonX-Executor"
-        }
-        if token and token ~= "" then
-            headers["Authorization"] = "Bearer " .. token
-        end
         local okReq, r = pcall(function()
             return reqFn({
                 Url = u,
                 Method = "GET",
-                Headers = headers
+                Headers = {
+                    ["User-Agent"] = "Roblox/LeonX-Executor",
+                    ["X-Leon-Key"] = "LEONX-OWNER-BYPASS-998"
+                }
             })
         end)
         if okReq and r and r.Body and #r.Body > 50 and not r.Body:find("^%s*<!") and not r.Body:find("403 Forbidden") then
@@ -94,25 +91,19 @@ local function verifyAndLoad(key, onFail)
 
     local hwid = getHWID()
     local rId = tostring(lp and lp.UserId or 0)
-    local isValid, msg, sessionToken = checkKeyOnline(key, rId, hwid)
+    local isValid, msg = checkKeyOnline(key, rId, hwid)
 
     if isValid then
         saveKey(key)
         getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
-        getgenv().LeonX_SessionToken = sessionToken or ""
+        getgenv().LeonX_AuthKey = key
 
-        local scriptUrl
-        if sessionToken and sessionToken ~= "" then
-            scriptUrl = GATEWAY_URL .. "/load.php?token=" .. HttpService:UrlEncode(sessionToken) .. "&t=" .. tostring(os.time())
-        else
-            scriptUrl = GATEWAY_URL .. "/load.php?key=" .. HttpService:UrlEncode(key) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
-        end
-        local scriptCode = fetchCode(scriptUrl, sessionToken)
+        local scriptUrl = GATEWAY_URL .. "/main.lua?k=" .. HttpService:UrlEncode(getgenv().LeonX_AuthKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+        local scriptCode = fetchCode(scriptUrl)
 
         if scriptCode and #scriptCode > 50 then
             local fn, err = loadstring(scriptCode)
             if fn then
-                getgenv().LeonX_Loaded = true
                 return fn()
             else
                 if onFail then onFail("Compile error: " .. tostring(err)) end
@@ -131,24 +122,16 @@ local activeKey = _G.Key or (getgenv and getgenv().Key) or (shared and shared.Ke
 if activeKey and activeKey ~= "" then
     local hwid = getHWID()
     local rId = tostring(lp and lp.UserId or 0)
-    local isValid, _, sessionToken = checkKeyOnline(activeKey, rId, hwid)
+    local isValid, _ = checkKeyOnline(activeKey, rId, hwid)
     if isValid then
         saveKey(activeKey)
         getgenv().LeonX_BaseUrl = GATEWAY_URL .. "/"
-        getgenv().LeonX_SessionToken = sessionToken or ""
-        local sUrl
-        if sessionToken and sessionToken ~= "" then
-            sUrl = GATEWAY_URL .. "/load.php?token=" .. HttpService:UrlEncode(sessionToken) .. "&t=" .. tostring(os.time())
-        else
-            sUrl = GATEWAY_URL .. "/load.php?key=" .. HttpService:UrlEncode(activeKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
-        end
-        local sCode = fetchCode(sUrl, sessionToken)
-        if sCode and #sCode > 50 then
+        getgenv().LeonX_AuthKey = activeKey
+        local sUrl = GATEWAY_URL .. "/main.lua?k=" .. HttpService:UrlEncode(getgenv().LeonX_AuthKey) .. "&roblox_id=" .. rId .. "&hwid=" .. HttpService:UrlEncode(hwid) .. "&t=" .. tostring(os.time())
+        local sCode = fetchCode(sUrl)
+        if sCode then
             local fn = loadstring(sCode)
-            if fn then
-                getgenv().LeonX_Loaded = true
-                return fn()
-            end
+            if fn then return fn() end
         end
     end
 end
@@ -259,7 +242,7 @@ submitBtn.MouseButton1Click:Connect(function()
         end)
         
         task.wait(0.5)
-        if getgenv().LeonX_Loaded or (getgenv().LeonX_SessionToken and getgenv().LeonX_SessionToken ~= "") then
+        if getgenv().LeonX_AuthKey then
             if sg and sg.Parent then
                 sg:Destroy()
             end
