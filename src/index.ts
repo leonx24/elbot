@@ -941,15 +941,14 @@ client.once(Events.ClientReady, async (readyClient) => {
           if (!alreadySent) {
             try {
               const userKey = getOrCreateUserKey(memberId);
-              const loaderCode = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+              const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
               const dmContent = 
                 `**LeonX Hub Loader & License Key**\n` +
-                `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script khusus dan key lisensi Anda:\n\n` +
-                `📱 **Mobile Copy (Salin Cepat):**\n` +
-                `**📜 Script Loader (Lua):**\n` +
-                `\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
-                `**🔑 Key Lisensi Saja:**\n` +
-                `\`\`\`text\n${userKey}\n\`\`\`\n` +
+                `Halo <@${memberId}>, akun Anda terverifikasi di server LeonX Hub. Berikut adalah loader script dan key lisensi Anda:\n\n` +
+                `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+                `\`${scriptCode}\`\n\n` +
+                `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+                `\`${userKey}\`\n\n` +
                 `*Jangan bagikan key ini kepada siapapun!*`;
                 
               await member.send(dmContent);
@@ -1021,69 +1020,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userKey = getOrCreateUserKey(interaction.user.id);
-        const loaderCode = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+        const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
 
-        const v2DmScript = buildV2Container({
-          title: "🔑 LeonX Hub Loader & Key",
-          description: "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
-          sections: [
-            {
-              title: "📜 Script Loader (Lua)",
-              content:
-                "```lua\n" +
-                loaderCode + "\n" +
-                "```"
-            },
-            {
-              title: "🔑 License Key",
-              content:
-                "```text\n" +
-                userKey + "\n" +
-                "```"
-            }
-          ],
-          footer: "LeonX Hub • License System"
-        });
+        const messageText =
+          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+          `\`${scriptCode}\`\n\n` +
+          `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+          `\`${userKey}\``;
 
-        let dmSuccess = true;
         try {
-          await interaction.user.send(v2DmScript);
-          await interaction.user.send({
-            content:
-              `📱 **Mobile Copy — LeonX Hub Loader & Key**\n` +
-              `*(Khusus pengguna Mobile: tekan lama teks di dalam box atau klik ikon copy di pojok kode)*\n\n` +
-              `**📜 Script Loader (Siap Pakai):**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
-              `**🔑 Key Lisensi Saja:**\n\`\`\`text\n${userKey}\n\`\`\``
-          });
-        } catch (dmErr) {
-          dmSuccess = false;
+          await interaction.user.send(messageText);
+        } catch {
+          // Abaikan jika DM ditutup
         }
 
-        const quickCopyRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("copy_mobile_script")
-            .setLabel("Salin Script (Mobile)")
-            .setEmoji("📜")
-            .setStyle(ButtonStyle.Primary),
-          new ButtonBuilder()
-            .setCustomId("copy_mobile_key")
-            .setLabel("Salin Key (Mobile)")
-            .setEmoji("🔑")
-            .setStyle(ButtonStyle.Secondary)
-        );
-
-        const replyPrefix = dmSuccess
-          ? "✅ **Script loader dan key khusus berhasil dikirim melalui DM!**"
-          : "⚠️ **Bot tidak dapat mengirim DM (DM Anda terkunci/nonaktif).**";
-
         await interaction.editReply({
-          content:
-            `${replyPrefix}\n\n` +
-            `📱 **Mobile Quick Copy (Salin Langsung di Bawah):**\n` +
-            `*Gunakan tombol copy di pojok kode atau klik tombol salin murni:*\n\n` +
-            `**📜 Script Loader:**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
-            `**🔑 Key Lisensi Saja:**\n\`\`\`text\n${userKey}\n\`\`\``,
-          components: [quickCopyRow]
+          content: messageText
         });
       }
 
@@ -1176,42 +1128,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }).join("\n");
         }
 
-        const loaderCode = `_G.Key = "${keyData.key}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+        const scriptCode = `_G.Key = "${keyData.key}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
 
         const embed = new EmbedBuilder()
           .setTitle("🔑 Informasi Key & Lisensi Anda")
           .setDescription(
             "Berikut adalah detail lisensi dan aktivitas penggunaan script Anda.\n\n" +
             "**🔑 Informasi Lisensi**\n" +
-            `• \`Key Lisensi:\` \`||${keyData.key}||\`\n` +
+            `• \`Key Lisensi:\` \`${keyData.key}\`\n` +
             `• \`Akun Roblox:\` ${keyData.roblox_id ? `[Profil Roblox](https://www.roblox.com/users/${keyData.roblox_id}/profile) (\`${keyData.roblox_id}\`)` : "🔴 Belum tertaut"}\n` +
             `• \`Perangkat (HWID):\` ${keyData.hwid ? `\`${keyData.hwid}\`` : "🔴 Belum tertaut"}\n` +
             `• \`Cooldown Reset:\` ${cooldownText}\n` +
             `• \`Total Eksekusi:\` \`${totalExec}\` kali\n` +
             `• \`Dibuat Pada:\` \`${new Date(keyData.created_at + " UTC").toLocaleString("id-ID", { dateStyle: "medium" })}\`\n\n` +
-            "**📱 Mobile Copy (Salin Cepat)**\n" +
-            `• Script Loader:\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
-            `• Key Lisensi Saja:\n\`\`\`text\n${keyData.key}\n\`\`\`\n\n` +
+            "**Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan:**\n\n" +
+            `\`${scriptCode}\`\n\n` +
+            "**Klik key lisensi di bawah untuk salin key saja:**\n\n" +
+            `\`${keyData.key}\`\n\n` +
             "**📜 Riwayat 5 Eksekusi Terakhir**\n" +
             historyText
           )
           .setFooter({ text: "LeonX Hub • License System" })
           .setTimestamp();
 
-        const keyinfoRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("copy_mobile_script")
-            .setLabel("Salin Script (Mobile)")
-            .setEmoji("📜")
-            .setStyle(ButtonStyle.Primary),
-          new ButtonBuilder()
-            .setCustomId("copy_mobile_key")
-            .setLabel("Salin Key (Mobile)")
-            .setEmoji("🔑")
-            .setStyle(ButtonStyle.Secondary)
-        );
-
-        await interaction.editReply({ embeds: [embed], components: [keyinfoRow] });
+        await interaction.editReply({ embeds: [embed] });
       }
 
       if (interaction.commandName === "lookup") {
@@ -1387,41 +1327,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 } else {
                   try {
                     const userKey = getOrCreateUserKey(interaction.user.id);
-                    const loaderCode = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
-                    const v2DmScript = buildV2Container({
-                      title: "🔑 LeonX Hub Loader & Key",
-                      description: isEng
-                        ? "Here is your personal script loader. *Do not share this key with anyone!*"
-                        : "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
-                      sections: [
-                        {
-                          title: "📜 Script Loader (Lua)",
-                          content:
-                            "```lua\n" +
-                            loaderCode + "\n" +
-                            "```"
-                        },
-                        {
-                          title: "🔑 License Key",
-                          content:
-                            "```text\n" +
-                            userKey + "\n" +
-                            "```"
-                        }
-                      ],
-                      footer: "LeonX Hub • License System"
-                    });
-                    await interaction.user.send(v2DmScript);
-                    await interaction.user.send({
-                      content: isEng
-                        ? `📱 **Mobile Copy — LeonX Hub Loader & Key**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n🔑 **License Key Only:**\n\`\`\`text\n${userKey}\n\`\`\``
-                        : `📱 **Mobile Copy — LeonX Hub Loader & Key**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n🔑 **Key Lisensi Saja:**\n\`\`\`text\n${userKey}\n\`\`\``
-                    });
+                    const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+                    await interaction.user.send(
+                      `**LeonX Hub Loader & Key**\n\n` +
+                      `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+                      `\`${scriptCode}\`\n\n` +
+                      `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+                      `\`${userKey}\``
+                    );
                     finalReply = finalReply.replace(
                       actionSendScriptRegex,
                       isEng
-                        ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs privately with Mobile Copy. Please check your inbox.`
-                        : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda lengkap dengan format Mobile Copy. Silakan periksa pesan masuk Anda.`
+                        ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs. Please check your inbox.`
+                        : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`
                     );
                   } catch (dmErr) {
                     finalReply = finalReply.replace(
@@ -1552,7 +1470,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     });
                     await interaction.user.send(v2DmKeyInfo);
                     await interaction.user.send({
-                      content: `🔑 **Mobile Copy — Key Lisensi:**\n\`\`\`text\n${row.key}\n\`\`\``
+                      content: `Klik key lisensi di bawah untuk salin key saja:\n\n\`${row.key}\``
                     });
                   } catch (dmErr) {
                     console.log(`Failed to DM key info to ${interaction.user.tag}:`, dmErr);
@@ -1592,28 +1510,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "generatekey") {
         const user = interaction.options.getUser("user", true);
         const newKey = forceGenerateUserKey(user.id);
-        const loaderCode = `_G.Key = "${newKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
-
-        const generateRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("copy_mobile_script")
-            .setLabel("Salin Script (Mobile)")
-            .setEmoji("📜")
-            .setStyle(ButtonStyle.Primary),
-          new ButtonBuilder()
-            .setCustomId("copy_mobile_key")
-            .setLabel("Salin Key (Mobile)")
-            .setEmoji("🔑")
-            .setStyle(ButtonStyle.Secondary)
-        );
+        const scriptCode = `_G.Key = "${newKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
 
         await interaction.reply({
           content:
-            `🔑 **Key Baru Berhasil Dihasilkan!**\nPengguna: <@${user.id}>\nKey: \`${newKey}\`\n\n` +
-            `📱 **Mobile Copy:**\n` +
-            `\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
-            `*Catatan: Key lama (jika ada) telah dinonaktifkan, dan semua data binding (Roblox ID & HWID) untuk pengguna ini telah di-reset.*`,
-          components: [generateRow],
+            `🔑 **Key Baru Berhasil Dihasilkan!**\nPengguna: <@${user.id}>\n\n` +
+            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+            `\`${scriptCode}\`\n\n` +
+            `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+            `\`${newKey}\`\n\n` +
+            `*Catatan: Key lama telah dinonaktifkan, dan semua data binding telah di-reset.*`,
           flags: MessageFlags.Ephemeral
         });
 
@@ -1621,10 +1527,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
           const dmContent = 
             `**LeonX Hub Loader (Key Baru)**\n` +
-            `Administrator telah membuatkan/memperbarui key baru untuk Anda. Jangan bagikan key ini kepada siapapun!\n\n` +
-            `📱 **Mobile Copy (Salin Cepat):**\n` +
-            `**📜 Script Loader:**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n` +
-            `**🔑 Key Lisensi Saja:**\n\`\`\`text\n${newKey}\n\`\`\``;
+            `Administrator telah membuatkan key baru untuk Anda:\n\n` +
+            `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+            `\`${scriptCode}\`\n\n` +
+            `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+            `\`${newKey}\``;
           await user.send(dmContent);
         } catch {
           // Abaikan jika DM ditutup
@@ -3061,27 +2968,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isButton() && (interaction.customId === "copy_loader" || interaction.customId === "license:copy_loader")) {
       const userKey = getOrCreateUserKey(interaction.user.id);
-      const code = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
-      const quickRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId("copy_mobile_script")
-          .setLabel("Salin Script Murni (Mobile)")
-          .setEmoji("📜")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId("copy_mobile_key")
-          .setLabel("Salin Key Murni (Mobile)")
-          .setEmoji("🔑")
-          .setStyle(ButtonStyle.Secondary)
-      );
-
+      const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
       await interaction.reply({
         content:
-          `📱 **Mobile Copy — Script Loader & Key Siap Pakai:**\n` +
-          `*(Tekan tombol copy di pojok kanan atas codeblock atau tombol di bawah)*\n\n` +
-          `**📜 Script Loader (Lua):**\n\`\`\`lua\n${code}\n\`\`\`\n` +
-          `**🔑 License Key:**\n\`\`\`text\n${userKey}\n\`\`\``,
-        components: [quickRow],
+          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+          `\`${scriptCode}\`\n\n` +
+          `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+          `\`${userKey}\``,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -3089,9 +2982,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isButton() && (interaction.customId === "copy_mobile_script" || interaction.customId === "license:copy_mobile_script")) {
       const userKey = getOrCreateUserKey(interaction.user.id);
-      const code = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+      const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
       await interaction.reply({
-        content: `\`\`\`lua\n${code}\n\`\`\``,
+        content:
+          `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+          `\`${scriptCode}\``,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -3105,7 +3000,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     )) {
       const userKey = getOrCreateUserKey(interaction.user.id);
       await interaction.reply({
-        content: `\`\`\`text\n${userKey}\n\`\`\``,
+        content:
+          `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+          `\`${userKey}\``,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -4087,41 +3984,19 @@ client.on(Events.MessageCreate, async (message) => {
             } else {
               try {
                 const userKey = getOrCreateUserKey(message.author.id);
-                const loaderCode = `_G.Key = "${userKey}"\nloadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
-                const v2DmScript = buildV2Container({
-                  title: isEng ? "🔑 LeonX Hub Loader & Key" : "🔑 LeonX Hub Loader & Key",
-                  description: isEng
-                    ? "Here is your exclusive script loader. *Do not share this key with anyone!*"
-                    : "Berikut adalah loader script khusus untuk Anda. *Jangan bagikan key ini kepada siapapun!*",
-                  sections: [
-                    {
-                      title: isEng ? "📜 Script Loader (Lua)" : "📜 Script Loader (Lua)",
-                      content:
-                        "```lua\n" +
-                        loaderCode + "\n" +
-                        "```"
-                    },
-                    {
-                      title: isEng ? "🔑 License Key" : "🔑 Key Lisensi",
-                      content:
-                        "```text\n" +
-                        userKey + "\n" +
-                        "```"
-                    }
-                  ],
-                  footer: "LeonX Hub • License System"
-                });
-                await message.author.send(v2DmScript);
-                await message.author.send({
-                  content: isEng
-                    ? `📱 **Mobile Copy — LeonX Hub Loader & Key**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n🔑 **License Key Only:**\n\`\`\`text\n${userKey}\n\`\`\``
-                    : `📱 **Mobile Copy — LeonX Hub Loader & Key**\n\`\`\`lua\n${loaderCode}\n\`\`\`\n🔑 **Key Lisensi Saja:**\n\`\`\`text\n${userKey}\n\`\`\``
-                });
+                const scriptCode = `_G.Key = "${userKey}"; loadstring(game:HttpGet("https://leonthings.my.id/loader.lua?t=" .. tostring(os.time())))()`;
+                await message.author.send(
+                  `**LeonX Hub Loader & Key**\n\n` +
+                  `Klik script nya aja nanti bakalan langsung ter-copy otomatis, jangan di tahan\n\n` +
+                  `\`${scriptCode}\`\n\n` +
+                  `Klik key lisensi di bawah untuk salin key saja:\n\n` +
+                  `\`${userKey}\``
+                );
                 finalReply = finalReply.replace(
                   actionSendScriptRegex,
                   isEng
-                    ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs privately with Mobile Copy. Please check your inbox.`
-                    : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda lengkap dengan format Mobile Copy. Silakan periksa pesan masuk Anda.`
+                    ? `\n\n🔑 **Success!** Your script loader and license key have been sent to your DMs. Please check your inbox.`
+                    : `\n\n🔑 **Sukses!** Loader script dan key lisensi Anda telah dikirimkan secara pribadi ke DM Anda. Silakan periksa pesan masuk Anda.`
                 );
               } catch (dmErr) {
                 finalReply = finalReply.replace(
@@ -4278,9 +4153,7 @@ client.on(Events.MessageCreate, async (message) => {
                     `• **Cooldown Reset**: \`${cooldownRemainingMinutes > 0 ? `${cooldownRemainingMinutes} menit` : "Ready"}\``;
                 await message.author.send(dmContent);
                 await message.author.send({
-                  content: isEng
-                    ? `🔑 **Mobile Copy — License Key:**\n\`\`\`text\n${row.key}\n\`\`\``
-                    : `🔑 **Mobile Copy — Key Lisensi:**\n\`\`\`text\n${row.key}\n\`\`\``
+                  content: `Klik key lisensi di bawah untuk salin key saja:\n\n\`${row.key}\``
                 });
               } catch (dmErr) {
                 console.log(`Failed to DM key info to ${message.author.tag}:`, dmErr);
