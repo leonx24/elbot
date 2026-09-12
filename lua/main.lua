@@ -346,16 +346,16 @@ SplashCard.Size = UDim2.new(0, 280, 0, 160)
 local function tw(o, t, p)
     TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), p):Play()
 end
-tw(SplashCard, 0.45, {BackgroundTransparency = 0, Size = UDim2.new(0, 340, 0, 200)})
-tw(SplashBg, 0.35, {BackgroundTransparency = 0.15})
+tw(SplashCard, 0.25, {BackgroundTransparency = 0, Size = UDim2.new(0, 340, 0, 200)})
+tw(SplashBg, 0.2, {BackgroundTransparency = 0.15})
 
 for _, child in ipairs(SplashCard:GetDescendants()) do
     if child:IsA("TextLabel") then
         child.TextTransparency = 1
-        TweenService:Create(child, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
+        TweenService:Create(child, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
     elseif child:IsA("Frame") then
         child.BackgroundTransparency = 1
-        TweenService:Create(child, TweenInfo.new(0.4), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(child, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
     end
 end
 
@@ -379,7 +379,7 @@ task.spawn(function()
             dotIdx = (dotIdx % #dotFrames) + 1
             pcall(function() SplashDots.Text = dotFrames[dotIdx] end)
         end
-        if now - lastStep >= 1.0 then
+        if now - lastStep >= 0.5 then
             lastStep = now
             stepIdx = (stepIdx % #statusSteps) + 1
             pcall(function() SplashStatus.Text = statusSteps[stepIdx] end)
@@ -392,7 +392,7 @@ end)
 local function setSplashProgress(pct)
     pcall(function()
         local clamped = math.clamp(pct, 0, 1)
-        tw(SplashBarFill, 0.25, {Size = UDim2.new(clamped, 0, 1, 0)})
+        tw(SplashBarFill, 0.12, {Size = UDim2.new(clamped, 0, 1, 0)})
         SplashPct.Text = tostring(math.floor(clamped * 100)) .. "%"
     end)
 end
@@ -852,7 +852,7 @@ local AutoTab = Window:Tab({ Title = "Auto", Icon = "zap" })
 local MacroTab = Window:Tab({ Title = "Macro", Icon = "clapperboard" })
 local SetTab = Window:Tab({ Title = "Settings", Icon = "settings" })
 
-FavTab:Section({ Title = "Quick Access Features" })
+FavTab:Section({ Expanded = false, Title = "Quick Access Features" })
 FavTab:Paragraph({
     Title   = "Favorites & Quick Access",
     Content = "Star (★) any toggle to pin it here! Your favorite features at your fingertips."
@@ -893,7 +893,7 @@ end
 -- ══════════════════════════════════════════════════════════════════════════════
 -- MOVEMENT TAB
 -- ══════════════════════════════════════════════════════════════════════════════
-MovTab:Section({ Title = "Flight" })
+MovTab:Section({ Expanded = false, Title = "Flight" })
 -- Creating UI components
 
 -- Fly toggle
@@ -938,7 +938,7 @@ UIS.InputBegan:Connect(function(i, gp)
     flyToggle:Set(s)
 end)
 
-MovTab:Section({ Title = "Speed" })
+MovTab:Section({ Expanded = false, Title = "Speed" })
 
 speedToggle = MovTab:Toggle({
     Title    = "Speed Hack",
@@ -976,7 +976,7 @@ jumpPowerSlider = MovTab:Slider({
 })
 ConfigMgr:Register("JumpPower", jumpPowerSlider)
 
-MovTab:Section({ Title = "Physics" })
+MovTab:Section({ Expanded = false, Title = "Physics" })
 
 infJumpToggle = MovTab:Toggle({
     Title    = "Infinite Jump",
@@ -1030,7 +1030,7 @@ invisToggle = MovTab:Toggle({
 })
 ConfigMgr:Register("Invisible", invisToggle)
 
-MovTab:Section({ Title = "Camera" })
+MovTab:Section({ Expanded = false, Title = "Camera" })
 
 fcKey = Enum.KeyCode.V
 fcToggle = MovTab:Toggle({
@@ -1067,7 +1067,7 @@ UIS.InputBegan:Connect(function(i, gp)
     if s then FreeCam:Enable() else FreeCam:Disable() end
 end)
 
-MovTab:Section({ Title = "Special" })
+MovTab:Section({ Expanded = false, Title = "Special" })
 
 clickTPToggle = MovTab:Toggle({
     Title    = "Click Teleport",
@@ -1091,7 +1091,7 @@ wowToggle = MovTab:Toggle({
 })
 ConfigMgr:Register("WalkOnWater", wowToggle)
 
-MovTab:Section({ Title = "Orbit" })
+MovTab:Section({ Expanded = false, Title = "Orbit" })
 
 orbitToggle = MovTab:Toggle({
     Title    = "Orbit Player",
@@ -1160,7 +1160,7 @@ ConfigMgr:Register("OrbitHeight", orbitHeightSlider)
 -- ══════════════════════════════════════════════════════════════════════════════
 
 -- Macro name input
-MacroTab:Section({ Title = "Interface" })
+MacroTab:Section({ Expanded = false, Title = "Interface" })
 macroNameInput = MacroTab:Input({
     Title = "Macro Name",
     Placeholder = "e.g. route_to_peak",
@@ -1169,13 +1169,13 @@ macroNameInput = MacroTab:Input({
     Callback = function() end
 })
 
-MacroTab:Section({ Title = "Status" })
+MacroTab:Section({ Expanded = false, Title = "Status" })
 macroStatusText = MacroTab:Paragraph({
     Title = "Status",
     Content = "Idle"
 })
 
-MacroTab:Section({ Title = "Recording" })
+MacroTab:Section({ Expanded = false, Title = "Recording" })
 
 MacroTab:Button({
     Title = "Start Recording",
@@ -1204,7 +1204,7 @@ MacroTab:Button({
     end
 })
 
-MacroTab:Section({ Title = "Playback" })
+MacroTab:Section({ Expanded = false, Title = "Playback" })
 
 MacroTab:Button({
     Title = "Play Current Macro",
@@ -1272,7 +1272,7 @@ recordInputsToggle = MacroTab:Toggle({
 })
 ConfigMgr:Register("MacroRecordInputs", recordInputsToggle)
 
-MacroTab:Section({ Title = "Position Backtracker (Rewind)" })
+MacroTab:Section({ Expanded = false, Title = "Position Backtracker (Rewind)" })
 
 local backtrackerToggle = MacroTab:Toggle({
     Title    = "Position Backtracker",
@@ -1320,7 +1320,7 @@ MacroTab:Button({
     end
 })
 
-MacroTab:Section({ Title = "Save / Load" })
+MacroTab:Section({ Expanded = false, Title = "Save / Load" })
 
 MacroTab:Button({
     Title = "Save Current Macro",
@@ -1389,7 +1389,7 @@ MacroTab:Button({
     end
 })
 
-MacroTab:Section({ Title = "Import / Export" })
+MacroTab:Section({ Expanded = false, Title = "Import / Export" })
 
 MacroTab:Button({
     Title = "Export to Clipboard",
@@ -1444,7 +1444,7 @@ MacroTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 -- MACRO QUEUE SECTION (Sequential Playback)
 -- ══════════════════════════════════════════════════════════════════════════════
-MacroTab:Section({ Title = "Macro Queue (Sequential)" })
+MacroTab:Section({ Expanded = false, Title = "Macro Queue (Sequential)" })
 
 MacroTab:Paragraph({
     Title = "Queue Info",
@@ -1534,7 +1534,7 @@ queueLoopToggle = MacroTab:Toggle({
 })
 ConfigMgr:Register("MacroQueueLoop", queueLoopToggle)
 
-MacroTab:Section({ Title = "Queue Playback" })
+MacroTab:Section({ Expanded = false, Title = "Queue Playback" })
 
 MacroTab:Button({
     Title = "Start Queue Playback",
@@ -1564,7 +1564,7 @@ MacroTab:Button({
 })
 
 -- Per-map info
-MacroTab:Section({ Title = "Map Info" })
+MacroTab:Section({ Expanded = false, Title = "Map Info" })
 MacroTab:Paragraph({
     Title = "Current Map",
     Content = "PlaceId: " .. tostring(game.PlaceId)
@@ -1598,7 +1598,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 -- VISUAL TAB
 -- ══════════════════════════════════════════════════════════════════════════════
-VisTab:Section({ Title = "Rendering" })
+VisTab:Section({ Expanded = false, Title = "Rendering" })
 
 perfStatsToggle = VisTab:Toggle({
     Title    = "Perf Stats (HUD)",
@@ -1642,7 +1642,7 @@ removeFogToggle = VisTab:Toggle({
 })
 ConfigMgr:Register("RemoveFog", removeFogToggle)
 
-VisTab:Section({ Title = "ESP Settings" })
+VisTab:Section({ Expanded = false, Title = "ESP Settings" })
 
 local EC = {
     White  = Color3.fromRGB(255,255,255), Red    = Color3.fromRGB(255,60,60),
@@ -1697,7 +1697,7 @@ espSkeletonToggle = VisTab:Toggle({
 })
 ConfigMgr:Register("ESPSkeleton", espSkeletonToggle)
 
-VisTab:Section({ Title = "Tracer" })
+VisTab:Section({ Expanded = false, Title = "Tracer" })
 
 tracerToggle = VisTab:Toggle({
     Title    = "Player Tracer",
@@ -1739,7 +1739,7 @@ tracerThickSlider = VisTab:Slider({
 })
 ConfigMgr:Register("TracerThickness", tracerThickSlider)
 
-VisTab:Section({ Title = "Performance & Anti-Lag" })
+VisTab:Section({ Expanded = false, Title = "Performance & Anti-Lag" })
 antiLagToggle = VisTab:Toggle({
     Title    = "Anti-Lag Mode",
     Tooltip  = "Disable heavy particles, shadows, and terrain details",
@@ -1772,7 +1772,7 @@ fpsCapSlider = VisTab:Slider({
 })
 ConfigMgr:Register("FPSCap", fpsCapSlider)
 
-VisTab:Section({ Title = "Camera" })
+VisTab:Section({ Expanded = false, Title = "Camera" })
 
 fovToggle = VisTab:Toggle({
     Title    = "FOV Modifier",
@@ -1794,7 +1794,7 @@ fovSlider = VisTab:Slider({
 })
 ConfigMgr:Register("FOVValue", fovSlider)
 
-VisTab:Section({ Title = "Radar" })
+VisTab:Section({ Expanded = false, Title = "Radar" })
 
 radarToggle = VisTab:Toggle({
     Title    = "Radar",
@@ -1837,7 +1837,7 @@ ConfigMgr:Register("RadarOpacity", radarOpacitySlider)
 -- ══════════════════════════════════════════════════════════════════════════════
 -- COMBAT TAB
 -- ══════════════════════════════════════════════════════════════════════════════
-CombatTab:Section({ Title = "Kill Aura" })
+CombatTab:Section({ Expanded = false, Title = "Kill Aura" })
 
 killAuraToggle = CombatTab:Toggle({
     Title    = "Kill Aura",
@@ -1892,7 +1892,7 @@ killAuraTeamToggle = CombatTab:Toggle({
 })
 ConfigMgr:Register("KillAuraTeamCheck", killAuraTeamToggle)
 
-CombatTab:Section({ Title = "Hitbox Expander" })
+CombatTab:Section({ Expanded = false, Title = "Hitbox Expander" })
 
 hitboxToggle = CombatTab:Toggle({
     Title    = "Hitbox Expander",
@@ -1955,7 +1955,7 @@ CombatTab:Keybind({
     end
 })
 
-CombatTab:Section({ Title = "Quick Switch" })
+CombatTab:Section({ Expanded = false, Title = "Quick Switch" })
 
 quickSwitchToggle = CombatTab:Toggle({
     Title    = "Quick Switch",
@@ -2013,7 +2013,7 @@ qsSecondKeyInput = CombatTab:Input({
 })
 ConfigMgr:Register("QuickSwitchSecondKey", qsSecondKeyInput)
 
-CombatTab:Section({ Title = "Instant Kill" })
+CombatTab:Section({ Expanded = false, Title = "Instant Kill" })
 
 ikToggle = CombatTab:Toggle({
     Title    = "Instant Kill NPC",
@@ -2056,7 +2056,7 @@ CombatTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 -- PLAYER TAB (Utility & Protection)
 -- ══════════════════════════════════════════════════════════════════════════════
-PlayerTab:Section({ Title = "Utility" })
+PlayerTab:Section({ Expanded = false, Title = "Utility" })
 
 antiAFKToggle = PlayerTab:Toggle({
     Title    = "Anti AFK",
@@ -2091,7 +2091,7 @@ godModeToggle = PlayerTab:Toggle({
 })
 ConfigMgr:Register("GodMode", godModeToggle)
 
-PlayerTab:Section({ Title = "Protection" })
+PlayerTab:Section({ Expanded = false, Title = "Protection" })
 
 antiDetectToggle = PlayerTab:Toggle({
     Title    = "Anti Detect (Adonis/AC)",
@@ -2168,7 +2168,7 @@ voidThreshSlider = PlayerTab:Slider({
 })
 ConfigMgr:Register("VoidThreshold", voidThreshSlider)
 
-PlayerTab:Section({ Title = "Exploit" })
+PlayerTab:Section({ Expanded = false, Title = "Exploit" })
 
 local gpSpoofToggle
 pcall(function()
@@ -2226,7 +2226,7 @@ pcall(function()
     })
 end)
 
-PlayerTab:Section({ Title = "Avatar Customizer" })
+PlayerTab:Section({ Expanded = false, Title = "Avatar Customizer" })
 
 avatarCustomizerToggle = PlayerTab:Toggle({
     Title    = "Avatar Customizer",
@@ -2407,7 +2407,7 @@ PlayerTab:Button({
 })
 
 
-PlayerTab:Section({ Title = "Info" })
+PlayerTab:Section({ Expanded = false, Title = "Info" })
 PlayerTab:Paragraph({ Title = "Username", Content = lp.Name })
 PlayerTab:Paragraph({ Title = "User ID",  Content = tostring(lp.UserId) })
 PlayerTab:Button({
@@ -2420,7 +2420,7 @@ PlayerTab:Button({
     end
 })
 
-PlayerTab:Section({ Title = "Server Utilities" })
+PlayerTab:Section({ Expanded = false, Title = "Server Utilities" })
 autoRejoinToggle = PlayerTab:Toggle({
     Title    = "Auto Rejoin on Disconnect",
     Flag     = "AutoRejoin",
@@ -2468,7 +2468,7 @@ PlayerTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 -- TELEPORT TAB
 -- ══════════════════════════════════════════════════════════════════════════════
-TeleTab:Section({ Title = "Position" })
+TeleTab:Section({ Expanded = false, Title = "Position" })
 
 TeleTab:Button({
     Title    = "Copy My Position",
@@ -2490,7 +2490,7 @@ TeleTab:Button({
     end
 })
 
-TeleTab:Section({ Title = "To Player" })
+TeleTab:Section({ Expanded = false, Title = "To Player" })
 
 selectedPlayer = nil
 tpDrop = TeleTab:Dropdown({
@@ -2560,7 +2560,7 @@ TeleTab:Button({
     end
 })
 
-TeleTab:Section({ Title = "Waypoints" })
+TeleTab:Section({ Expanded = false, Title = "Waypoints" })
 
 
 wpNameIn = TeleTab:Input({
@@ -2655,7 +2655,7 @@ TeleTab:Keybind({
     end
 })
 
-TeleTab:Section({ Title = "Waypoint Queue (Sequential)" })
+TeleTab:Section({ Expanded = false, Title = "Waypoint Queue (Sequential)" })
 
 TeleTab:Paragraph({
     Title = "Queue Info",
@@ -2777,7 +2777,7 @@ TeleTab:Keybind({
     end
 })
 
-TeleTab:Section({ Title = "Server" })
+TeleTab:Section({ Expanded = false, Title = "Server" })
 
 TeleTab:Button({
     Title    = "Rejoin Server",
@@ -2801,7 +2801,7 @@ TeleTab:Button({
 -- ══════════════════════════════════════════════════════════════════════════════
 -- AUTO TAB (Automation Features)
 -- ══════════════════════════════════════════════════════════════════════════════
-AutoTab:Section({ Title = "Instant Prompts" })
+AutoTab:Section({ Expanded = false, Title = "Instant Prompts" })
 
 instantPromptsToggle = AutoTab:Toggle({
     Title    = "Instant Prompts",
@@ -2814,7 +2814,7 @@ instantPromptsToggle = AutoTab:Toggle({
 })
 ConfigMgr:Register("InstantPrompts", instantPromptsToggle)
 
-AutoTab:Section({ Title = "Auto Clicker" })
+AutoTab:Section({ Expanded = false, Title = "Auto Clicker" })
 
 autoClickerToggle = AutoTab:Toggle({
     Title    = "Auto Clicker",
@@ -2969,7 +2969,7 @@ FavTab:Toggle({
 })
 
 -- Dynamic favorites: when user stars a toggle from any other tab, create a synced toggle here
-FavTab:Section({ Title = "Your Starred Features" })
+FavTab:Section({ Expanded = false, Title = "Your Starred Features" })
 
 Library._favCb = function(flagKey, isStarred, info)
     if isStarred then
@@ -3034,7 +3034,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 -- SETTINGS TAB
 -- ══════════════════════════════════════════════════════════════════════════════
-SetTab:Section({ Title = "Interface" })
+SetTab:Section({ Expanded = false, Title = "Interface" })
 
 SetTab:Keybind({
     Title    = "Toggle UI Key",
@@ -3057,7 +3057,7 @@ themeDrop = SetTab:Dropdown({
 })
 ConfigMgr:Register("Theme", themeDrop)
 
-SetTab:Section({ Title = "Discord Webhook Logger" })
+SetTab:Section({ Expanded = false, Title = "Discord Webhook Logger" })
 webhookUrlInput = SetTab:Input({
     Title       = "Webhook URL",
     Placeholder = "https://discord.com/api/webhooks/...",
@@ -3082,7 +3082,7 @@ SetTab:Button({
     end
 })
 
-SetTab:Section({ Title = "Auto Save" })
+SetTab:Section({ Expanded = false, Title = "Auto Save" })
 
 autoSaveToggle = SetTab:Toggle({
     Title    = "Auto Save Config",
@@ -3104,7 +3104,7 @@ autoSaveIntervalSlider = SetTab:Slider({
 })
 ConfigMgr:Register("AutoSaveInterval", autoSaveIntervalSlider)
 
-SetTab:Section({ Title = "Config" })
+SetTab:Section({ Expanded = false, Title = "Config" })
 
 cfgNameIn = SetTab:Input({
     Title       = "Config Name",
@@ -3190,7 +3190,7 @@ SetTab:Button({
     end
 })
 
-SetTab:Section({ Title = "Config Share Code (Base64)" })
+SetTab:Section({ Expanded = false, Title = "Config Share Code (Base64)" })
 
 shareCodeInput = SetTab:Input({
     Title       = "Share Code",
@@ -3231,7 +3231,7 @@ SetTab:Button({
     end
 })
 
-SetTab:Section({ Title = "About" })
+SetTab:Section({ Expanded = false, Title = "About" })
 SetTab:Paragraph({
     Title   = "Leon X",
     Content = "v"..CURRENT_VERSION.." • by leonx24"
@@ -3380,7 +3380,7 @@ UIS.InputBegan:Connect(function(i, gp)
     N("PANIC", "All features disabled")
 end)
 
-SetTab:Section({ Title = "Panic Key" })
+SetTab:Section({ Expanded = false, Title = "Panic Key" })
 SetTab:Keybind({
     Title    = "Panic Key (Disable All)",
     Value    = "Delete",
@@ -3671,21 +3671,21 @@ task.spawn(function()
     end)
     task.wait(0.2)
     pcall(function()
-        tw(SplashCard, 0.35, {BackgroundTransparency = 1})
+        tw(SplashCard, 0.18, {BackgroundTransparency = 1})
         for _, child in ipairs(SplashCard:GetDescendants()) do
             pcall(function()
                 if child:IsA("TextLabel") then
-                    TweenService:Create(child, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+                    TweenService:Create(child, TweenInfo.new(0.15), {TextTransparency = 1}):Play()
                 elseif child:IsA("Frame") then
-                    TweenService:Create(child, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+                    TweenService:Create(child, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play()
                 elseif child:IsA("UIStroke") then
-                    TweenService:Create(child, TweenInfo.new(0.3), {Transparency = 1}):Play()
+                    TweenService:Create(child, TweenInfo.new(0.15), {Transparency = 1}):Play()
                 end
             end)
         end
-        tw(SplashBg, 0.35, {BackgroundTransparency = 1})
+        tw(SplashBg, 0.2, {BackgroundTransparency = 1})
     end)
-    task.wait(0.35)
+    task.wait(0.2)
     pcall(function()
         if SplashGui and SplashGui.Parent then SplashGui:Destroy() end
     end)
