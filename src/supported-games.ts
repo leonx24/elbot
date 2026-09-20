@@ -52,6 +52,13 @@ export const DEFAULT_SUPPORTED_GAMES: SupportedGame[] = [
     placeIds: [122446657157717],
   },
   {
+    id: "ride-a-pet",
+    name: "Ride a Pet",
+    status: "WORK",
+    category: "Roblox",
+    placeIds: [124216119978534],
+  },
+  {
     id: "fish-and-monster",
     name: "Fish and Monster",
     status: "DISCONTINUED",
