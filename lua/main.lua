@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.0.5"
+local CURRENT_VERSION = "0.0.7"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
@@ -969,6 +969,7 @@ if ActiveGameModule then
         ActiveGameModule:WireUI(Window, {
             Fly          = Fly,
             Speed        = Speed,
+            Waypoint     = Waypoint,
             Window       = Window,
             AntiAFK      = AntiAFK,
             InfiniteJump = InfJump,
