@@ -818,6 +818,11 @@ local GAME_REGISTRY = {
         GameIds = { 9534705677 },
         Path = "modules/games/sniperarena.lua"
     },
+    {
+        Name = "Ride a Pet",
+        PlaceIds = { 124216119978534 },
+        Path = "modules/games/rideapet.lua"
+    },
 }
 
 local ActiveGameModule = nil
