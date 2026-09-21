@@ -825,8 +825,6 @@ let memberCountChannelId: string | null = null;
 async function updateMemberCountChannel(): Promise<void> {
   try {
     const guild = await client.guilds.fetch(config.GUILD_ID);
-    // Fetch all members to get accurate count
-    await guild.members.fetch();
     const memberCount = guild.memberCount;
     const targetName = `👥 Members: ${memberCount}`;
 
