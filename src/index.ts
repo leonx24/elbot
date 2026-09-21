@@ -819,6 +819,69 @@ async function updateVoiceChannelStatus(status?: string): Promise<void> {
   }
 }
 
+// ── Member Count Voice Channel ──
+let memberCountChannelId: string | null = null;
+
+async function updateMemberCountChannel(): Promise<void> {
+  try {
+    const guild = await client.guilds.fetch(config.GUILD_ID);
+    // Fetch all members to get accurate count
+    await guild.members.fetch();
+    const memberCount = guild.memberCount;
+    const targetName = `👥 Members: ${memberCount}`;
+
+    // Check if we already have a saved channel ID in database
+    if (!memberCountChannelId) {
+      const dbEntry = db.prepare("SELECT value FROM bot_settings WHERE key = 'member_count_channel_id'").get() as { value: string } | undefined;
+      if (dbEntry?.value) {
+        memberCountChannelId = dbEntry.value;
+      } else if (config.MEMBER_COUNT_CHANNEL_ID) {
+        memberCountChannelId = config.MEMBER_COUNT_CHANNEL_ID;
+      }
+    }
+
+    // Try to fetch existing channel
+    if (memberCountChannelId) {
+      const existingChannel = await guild.channels.fetch(memberCountChannelId).catch(() => null);
+      if (existingChannel && existingChannel.type === ChannelType.GuildVoice) {
+        if (existingChannel.name !== targetName) {
+          await existingChannel.setName(targetName);
+          console.log(`[MemberCount] Voice channel diperbarui: ${targetName}`);
+        }
+        return;
+      }
+      // Channel was deleted or not found, reset
+      memberCountChannelId = null;
+    }
+
+    // Create new voice channel
+    const newChannel = await guild.channels.create({
+      name: targetName,
+      type: ChannelType.GuildVoice,
+      permissionOverwrites: [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+          allow: [PermissionFlagsBits.ViewChannel]
+        }
+      ],
+      position: 0
+    });
+
+    memberCountChannelId = newChannel.id;
+
+    // Save to database so it persists across restarts
+    db.prepare(`
+      INSERT INTO bot_settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run("member_count_channel_id", newChannel.id);
+
+    console.log(`[MemberCount] Voice channel baru dibuat: ${targetName} (${newChannel.id})`);
+  } catch (error) {
+    console.error("[MemberCount] Gagal memperbarui member count channel:", error);
+  }
+}
+
 async function checkMonitoredPlaces(): Promise<void> {
   const monitoredChannelId = config.MONITORED_UPDATE_CHANNEL_ID;
   if (!monitoredChannelId) return;
@@ -913,6 +976,9 @@ client.once(Events.ClientReady, async (readyClient) => {
   });
   await updateVoiceChannelStatus().catch((error) => {
     console.error("Gagal menjalankan update voice channel status:", error);
+  });
+  await updateMemberCountChannel().catch((error) => {
+    console.error("Gagal menjalankan update member count channel:", error);
   });
 
   // Jalankan detektor update game Roblox secara berkala
@@ -5779,6 +5845,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
   } catch (error) {
     console.error("Gagal mengirim pesan selamat datang:", error);
   }
+
+  // Update member count voice channel
+  updateMemberCountChannel().catch((err) => {
+    console.error("[MemberCount] Gagal update setelah member join:", err);
+  });
 });
 
 client.on(Events.GuildMemberRemove, async (member) => {
@@ -5800,6 +5871,11 @@ client.on(Events.GuildMemberRemove, async (member) => {
   } catch (error) {
     console.error("Gagal mengirim pesan selamat tinggal:", error);
   }
+
+  // Update member count voice channel
+  updateMemberCountChannel().catch((err) => {
+    console.error("[MemberCount] Gagal update setelah member leave:", err);
+  });
 });
 
 await client.login(config.DISCORD_TOKEN);

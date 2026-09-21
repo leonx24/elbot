@@ -27,7 +27,8 @@ const schema = z.object({
   EXECUTION_LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   MONITORED_UPDATE_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   RULES_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
-  WELCOME_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
+  WELCOME_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  MEMBER_COUNT_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal(""))
 });
 
 export const config = schema.parse(process.env);
