@@ -59,6 +59,13 @@ export const DEFAULT_SUPPORTED_GAMES: SupportedGame[] = [
     placeIds: [124216119978534],
   },
   {
+    id: "steal-an-egg",
+    name: "Steal an Egg",
+    status: "WORK",
+    category: "Roblox",
+    placeIds: [107778070777162],
+  },
+  {
     id: "fish-and-monster",
     name: "Fish and Monster",
     status: "DISCONTINUED",
