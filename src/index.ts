@@ -126,6 +126,9 @@ class BoundedMap<K, V> extends Map<K, V> {
 
 const cooldowns = new BoundedMap<string, number>(5000);
 const ticketDeleteTimers = new BoundedMap<string, NodeJS.Timeout>(1000);
+// Fix: dedup log eksekusi per key dalam jendela singkat (1 eksekusi = banyak request validasi dari loader+worker)
+const recentExecutionLogs = new BoundedMap<string, number>(2000);
+const EXECUTION_LOG_DEDUP_MS = 20_000;
 const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
 
 // Fix #11: Whitelist-only role check (no name-based matching, no hardcoded ID fallback)
@@ -4709,6 +4712,7 @@ function collectBody(req: http.IncomingMessage, maxBytes: number = 100_000): Pro
 
 // Helper function untuk mencatat dan mengirim log eksekusi in-game
 async function recordAndSendExecutionLog(params: {
+  key?: string;
   discordId?: string | null;
   username?: string;
   robloxId?: string;
@@ -4716,11 +4720,21 @@ async function recordAndSendExecutionLog(params: {
   executor?: string;
   hwid?: string;
 }) {
+  const key = params.key || "";
   const username = params.username || "Unknown";
   const robloxId = params.robloxId || null;
   const placeId = params.placeId || "Unknown";
   const executor = params.executor || "Unknown";
   const hwid = params.hwid || "N/A";
+
+  // Dedup: satu eksekusi loader memicu beberapa request validasi (loader langsung,
+  // worker /main.lua, dan proxy modul). Lewati duplikat dalam jendela singkat.
+  if (key) {
+    const now = Date.now();
+    const last = recentExecutionLogs.get(key) ?? 0;
+    if (now - last < EXECUTION_LOG_DEDUP_MS) return;
+    recentExecutionLogs.set(key, now);
+  }
 
   // 1. Catat log eksekusi ke database SQLite
   try {
@@ -4923,6 +4937,7 @@ http.createServer(async (req, res) => {
 
       // Catat log eksekusi ke database dan kirim log ke Discord
       await recordAndSendExecutionLog({
+        key,
         discordId: result.discordId,
         username,
         robloxId,
@@ -5010,6 +5025,7 @@ http.createServer(async (req, res) => {
 
       // Catat log eksekusi ke database dan kirim log ke Discord
       await recordAndSendExecutionLog({
+        key,
         discordId: result.discordId,
         username,
         robloxId,
