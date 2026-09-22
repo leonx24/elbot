@@ -12,6 +12,7 @@ const schema = z.object({
   OWNER_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   TICKET_CATEGORY_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   SUPPORT_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
+  TICKET_GUARD_ROLE_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   BUG_REPORT_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),
   CHANGELOG_CHANNEL_ID: z.string().regex(/^\d+$/, "CHANGELOG_CHANNEL_ID harus berupa channel ID"),
   LOG_CHANNEL_ID: z.string().regex(/^\d+$/).optional().or(z.literal("")),

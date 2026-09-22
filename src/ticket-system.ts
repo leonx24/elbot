@@ -9,6 +9,7 @@ import {
   GuildMember,
   Message,
   PermissionFlagsBits,
+  Role,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
   TextChannel,
@@ -75,6 +76,46 @@ export function createTicketPanel() {
   });
 }
 
+export function findTicketGuardRole(guild: Guild): Role | undefined {
+  if (config.TICKET_GUARD_ROLE_ID) {
+    const role = guild.roles.cache.get(config.TICKET_GUARD_ROLE_ID);
+    if (role) return role;
+  }
+  return guild.roles.cache.find((r) => {
+    const name = r.name.toLowerCase().trim();
+    return (
+      name === "ticket guard" ||
+      name === "ticketing guard" ||
+      name === "ticketguard" ||
+      name === "ticketingguard" ||
+      name.replace(/[\s-_]/g, "") === "ticketguard" ||
+      name.replace(/[\s-_]/g, "") === "ticketingguard"
+    );
+  });
+}
+
+export function isTicketGuard(member?: GuildMember | null): boolean {
+  if (!member) return false;
+  if (member.id === config.OWNER_ID) return true;
+  if (member.guild.ownerId === member.id) return true;
+  if (member.permissions && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (config.OWNER_ROLE_ID && member.roles.cache.has(config.OWNER_ROLE_ID)) return true;
+  if (config.TICKET_GUARD_ROLE_ID && member.roles.cache.has(config.TICKET_GUARD_ROLE_ID)) return true;
+  if (config.SUPPORT_ROLE_ID && member.roles.cache.has(config.SUPPORT_ROLE_ID)) return true;
+
+  return member.roles.cache.some((r) => {
+    const name = r.name.toLowerCase().trim();
+    return (
+      name === "ticket guard" ||
+      name === "ticketing guard" ||
+      name === "ticketguard" ||
+      name === "ticketingguard" ||
+      name.replace(/[\s-_]/g, "") === "ticketguard" ||
+      name.replace(/[\s-_]/g, "") === "ticketingguard"
+    );
+  });
+}
+
 export async function createTicketChannel(
   guild: Guild,
   user: User,
@@ -87,27 +128,39 @@ export async function createTicketChannel(
   const paddedNumber = String(ticketNumber).padStart(4, "0");
   const channelName = `${category}-${paddedNumber}`;
 
+  const ticketGuardRole = findTicketGuardRole(guild);
+  const guardRoleId = ticketGuardRole?.id;
+
+  const permissionOverwrites: any[] = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
+    ...(config.SUPPORT_ROLE_ID
+      ? [{
+          id: config.SUPPORT_ROLE_ID,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+        }]
+      : []),
+    ...(config.OWNER_ROLE_ID
+      ? [{
+          id: config.OWNER_ROLE_ID,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+        }]
+      : [])
+  ];
+
+  if (guardRoleId && guardRoleId !== config.SUPPORT_ROLE_ID && guardRoleId !== config.OWNER_ROLE_ID) {
+    permissionOverwrites.push({
+      id: guardRoleId,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+    });
+  }
+
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
     parent: config.TICKET_CATEGORY_ID || undefined,
     topic: `Ticket #${paddedNumber} by ${user.tag} (${user.id}) | Category: ${categoryInfo.label} | Created: ${new Date().toISOString()}`,
-    permissionOverwrites: [
-      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
-      ...(config.SUPPORT_ROLE_ID
-        ? [{
-            id: config.SUPPORT_ROLE_ID,
-            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
-          }]
-        : []),
-      ...(config.OWNER_ROLE_ID
-        ? [{
-            id: config.OWNER_ROLE_ID,
-            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
-          }]
-        : [])
-    ]
+    permissionOverwrites
   });
 
   const welcomeEmbed = new EmbedBuilder()
@@ -142,8 +195,14 @@ export async function createTicketChannel(
       .setStyle(ButtonStyle.Danger)
   );
 
+  const mentionRoles: string[] = [];
+  if (config.SUPPORT_ROLE_ID) mentionRoles.push(`<@&${config.SUPPORT_ROLE_ID}>`);
+  if (guardRoleId && guardRoleId !== config.SUPPORT_ROLE_ID) mentionRoles.push(`<@&${guardRoleId}>`);
+
+  const roleMentions = mentionRoles.length > 0 ? ` | ${mentionRoles.join(" ")}` : "";
+
   await channel.send({
-    content: config.SUPPORT_ROLE_ID ? `<@${user.id}> | <@&${config.SUPPORT_ROLE_ID}>` : `<@${user.id}>`,
+    content: `<@${user.id}>${roleMentions}`,
     embeds: [welcomeEmbed],
     components: [buttons]
   });

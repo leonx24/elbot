@@ -52,6 +52,8 @@ import {
   closeTicket,
   createRatingButtons,
   getTicketStats,
+  findTicketGuardRole,
+  isTicketGuard,
   TICKET_CATEGORIES,
   type TicketCategory
 } from "./ticket-system.js";
@@ -3256,6 +3258,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      // Cegah pembuat tiket mengklaim tiketnya sendiri agar AI tidak mati
+      if (interaction.user.id === ticketData.user_id) {
+        await interaction.reply({
+          content: "❌ Anda adalah pembuat tiket ini! Pembuat tiket tidak dapat mengklaim tiket sendiri agar asisten AI dapat terus membantu Anda.",
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
+      // Validasi izin: Hanya role Ticket Guard / Support / Admin / Owner yang dapat mengklaim
+      const member = interaction.member instanceof GuildMember
+        ? interaction.member
+        : await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+
+      if (!isTicketGuard(member)) {
+        await interaction.reply({
+          content: "❌ Anda tidak memiliki izin untuk mengklaim tiket ini! Hanya staff dengan role **Ticket Guard** yang dapat mengklaim tiket.",
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+
       if (ticketData.claimed_by) {
         await interaction.reply({
           content: `Ticket ini sudah di-claim oleh <@${ticketData.claimed_by}>`,
@@ -3267,7 +3291,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       db.prepare("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?")
         .run(interaction.user.id, interaction.channel.id);
 
-      // Restriction: Only claimed staff + ticket creator + Owner role + Support role can view
+      // Restriction: Only claimed staff + ticket creator + Owner role + Support role + Ticket Guard role can view
       const permissions: any[] = [
         { id: interaction.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: ticketData.user_id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
@@ -3288,7 +3312,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
+      const ticketGuardRole = findTicketGuardRole(interaction.guild);
+      if (ticketGuardRole && ticketGuardRole.id !== config.SUPPORT_ROLE_ID && ticketGuardRole.id !== config.OWNER_ROLE_ID) {
+        permissions.push({
+          id: ticketGuardRole.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages]
+        });
+      }
+
       await (interaction.channel as TextChannel).permissionOverwrites.set(permissions).catch(err => console.error("Gagal mengupdate izin channel ticket claim:", err));
+
+      // Disable the claim button on the original message if possible
+      if (interaction.message && interaction.message.components.length > 0) {
+        const updatedRows = interaction.message.components.map((row) => {
+          const newRow = ActionRowBuilder.from(row as any) as ActionRowBuilder<ButtonBuilder>;
+          newRow.components.forEach((comp) => {
+            if ("customId" in comp.data && comp.data.customId === "ticket:claim") {
+              comp.setDisabled(true);
+              comp.setLabel(`Claimed (${interaction.user.username})`);
+            }
+          });
+          return newRow;
+        });
+        await interaction.message.edit({ components: updatedRows }).catch(() => null);
+      }
 
       const v2Claim = buildV2Container({
         title: "✋ Ticket Diklaim",
