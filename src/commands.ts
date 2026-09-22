@@ -182,8 +182,7 @@ export const commands = [
         .setDescription("Lihat daftar blacklist")
     ),
   new SlashCommandBuilder()
-    .setName("stats").setDescription("Statistik bot dan server")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setName("stats").setDescription("Statistik real-time bot dan server"),
   new SlashCommandBuilder()
     .setName("roblox")
     .setDescription("Cari dan lihat detail profil Roblox")
