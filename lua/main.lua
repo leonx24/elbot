@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.2.6"
+local CURRENT_VERSION = "0.2.8"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
@@ -794,6 +794,7 @@ local GAME_REGISTRY = {
     {
         Name = "Grow a Garden 2",
         PlaceIds = { 77085202503540, 97598239454123 },
+        GameIds = { 10200395747 },
         Path = "modules/games/growagarden2.lua"
     },
     {
@@ -805,11 +806,13 @@ local GAME_REGISTRY = {
     {
         Name = "Violence District",
         PlaceIds = { 93978595733734 },
+        GameIds = { 6739698191 },
         Path = "modules/games/violencedistrict.lua"
     },
     {
         Name = "Steal an Egg",
         PlaceIds = { 107778070777162 },
+        GameIds = { 10563114921 },
         Path = "modules/games/stealanegg.lua"
     },
     {
@@ -820,7 +823,8 @@ local GAME_REGISTRY = {
     },
     {
         Name = "Ride a Pet",
-        PlaceIds = { 124216119978534 },
+        PlaceIds = { 124216119978534, 77451396148528, 73314521587550 },
+        GameIds = { 10035204815 },
         Path = "modules/games/rideapet.lua"
     },
 }
