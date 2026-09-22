@@ -76,7 +76,7 @@ local function secureFetch(path)
     local ok, res = pcall(function()
         return game:HttpGet(fullUrl, true)
     end)
-    if ok and res and #res >= 10 then return res end
+    if ok and res and #res >= 1 then return res end
     return nil
 end
 
@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.2.8"
+local CURRENT_VERSION = "0.2.9"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
@@ -823,8 +823,8 @@ local GAME_REGISTRY = {
     },
     {
         Name = "Ride a Pet",
-        PlaceIds = { 124216119978534, 77451396148528, 73314521587550 },
-        GameIds = { 10035204815 },
+        PlaceIds = { 124216119978534, "124216119978534", 77451396148528, "77451396148528", 73314521587550, "73314521587550" },
+        GameIds = { 10035204815, "10035204815" },
         Path = "modules/games/rideapet.lua"
     },
 }
@@ -836,11 +836,22 @@ local curGameId  = tostring(game.GameId)
 -- DEV: log current game IDs so new games can be added to GAME_REGISTRY
 warn("[LeonX] DEV PlaceId=" .. curPlaceId .. " | GameId=" .. curGameId)
 
+local function idMatches(id1, id2)
+    if id1 == nil or id2 == nil then return false end
+    if tostring(id1) == tostring(id2) then return true end
+    local n1, n2 = tonumber(id1), tonumber(id2)
+    if n1 and n2 then
+        if n1 == n2 then return true end
+        if string.format("%.0f", n1) == string.format("%.0f", n2) then return true end
+    end
+    return false
+end
+
 for _, gameDef in ipairs(GAME_REGISTRY) do
     local isMatch = false
     if gameDef.PlaceIds then
         for _, pid in ipairs(gameDef.PlaceIds) do
-            if tostring(pid) == curPlaceId then
+            if idMatches(pid, curPlaceId) or idMatches(pid, game.PlaceId) then
                 isMatch = true
                 break
             end
@@ -848,16 +859,20 @@ for _, gameDef in ipairs(GAME_REGISTRY) do
     end
     if not isMatch and gameDef.GameIds then
         for _, gid in ipairs(gameDef.GameIds) do
-            if tostring(gid) == curGameId then
+            if idMatches(gid, curGameId) or idMatches(gid, game.GameId) then
                 isMatch = true
                 break
             end
         end
     end
     if isMatch then
+        warn("[LeonX] GAME MATCH FOUND: " .. tostring(gameDef.Name) .. " (" .. tostring(gameDef.Path) .. ")")
         local gm = load(gameDef.Path)
         if gm then
             ActiveGameModule = gm
+            warn("[LeonX] SUCCESS: Loaded game module: " .. tostring(gameDef.Name))
+        else
+            warn("[LeonX] CRITICAL: Failed to load game module '" .. tostring(gameDef.Name) .. "' from " .. tostring(gameDef.Path))
         end
         break
     end
