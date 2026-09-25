@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.4.0"
+local CURRENT_VERSION = "0.4.5"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
@@ -834,6 +834,7 @@ local MODULES_TO_LOAD = {
     { key = "NoFallDmg",      path = "modules/player/nofalldamage.lua" },
     { key = "InstantKill",    path = "modules/player/instantkill.lua" },
     { key = "KillAura",       path = "modules/combat/killaura.lua" },
+    { key = "Fling",          path = "modules/combat/fling.lua" },
     { key = "AutoClicker",    path = "modules/auto/autoclicker.lua" },
     { key = "QuickSwitch",    path = "modules/combat/quickswitch.lua" },
     { key = "MacroRec",       path = "modules/movements/macrorecorder.lua" },
@@ -896,6 +897,7 @@ local GodMode        = moduleResults.GodMode
 local NoFallDmg      = moduleResults.NoFallDmg
 local InstantKill    = moduleResults.InstantKill
 local KillAura       = moduleResults.KillAura
+local Fling          = moduleResults.Fling
 local AutoClicker    = moduleResults.AutoClicker
 local QuickSwitch    = moduleResults.QuickSwitch
 local MacroRec       = moduleResults.MacroRec
@@ -961,6 +963,7 @@ GodMode        = safe(GodMode)
 NoFallDmg      = safe(NoFallDmg)
 InstantKill    = safe(InstantKill)
 KillAura       = safe(KillAura)
+Fling          = safe(Fling)
 AutoClicker    = safe(AutoClicker)
 QuickSwitch    = safe(QuickSwitch)
 MacroRec       = safe(MacroRec)
@@ -1088,6 +1091,7 @@ _G.LeonX_Cleanup = function()
     pcall(function() if RemoveFog and RemoveFog.Disable then RemoveFog:Disable() end end)
     pcall(function() if AntiAFK and AntiAFK.Disable then AntiAFK:Disable() end end)
     pcall(function() if AutoClicker and AutoClicker.Disable then AutoClicker:Disable() end end)
+    pcall(function() if Fling and Fling.Disable then Fling:Disable() end end)
     pcall(function() if FOVMod and FOVMod.Disable then FOVMod:Disable() end end)
     pcall(function() if InstantPrompts and InstantPrompts.Disable then InstantPrompts:Disable() end end)
     pcall(function() if Orbit and Orbit.Disable then Orbit:Disable() end end)
@@ -2448,6 +2452,111 @@ InstantKillGroup:Button({
     end
 })
 
+local FlingGroup = CombatTab:Group({ Title = "Player Fling System", Icon = "wind" })
+
+flingToggle = FlingGroup:Toggle({
+    Title    = "Touch Fling",
+    Flag     = "TouchFling",
+    Value    = false,
+    Tooltip  = "Spin at extreme angular velocity to fling any player you touch into the void",
+    Callback = function(v)
+        if v then Fling:Enable() else Fling:Disable() end
+        N("Fling", v and "Touch Fling Enabled" or "Disabled")
+    end
+})
+ConfigMgr:Register("TouchFling", flingToggle)
+
+flingPowerSlider = FlingGroup:Slider({
+    Title    = "Fling Power",
+    Flag     = "FlingPower",
+    Value    = { Min = 10000, Max = 150000, Default = 50000 },
+    Step     = 5000,
+    Tooltip  = "Angular velocity multiplier (higher = flings further)",
+    Callback = function(v)
+        Fling:SetPower(v)
+    end
+})
+ConfigMgr:Register("FlingPower", flingPowerSlider)
+
+flingModeDrop = FlingGroup:Dropdown({
+    Title    = "Fling Physics Mode",
+    Flag     = "FlingMode",
+    Values   = { "AngularVelocity", "BodyAngularVelocity", "RotVelocity" },
+    Value    = "AngularVelocity",
+    Tooltip  = "Physics method used to generate fling impulse",
+    Callback = function(v)
+        Fling:SetMode(v)
+    end
+})
+ConfigMgr:Register("FlingMode", flingModeDrop)
+
+flingTeamToggle = FlingGroup:Toggle({
+    Title    = "Team Check",
+    Flag     = "FlingTeamCheck",
+    Value    = false,
+    Tooltip  = "Do not fling teammates",
+    Callback = function(v)
+        Fling:SetTeamCheck(v)
+    end
+})
+ConfigMgr:Register("FlingTeamCheck", flingTeamToggle)
+
+local selectedFlingTarget = nil
+local flingTargetDrop = nil
+
+local function refreshFlingTargets()
+    local list = Fling:GetPlayerList()
+    selectedFlingTarget = list[1]
+    if flingTargetDrop then
+        flingTargetDrop:Refresh(list)
+        flingTargetDrop:Select(list[1])
+    end
+    return list
+end
+
+flingTargetDrop = FlingGroup:Dropdown({
+    Title    = "Target Player",
+    Values   = Fling:GetPlayerList(),
+    Value    = 1,
+    Tooltip  = "Select a player to fling",
+    Callback = function(v)
+        selectedFlingTarget = v
+        Fling:SetTarget(v)
+    end
+})
+
+FlingGroup:Button({
+    Title    = "Refresh Player List",
+    Icon     = "refresh-cw",
+    Tooltip  = "Refresh active server players for fling targeting",
+    Callback = function()
+        refreshFlingTargets()
+        N("Fling", "Player list refreshed")
+    end
+})
+
+FlingGroup:Button({
+    Title    = "Fling Target Player",
+    Icon     = "target",
+    Tooltip  = "Teleport into target player, fling them away, and return back safely",
+    Callback = function()
+        if not selectedFlingTarget or selectedFlingTarget == "(no players)" then
+            N("Fling", "Select a target player first!")
+            return
+        end
+        Fling:FlingTarget(selectedFlingTarget, N)
+    end
+})
+
+FlingGroup:Button({
+    Title    = "Fling All Players",
+    Icon     = "flame",
+    Tooltip  = "Sequentially fling every player in the server, then return to original spot",
+    Callback = function()
+        Fling:FlingAll(N)
+    end
+})
+
 -- ══════════════════════════════════════════════════════════════════════════════
 -- PLAYER TAB (Utility & Protection)
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -3749,6 +3858,7 @@ UIS.InputBegan:Connect(function(i, gp)
     pcall(function() if HitboxExp.Enabled then hitboxToggle:Set(false); HitboxExp:Disable() end end)
     pcall(function() if InstantKill.Enabled then ikToggle:Set(false); InstantKill:Disable() end end)
     pcall(function() if QuickSwitch.Enabled then quickSwitchToggle:Set(false); QuickSwitch:Disable() end end)
+    pcall(function() if Fling and Fling.Enabled then flingToggle:Set(false); Fling:Disable() end end)
 
     -- Disable player modules
     pcall(function() if InfStamina.Enabled then infStaminaToggle:Set(false); InfStamina:Disable() end end)
@@ -3973,6 +4083,10 @@ task.delay(1.5, function()
         if hitboxToggle.Value == true and not HitboxExp.Enabled then HitboxExp:Enable() end
         if ikToggle.Value == true and not InstantKill.Enabled then InstantKill:Enable() end
         if quickSwitchToggle.Value == true and not QuickSwitch.Enabled then QuickSwitch:Enable() end
+        if flingToggle and flingToggle.Value == true and not Fling.Enabled then Fling:Enable() end
+        pcall(function() Fling:SetPower(flingPowerSlider.Value or 50000) end)
+        pcall(function() Fling:SetMode(flingModeDrop.Value or "AngularVelocity") end)
+        pcall(function() Fling:SetTeamCheck(flingTeamToggle.Value or false) end)
         pcall(function() QuickSwitch:SetDelayAfterShot(qsShotDelaySlider.Value or 50) end)
         pcall(function() QuickSwitch:SetDelayBetweenSwitches(qsSwitchDelaySlider.Value or 50) end)
         pcall(function() QuickSwitch:SetSwitchType(qsModeDrop.Value or "Q-Q") end)
