@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.4.5"
+local CURRENT_VERSION = "0.5.0"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
@@ -933,7 +933,7 @@ local DUMMY = {
     WireUI = function() end,
     Name = "Dummy",
 }
-local function safe(m) return m or setmetatable({}, {__index = function() return DUMMY end}) end
+local function safe(m) return m or setmetatable({}, {__index = DUMMY}) end
 
 ConfigMgr      = safe(ConfigMgr)
 AntiDetect     = safe(AntiDetect)
@@ -970,7 +970,6 @@ MacroRec       = safe(MacroRec)
 Backtracker    = safe(Backtracker)
 pcall(function()
     Backtracker:SetMacroRecorder(MacroRec)
-    Backtracker:SetNotifyCallback(N)
 end)
 AntiVoid       = safe(AntiVoid)
 GamepassSpoof  = safe(GamepassSpoof)
@@ -1162,6 +1161,12 @@ local function N(title, state, duration)
     })
 end
 
+pcall(function()
+    if Backtracker and Backtracker.SetNotifyCallback then
+        Backtracker:SetNotifyCallback(N)
+    end
+end)
+
 
 local function showDebugError(title, err)
     pcall(function()
@@ -1203,6 +1208,86 @@ if ConfigMgr then
         end
     end)
 end
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- PANIC KEY (Delete) — Active across BOTH Game Mode and Universal Mode
+-- ════════════════════════════════════════════════════════════════════════════
+local panicKey = Enum.KeyCode.Delete
+
+local function triggerPanic()
+    pcall(function()
+        if ActiveGameModule and ActiveGameModule.Disable then
+            ActiveGameModule:Disable()
+        end
+    end)
+
+    -- Disable movement modules
+    pcall(function() if flyToggle then flyToggle:Set(false) end; if Fly and Fly.Disable then Fly:Disable() end end)
+    pcall(function() if speedToggle then speedToggle:Set(false) end; if Speed and Speed.Disable then Speed:Disable() end end)
+    pcall(function() if fcToggle then fcToggle:Set(false) end; if FreeCam and FreeCam.Disable then FreeCam:Disable() end end)
+    pcall(function() if infJumpToggle then infJumpToggle:Set(false) end; if InfJump and InfJump.Disable then InfJump:Disable() end end)
+    pcall(function() if noclipToggle then noclipToggle:Set(false) end; if Noclip and Noclip.Disable then Noclip:Disable() end end)
+    pcall(function() if antiRagdollToggle then antiRagdollToggle:Set(false) end; if AntiRagdoll and AntiRagdoll.Disable then AntiRagdoll:Disable() end end)
+    pcall(function() if invisToggle then invisToggle:Set(false) end; if Invisible and Invisible.Disable then Invisible:Disable() end end)
+    pcall(function() if clickTPToggle then clickTPToggle:Set(false) end; if ClickTP and ClickTP.Disable then ClickTP:Disable() end end)
+    pcall(function() if wowToggle then wowToggle:Set(false) end; if WalkOnWater and WalkOnWater.Disable then WalkOnWater:Disable() end end)
+    pcall(function() if orbitToggle then orbitToggle:Set(false) end; if Orbit and Orbit.Disable then Orbit:Disable() end end)
+
+    -- Disable visual modules
+    pcall(function() if espToggle then espToggle:Set(false) end; if ESP and ESP.Disable then ESP:Disable() end end)
+    pcall(function() if fullBrightToggle then fullBrightToggle:Set(false) end; if FullBright and FullBright.Disable then FullBright:Disable() end end)
+    pcall(function() if tracerToggle then tracerToggle:Set(false) end; if Tracer and Tracer.Disable then Tracer:Disable() end end)
+    pcall(function() if removeFogToggle then removeFogToggle:Set(false) end; if RemoveFog and RemoveFog.Disable then RemoveFog:Disable() end end)
+    pcall(function() if fovToggle then fovToggle:Set(false) end; if FOVMod and FOVMod.Disable then FOVMod:Disable() end end)
+    pcall(function() if radarToggle then radarToggle:Set(false) end; if Radar and Radar.Disable then Radar:Disable() end end)
+
+    -- Disable combat modules
+    pcall(function() if killAuraToggle then killAuraToggle:Set(false) end; if KillAura and KillAura.Disable then KillAura:Disable() end end)
+    pcall(function() if hitboxToggle then hitboxToggle:Set(false) end; if HitboxExp and HitboxExp.Disable then HitboxExp:Disable() end end)
+    pcall(function() if ikToggle then ikToggle:Set(false) end; if InstantKill and InstantKill.Disable then InstantKill:Disable() end end)
+    pcall(function() if quickSwitchToggle then quickSwitchToggle:Set(false) end; if QuickSwitch and QuickSwitch.Disable then QuickSwitch:Disable() end end)
+    pcall(function() if flingToggle then flingToggle:Set(false) end; if Fling and Fling.Disable then Fling:Disable() end end)
+
+    -- Disable player modules
+    pcall(function() if infStaminaToggle then infStaminaToggle:Set(false) end; if InfStamina and InfStamina.Disable then InfStamina:Disable() end end)
+    pcall(function() if godModeToggle then godModeToggle:Set(false) end; if GodMode and GodMode.Disable then GodMode:Disable() end end)
+    pcall(function() if noFallToggle then noFallToggle:Set(false) end; if NoFallDmg and NoFallDmg.Disable then NoFallDmg:Disable() end end)
+    pcall(function() if antiFlingToggle then antiFlingToggle:Set(false) end; if AntiFling and AntiFling.Disable then AntiFling:Disable() end end)
+    pcall(function() if antiVoidToggle then antiVoidToggle:Set(false) end; if AntiVoid and AntiVoid.Disable then AntiVoid:Disable() end end)
+    pcall(function() if gpSpoofToggle then gpSpoofToggle:Set(false) end; if GamepassSpoof and GamepassSpoof.Disable then GamepassSpoof:Disable() end end)
+    pcall(function() if avatarCustomizerToggle then avatarCustomizerToggle:Set(false) end; if AvatarSpoof and AvatarSpoof.Disable then AvatarSpoof:Disable() end end)
+
+    -- Disable auto modules
+    pcall(function() if autoClickerToggle then autoClickerToggle:Set(false) end; if AutoClicker and AutoClicker.Disable then AutoClicker:Disable() end end)
+    pcall(function() if backtrackerToggle then backtrackerToggle:Set(false) end; if Backtracker and Backtracker.Disable then Backtracker:Disable() end end)
+    pcall(function() if instantPromptsToggle then instantPromptsToggle:Set(false) end; if InstantPrompts and InstantPrompts.Disable then InstantPrompts:Disable() end end)
+
+    -- Stop waypoint queue
+    pcall(function() if Waypoint and Waypoint.StopQueue then Waypoint:StopQueue() end end)
+
+    -- Reset WalkSpeed/JumpPower to normal
+    pcall(function()
+        local char = lp.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = 16
+                hum.JumpPower = 50
+                hum.JumpHeight = 7.2
+            end
+        end
+    end)
+
+    -- Hide the window
+    pcall(function() if Window and Window.Close then Window:Close() end end)
+
+    N("PANIC", "All features disabled")
+end
+
+UIS.InputBegan:Connect(function(i, gp)
+    if gp or i.KeyCode ~= panicKey then return end
+    triggerPanic()
+end)
 
 -- ══ GAME MODULE vs UNIVERSAL MODE ═════════════════════════════════════
 if ActiveGameModule then
@@ -3826,75 +3911,8 @@ UIS.InputBegan:Connect(function(i, gp)
 end)
 
 -- ════════════════════════════════════════════════════════════════════════════
--- PANIC KEY (Delete) — Disable ALL active modules + hide window
+-- PANIC KEY SETTINGS (Handler registered globally above)
 -- ════════════════════════════════════════════════════════════════════════════
-local panicKey = Enum.KeyCode.Delete
-
-UIS.InputBegan:Connect(function(i, gp)
-    if gp or i.KeyCode ~= panicKey then return end
-
-    -- Disable all movement modules
-    pcall(function() if Fly.Enabled then flyToggle:Set(false); Fly:Disable() end end)
-    pcall(function() if Speed.Enabled then speedToggle:Set(false); Speed:Disable() end end)
-    pcall(function() if FreeCam.Enabled then fcToggle:Set(false); FreeCam:Disable() end end)
-    pcall(function() if InfJump.Enabled then infJumpToggle:Set(false); InfJump:Disable() end end)
-    pcall(function() if Noclip.Enabled then noclipToggle:Set(false); Noclip:Disable() end end)
-    pcall(function() if AntiRagdoll.Enabled then antiRagdollToggle:Set(false); AntiRagdoll:Disable() end end)
-    pcall(function() if Invisible.Enabled then invisToggle:Set(false); Invisible:Disable() end end)
-    pcall(function() if ClickTP.Enabled then clickTPToggle:Set(false); ClickTP:Disable() end end)
-    pcall(function() if WalkOnWater.Enabled then wowToggle:Set(false); WalkOnWater:Disable() end end)
-    pcall(function() if Orbit and Orbit.Enabled then orbitToggle:Set(false); Orbit:Disable() end end)
-
-    -- Disable visual modules
-    pcall(function() if ESP.Enabled then espToggle:Set(false); ESP:Disable() end end)
-    pcall(function() if FullBright.Enabled then fullBrightToggle:Set(false); FullBright:Disable() end end)
-    pcall(function() if Tracer.Enabled then tracerToggle:Set(false); Tracer:Disable() end end)
-    pcall(function() if RemoveFog.Enabled then removeFogToggle:Set(false); RemoveFog:Disable() end end)
-    pcall(function() if FOVMod and FOVMod.Enabled then fovToggle:Set(false); FOVMod:Disable() end end)
-    pcall(function() if Radar and Radar.Enabled then radarToggle:Set(false); Radar:Disable() end end)
-
-    -- Disable combat modules
-    pcall(function() if KillAura.Enabled then killAuraToggle:Set(false); KillAura:Disable() end end)
-    pcall(function() if HitboxExp.Enabled then hitboxToggle:Set(false); HitboxExp:Disable() end end)
-    pcall(function() if InstantKill.Enabled then ikToggle:Set(false); InstantKill:Disable() end end)
-    pcall(function() if QuickSwitch.Enabled then quickSwitchToggle:Set(false); QuickSwitch:Disable() end end)
-    pcall(function() if Fling and Fling.Enabled then flingToggle:Set(false); Fling:Disable() end end)
-
-    -- Disable player modules
-    pcall(function() if InfStamina.Enabled then infStaminaToggle:Set(false); InfStamina:Disable() end end)
-    pcall(function() if GodMode.Enabled then godModeToggle:Set(false); GodMode:Disable() end end)
-    pcall(function() if NoFallDmg.Enabled then noFallToggle:Set(false); NoFallDmg:Disable() end end)
-    pcall(function() if AntiFling.Enabled then antiFlingToggle:Set(false); AntiFling:Disable() end end)
-    pcall(function() if AntiVoid.Enabled then antiVoidToggle:Set(false); AntiVoid:Disable() end end)
-    pcall(function() if GamepassSpoof.Enabled then gpSpoofToggle:Set(false); GamepassSpoof:Disable() end end)
-    pcall(function() if AvatarSpoof.Enabled then avatarCustomizerToggle:Set(false); AvatarSpoof:Disable() end end)
-
-    -- Disable auto modules
-    pcall(function() if AutoClicker.Enabled then autoClickerToggle:Set(false); AutoClicker:Disable() end end)
-    pcall(function() if Backtracker.Enabled then backtrackerToggle:Set(false); Backtracker:Disable() end end)
-    pcall(function() if InstantPrompts and InstantPrompts.Enabled then instantPromptsToggle:Set(false); InstantPrompts:Disable() end end)
-
-    -- Stop waypoint queue
-    pcall(function() Waypoint:StopQueue() end)
-
-    -- Reset WalkSpeed/JumpPower to normal
-    pcall(function()
-        local char = lp.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.WalkSpeed = 16
-                hum.JumpPower = 50
-                hum.JumpHeight = 7.2
-            end
-        end
-    end)
-
-    -- Hide the window
-    pcall(function() Window:Close() end)
-
-    N("PANIC", "All features disabled")
-end)
 
 SetTab:Section({ Expanded = false, Title = "Panic Key" })
 SetTab:Keybind({
