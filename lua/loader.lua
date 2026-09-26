@@ -86,14 +86,18 @@ local function fetchCode(u)
     end
     local reqFn = (syn and syn.request) or (http and http.request) or http_request or request
     if reqFn then
+        local headers = {
+            ["User-Agent"] = "Roblox/LeonX-Executor",
+        }
+        local activeAuth = (getgenv and getgenv().LeonX_AuthKey) or ""
+        if activeAuth ~= "" then
+            headers["X-Leon-Key"] = activeAuth
+        end
         local okReq, r = pcall(function()
             return reqFn({
                 Url = u,
                 Method = "GET",
-                Headers = {
-                    ["User-Agent"] = "Roblox/LeonX-Executor",
-                    ["X-Leon-Key"] = "LEONX-OWNER-BYPASS-998"
-                }
+                Headers = headers
             })
         end)
         if okReq and r and r.Body and #r.Body > 50 and not r.Body:find("^%s*<!") and not r.Body:find("403 Forbidden") then
