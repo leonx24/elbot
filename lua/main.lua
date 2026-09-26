@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.5.0"
+local CURRENT_VERSION = "0.5.1"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
