@@ -84,7 +84,7 @@ local raw_loadstring = loadstring or (getgenv and getgenv().loadstring) or (getf
 
 
 
-local CURRENT_VERSION = "0.5.2"
+local CURRENT_VERSION = "0.6.2"
 local remoteVersionFetched = false
 pcall(function()
     local vSrc = secureFetch("version.txt")
@@ -1154,11 +1154,13 @@ end
 
 -- Notification helper
 local function N(title, state, duration)
-    Library:Notify({
-        Title    = title,
-        Content  = state or "",
-        Duration = duration or 2,
-    })
+    pcall(function()
+        Library:Notify({
+            Title    = title,
+            Content  = state or "",
+            Duration = duration or 2,
+        })
+    end)
 end
 
 pcall(function()
