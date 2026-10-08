@@ -36,6 +36,55 @@ export const commands = [
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
     ),
   new SlashCommandBuilder()
+    .setName("game-manage")
+    .setDescription("Kelola daftar supported game di database bot (Owner Only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((sub) =>
+      sub.setName("list")
+        .setDescription("Lihat semua daftar supported game saat ini")
+    )
+    .addSubcommand((sub) =>
+      sub.setName("add")
+        .setDescription("Tambah game baru ke daftar supported games")
+        .addStringOption((o) => o.setName("nama").setDescription("Nama game Roblox").setRequired(true))
+        .addStringOption((o) =>
+          o.setName("status").setDescription("Status script game").setRequired(true)
+            .addChoices(
+              { name: "🟢 WORK (Normal)", value: "WORK" },
+              { name: "🔧 MAINTENANCE (Sedang Perbaikan)", value: "MAINTENANCE" },
+              { name: "🟠 NEED UPDATE (Perlu Update)", value: "NEED_UPDATE" },
+              { name: "🔴 DOWN (Gangguan)", value: "DOWN" },
+              { name: "🔴 DISCONTINUED (Dihentikan)", value: "DISCONTINUED" }
+            )
+        )
+        .addStringOption((o) => o.setName("place_id").setDescription("Roblox Place ID (pisahkan koma jika banyak)"))
+        .addStringOption((o) => o.setName("catatan").setDescription("Catatan/keterangan tambahan"))
+        .addStringOption((o) => o.setName("id").setDescription("ID slug unik (opsional, contoh: steal-an-egg)"))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("edit")
+        .setDescription("Edit informasi atau status game yang sudah ada")
+        .addStringOption((o) => o.setName("id_game").setDescription("ID game atau nama game yang ingin diedit").setRequired(true))
+        .addStringOption((o) =>
+          o.setName("status").setDescription("Status baru script game")
+            .addChoices(
+              { name: "🟢 WORK (Normal)", value: "WORK" },
+              { name: "🔧 MAINTENANCE (Sedang Perbaikan)", value: "MAINTENANCE" },
+              { name: "🟠 NEED UPDATE (Perlu Update)", value: "NEED_UPDATE" },
+              { name: "🔴 DOWN (Gangguan)", value: "DOWN" },
+              { name: "🔴 DISCONTINUED (Dihentikan)", value: "DISCONTINUED" }
+            )
+        )
+        .addStringOption((o) => o.setName("nama").setDescription("Nama baru untuk game"))
+        .addStringOption((o) => o.setName("catatan").setDescription("Catatan/keterangan baru (ketik 'none' untuk hapus)"))
+        .addStringOption((o) => o.setName("place_id").setDescription("Place ID baru (pisahkan koma)"))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("remove")
+        .setDescription("Hapus game dari daftar supported games")
+        .addStringOption((o) => o.setName("id_game").setDescription("ID game atau nama game yang ingin dihapus").setRequired(true))
+    ),
+  new SlashCommandBuilder()
     .setName("changelog")
     .setDescription("Lihat atau terbitkan changelog")
     .addSubcommand((sub) => sub.setName("latest").setDescription("Lihat update terbaru"))

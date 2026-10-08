@@ -1022,6 +1022,24 @@ local GAME_REGISTRY = {
         GameIds = { 10035204815, "10035204815" },
         Path = "modules/games/rideapet.lua"
     },
+    {
+        Name = "Loot To Forge",
+        PlaceIds = { 118805555015549, "118805555015549" },
+        GameIds = { 10684750879, "10684750879" },
+        Path = "modules/games/lootforge.lua"
+    },
+    {
+        Name = "Fishing Master",
+        PlaceIds = { 99925503388128, "99925503388128" },
+        GameIds = { 10039889230, "10039889230" },
+        Path = "modules/games/fishingmaster.lua"
+    },
+    {
+        Name = "Break and Steal an Egg",
+        PlaceIds = { 114326934417838, "114326934417838" },
+        GameIds = { 10765288803, "10765288803" },
+        Path = "modules/games/breakandsteal.lua"
+    },
 }
 
 local ActiveGameModule = nil

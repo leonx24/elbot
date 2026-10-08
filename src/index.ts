@@ -38,6 +38,12 @@ import {
   forceGenerateUserKey,
   validateUserKey,
   resetUserKeyBinding,
+  reactivateUserKey,
+  getAllSupportedGames,
+  getSupportedGameById,
+  addSupportedGame,
+  updateSupportedGame,
+  deleteSupportedGame,
   banIp,
   unbanIp,
   clearAllBannedIps,
@@ -132,13 +138,35 @@ const ticketDeleteTimers = new BoundedMap<string, NodeJS.Timeout>(1000);
 // Fix: dedup log eksekusi per key dalam jendela singkat (1 eksekusi = banyak request validasi dari loader+worker)
 const recentExecutionLogs = new BoundedMap<string, number>(2000);
 const EXECUTION_LOG_DEDUP_MS = 20_000;
-const ownerOnlyCommands = new Set(["warn", "timeout", "kick", "ban", "stats", "setstatus", "setvoicechannel", "blacklist", "monitor", "send-rules", "generatekey", "lookup"]);
+const ownerOnlyCommands = new Set([
+  "warn",
+  "timeout",
+  "kick",
+  "ban",
+  "stats",
+  "setstatus",
+  "setvoicechannel",
+  "blacklist",
+  "monitor",
+  "send-rules",
+  "generatekey",
+  "lookup",
+  "game-manage"
+]);
+
+// Helper: Owner check dengan prioritas OWNER_ROLE_ID dan fallback OWNER_ID
+function isOwner(member?: GuildMember | null, userId?: string): boolean {
+  if (member && config.OWNER_ROLE_ID && member.roles.cache.has(config.OWNER_ROLE_ID)) return true;
+  if (userId && userId === config.OWNER_ID) return true;
+  if (member && member.id === config.OWNER_ID) return true;
+  if (member && member.guild && member.guild.ownerId === member.id) return true;
+  return false;
+}
 
 // Fix #11: Whitelist-only role check (no name-based matching, no hardcoded ID fallback)
 function isUserOwnerOrAdmin(userId: string, member?: GuildMember | null): boolean {
-  if (userId === config.OWNER_ID) return true;
+  if (isOwner(member, userId)) return true;
   if (!member) return false;
-  if (config.OWNER_ROLE_ID && member.roles.cache.has(config.OWNER_ROLE_ID)) return true;
   if (member.permissions && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (member.permissions && member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
   return false;
@@ -1199,13 +1227,15 @@ client.once(Events.ClientReady, async (readyClient) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
-      if (ownerOnlyCommands.has(interaction.commandName) &&
-          interaction.user.id !== config.OWNER_ID) {
-        await interaction.reply({
-          content: "Command ini khusus owner bot.",
-          flags: MessageFlags.Ephemeral
-        });
-        return;
+      if (ownerOnlyCommands.has(interaction.commandName)) {
+        const member = interaction.member instanceof GuildMember ? interaction.member : null;
+        if (!isOwner(member, interaction.user.id)) {
+          await interaction.reply({
+            content: "❌ Command ini khusus role owner bot.",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
       }
 
       if (onCooldown(interaction.user.id, interaction.commandName)) {
@@ -1925,9 +1955,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         if (sub === "panel") {
-          if (interaction.user.id !== config.OWNER_ID) {
+          const member = interaction.member instanceof GuildMember ? interaction.member : null;
+          if (!isOwner(member, interaction.user.id)) {
             await interaction.reply({
-              content: "Hanya owner yang dapat membuat panel ticket.",
+              content: "❌ Hanya role owner yang dapat membuat panel ticket.",
               flags: MessageFlags.Ephemeral
             });
             return;
@@ -2278,7 +2309,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         } else if (sub === "games") {
           const targetChannel = (interaction.channel as TextChannel | null);
           const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
-          const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+          const games = getAllSupportedGames();
+          const v2Payload = buildSupportedGamesV2(games, guildIcon);
 
           if (!targetChannel || !("send" in targetChannel) || typeof targetChannel.send !== "function") {
             await interaction.reply({
@@ -2319,7 +2351,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "supported-games" || interaction.commandName === "support-game") {
         const targetChannel = (interaction.options.getChannel("channel") as TextChannel | null) ?? (interaction.channel as TextChannel | null);
         const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
-        const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+        const games = getAllSupportedGames();
+        const v2Payload = buildSupportedGamesV2(games, guildIcon);
 
         if (!targetChannel || !("send" in targetChannel) || typeof targetChannel.send !== "function") {
           await interaction.reply({
@@ -2341,6 +2374,145 @@ client.on(Events.InteractionCreate, async (interaction) => {
             content: `❌ Gagal mengirim pesan ke <#${targetChannel.id}>: ${err instanceof Error ? err.message : String(err)}`,
             flags: MessageFlags.Ephemeral
           });
+        }
+      }
+
+      if (interaction.commandName === "game-manage") {
+        const member = interaction.member instanceof GuildMember ? interaction.member : null;
+        if (!isOwner(member, interaction.user.id)) {
+          await interaction.reply({
+            content: "❌ Perintah ini khusus untuk role owner bot.",
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        const sub = interaction.options.getSubcommand();
+
+        if (sub === "list") {
+          const games = getAllSupportedGames();
+          if (games.length === 0) {
+            await interaction.reply({
+              content: "Belum ada game yang terdaftar di database.",
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          const lines = games.map((g, idx) => {
+            const statusEmoji = g.status === "WORK" ? "🟢" : g.status === "MAINTENANCE" ? "🔧" : g.status === "NEED_UPDATE" ? "🟠" : "🔴";
+            const pIds = g.placeIds && g.placeIds.length > 0 ? ` [Place: ${g.placeIds.join(", ")}]` : "";
+            const note = g.note ? `\n   └─ Note: *${g.note}*` : "";
+            return `${idx + 1}. ${statusEmoji} **${g.name}** (\`${g.id}\`) — \`${g.status}\`${pIds}${note}`;
+          }).join("\n");
+
+          const embed = new EmbedBuilder()
+            .setTitle("🎮 Daftar Supported Games (Database)")
+            .setDescription(lines.length > 3900 ? lines.slice(0, 3900) + "..." : lines)
+            .setColor(0x5865f2)
+            .setFooter({ text: "Gunakan /game-manage edit atau add untuk mengubah status game." });
+
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+          return;
+        }
+
+        if (sub === "add") {
+          const nama = interaction.options.getString("nama", true).trim();
+          const status = interaction.options.getString("status", true) as any;
+          const placeIdStr = interaction.options.getString("place_id");
+          const note = interaction.options.getString("catatan")?.trim();
+          const customId = interaction.options.getString("id")?.trim();
+
+          const placeIds = placeIdStr
+            ? placeIdStr.split(/[\s,]+/).filter(Boolean).map(id => id.trim())
+            : undefined;
+
+          const added = addSupportedGame({
+            id: customId || undefined,
+            name: nama,
+            status,
+            category: "Roblox",
+            note: note || undefined,
+            placeIds
+          });
+
+          await interaction.reply({
+            content: `✅ Game **${added.name}** (\`${added.id}\`) berhasil ditambahkan ke database dengan status \`${added.status}\`!`,
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        if (sub === "edit") {
+          const idGame = interaction.options.getString("id_game", true).trim();
+          const newStatus = interaction.options.getString("status") as any;
+          const newName = interaction.options.getString("nama")?.trim();
+          const newNote = interaction.options.getString("catatan")?.trim();
+          const placeIdStr = interaction.options.getString("place_id");
+
+          const existing = getSupportedGameById(idGame);
+          if (!existing) {
+            await interaction.reply({
+              content: `❌ Game dengan ID atau nama \`${idGame}\` tidak ditemukan di database. Gunakan \`/game-manage list\` untuk melihat daftar game.`,
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          const placeIds = placeIdStr !== null && placeIdStr !== undefined
+            ? (placeIdStr.toLowerCase() === "none" ? [] : placeIdStr.split(/[\s,]+/).filter(Boolean).map(id => id.trim()))
+            : undefined;
+
+          const noteToUpdate = newNote !== undefined
+            ? (newNote.toLowerCase() === "none" ? null : newNote)
+            : undefined;
+
+          const updated = updateSupportedGame(existing.id || idGame, {
+            status: newStatus || undefined,
+            name: newName || undefined,
+            note: noteToUpdate,
+            placeIds
+          });
+
+          if (!updated) {
+            await interaction.reply({
+              content: `❌ Gagal memperbarui game \`${idGame}\`.`,
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          await interaction.reply({
+            content: `✅ Game **${updated.name}** (\`${updated.id}\`) berhasil diperbarui!\n• **Status:** \`${updated.status}\`\n• **Catatan:** ${updated.note || "*Tidak ada*"}\n• **Place IDs:** ${updated.placeIds && updated.placeIds.length > 0 ? updated.placeIds.join(", ") : "*Tidak ada*"}`,
+            flags: MessageFlags.Ephemeral
+          });
+          return;
+        }
+
+        if (sub === "remove") {
+          const idGame = interaction.options.getString("id_game", true).trim();
+          const existing = getSupportedGameById(idGame);
+          if (!existing) {
+            await interaction.reply({
+              content: `❌ Game dengan ID atau nama \`${idGame}\` tidak ditemukan.`,
+              flags: MessageFlags.Ephemeral
+            });
+            return;
+          }
+
+          const deleted = deleteSupportedGame(existing.id || idGame);
+          if (deleted) {
+            await interaction.reply({
+              content: `🗑️ Game **${existing.name}** (\`${existing.id}\`) berhasil dihapus dari database.`,
+              flags: MessageFlags.Ephemeral
+            });
+          } else {
+            await interaction.reply({
+              content: `❌ Gagal menghapus game \`${idGame}\`.`,
+              flags: MessageFlags.Ephemeral
+            });
+          }
+          return;
         }
       }
 
@@ -2946,9 +3118,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (interaction.commandName === "send-rules") {
-        if (interaction.user.id !== config.OWNER_ID) {
+        const member = interaction.member instanceof GuildMember ? interaction.member : null;
+        if (!isOwner(member, interaction.user.id)) {
           await interaction.reply({
-            content: "Hanya owner yang dapat mengirimkan rules.",
+            content: "❌ Hanya role owner yang dapat mengirimkan rules.",
             flags: MessageFlags.Ephemeral
           });
           return;
@@ -3232,7 +3405,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // Refresh script support status button handler
     if (interaction.isButton() && interaction.customId === "refresh_script_status") {
       const guildIcon = interaction.guild?.iconURL() ?? client.user?.displayAvatarURL();
-      const v2Payload = buildSupportedGamesV2(undefined, guildIcon);
+      const games = getAllSupportedGames();
+      const v2Payload = buildSupportedGamesV2(games, guildIcon);
       await interaction.update(v2Payload);
       return;
     }
@@ -4591,7 +4765,7 @@ client.on(Events.MessageCreate, async (message) => {
   // Lewati pengecekan jika pengirim adalah owner atau staf dengan permission ManageMessages
   if (
     member.permissions.has(PermissionFlagsBits.ManageMessages) ||
-    member.id === config.OWNER_ID
+    isOwner(member, member.id)
   ) {
     return;
   }
@@ -4777,6 +4951,7 @@ const ALLOWED_ORIGINS = new Set([
 // Fix #8 & #9: Bounded rate limit trackers for OAuth and API endpoints
 const oauthIpRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(5000);
 const userResetCooldown = new BoundedMap<string, number>(5000);
+const userReactivateCooldown = new BoundedMap<string, number>(5000);
 const apiRateLimits = new BoundedMap<string, { count: number; resetAt: number }>(10000);
 
 function checkApiRateLimit(endpoint: string, ip: string, maxRequests: number = 30, windowMs: number = 60_000): boolean {
@@ -4917,6 +5092,11 @@ setInterval(() => {
     for (const [userId, lastReset] of userResetCooldown.entries()) {
       if (now - lastReset > 10 * 60 * 1000) {
         userResetCooldown.delete(userId);
+      }
+    }
+    for (const [userId, lastReactivate] of userReactivateCooldown.entries()) {
+      if (now - lastReactivate > 10 * 60 * 1000) {
+        userReactivateCooldown.delete(userId);
       }
     }
     for (const [key, data] of apiRateLimits.entries()) {
@@ -5481,6 +5661,167 @@ http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, error: "Payload too large" }));
         return;
       }
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/reactivate-my-key" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkOauthIpRateLimit(clientIp)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ success: false, error: "Too many requests. Please try again in a minute." }));
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    if (!token) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ success: false, error: "Authorization header with Bearer token is required." }));
+      return;
+    }
+
+    try {
+      await collectBody(req, 50_000);
+
+      const discordRes = await fetch("https://discord.com/api/oauth2/@me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!discordRes.ok) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ success: false, error: "Unauthorized access token." }));
+        return;
+      }
+
+      const oauthData = await discordRes.json() as {
+        scopes?: string[];
+        expires?: string;
+        user?: { id: string; username: string };
+      };
+
+      if (!oauthData.scopes?.includes("identify") || !oauthData.user) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ success: false, error: "Invalid token scope. 'identify' scope is required." }));
+        return;
+      }
+
+      if (oauthData.expires && new Date(oauthData.expires).getTime() <= Date.now()) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ success: false, error: "Access token has expired." }));
+        return;
+      }
+
+      const user = oauthData.user;
+      const guild = client.guilds.cache.get(config.GUILD_ID);
+      const member = await guild?.members.fetch(user.id).catch(() => null);
+      const userIsOwner = isOwner(member, user.id);
+
+      if (!userIsOwner) {
+        const now = Date.now();
+        const lastReactivate = userReactivateCooldown.get(user.id);
+        if (lastReactivate && now - lastReactivate < 5 * 60 * 1000) {
+          const remainingMinutes = Math.ceil((5 * 60 * 1000 - (now - lastReactivate)) / 60000);
+          res.writeHead(429);
+          res.end(JSON.stringify({
+            success: false,
+            error: `Anda hanya dapat mereaktivasi key sekali setiap 5 menit. Silakan coba lagi dalam ${remainingMinutes} menit.`
+          }));
+          return;
+        }
+      }
+
+      const result = reactivateUserKey(user.id, userIsOwner);
+      if (result.success) {
+        userReactivateCooldown.set(user.id, Date.now());
+
+        const logChannelId = config.LOG_CHANNEL_ID || config.SECURITY_LOG_CHANNEL_ID;
+        if (logChannelId) {
+          const ch = client.channels.cache.get(logChannelId) as TextChannel | undefined;
+          if (ch?.isSendable()) {
+            const embed = new EmbedBuilder()
+              .setTitle("🔄 Key Re-activated (Web)")
+              .setDescription(`Pengguna <@${user.id}> (\`${user.id}\`) telah mereaktivasi status key mereka via web console.`)
+              .setColor(0x00ff88)
+              .setTimestamp();
+            ch.send({ embeds: [embed] }).catch(() => {});
+          }
+        }
+
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, message: result.message, key: result.key }));
+      } else {
+        res.writeHead(400);
+        res.end(JSON.stringify({ success: false, error: result.message }));
+      }
+    } catch (error: any) {
+      console.error("Error in /api/reactivate-my-key:", error);
+      if (error?.message === "PAYLOAD_TOO_LARGE") {
+        res.writeHead(413);
+        res.end(JSON.stringify({ success: false, error: "Payload too large" }));
+        return;
+      }
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/supported-games" && req.method === "GET") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/supported-games", clientIp, 60)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    try {
+      const games = getAllSupportedGames();
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        success: true,
+        count: games.length,
+        games
+      }));
+    } catch (err) {
+      console.error("Error in /api/supported-games:", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: "Internal server error" }));
+    }
+  }
+  else if (pathname === "/api/admin/reactivate-key" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    if (!checkApiRateLimit("/api/admin/reactivate-key", clientIp, 20)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "Too many requests" }));
+      return;
+    }
+
+    const adminCheck = await requireAdminAuth(req);
+    if (!adminCheck.ok) {
+      res.writeHead(adminCheck.status);
+      res.end(JSON.stringify({ error: adminCheck.error }));
+      return;
+    }
+
+    try {
+      const body = await collectBody(req, 20_000);
+      const data = JSON.parse(body || "{}") as { discord_id?: string; key?: string };
+      let targetDiscordId = data.discord_id?.trim();
+
+      if (!targetDiscordId && data.key) {
+        const row = db.prepare("SELECT discord_id FROM user_keys WHERE key = ?").get(data.key.trim()) as { discord_id: string } | undefined;
+        targetDiscordId = row?.discord_id;
+      }
+
+      if (!targetDiscordId) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ success: false, error: "discord_id atau key wajib diberikan" }));
+        return;
+      }
+
+      const result = reactivateUserKey(targetDiscordId, true);
+      res.writeHead(result.success ? 200 : 400);
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error("Error in /api/admin/reactivate-key:", err);
       res.writeHead(500);
       res.end(JSON.stringify({ success: false, error: "Internal server error" }));
     }

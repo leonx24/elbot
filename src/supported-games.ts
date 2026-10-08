@@ -10,7 +10,7 @@ import {
   MessageFlags,
 } from "discord.js";
 
-export type GameStatus = "WORK" | "NEED_UPDATE" | "DOWN" | "DISCONTINUED";
+export type GameStatus = "WORK" | "MAINTENANCE" | "NEED_UPDATE" | "DOWN" | "DISCONTINUED";
 
 export interface SupportedGame {
   id?: string;
@@ -23,6 +23,7 @@ export interface SupportedGame {
 
 export const STATUS: Record<GameStatus, { emoji: string; label: string }> = {
   WORK: { emoji: "🟢", label: "WORK" },
+  MAINTENANCE: { emoji: "🔧", label: "MAINTENANCE" },
   NEED_UPDATE: { emoji: "🟠", label: "NEED UPDATE" },
   DOWN: { emoji: "🔴", label: "DOWN" },
   DISCONTINUED: { emoji: "🔴", label: "DISCONTINUED" },
@@ -43,6 +44,7 @@ export const DEFAULT_SUPPORTED_GAMES: SupportedGame[] = [
     name: "Violence District",
     status: "WORK",
     category: "Roblox",
+    placeIds: [93978595733734],
   },
   {
     id: "sniper-arena",
@@ -59,11 +61,34 @@ export const DEFAULT_SUPPORTED_GAMES: SupportedGame[] = [
     placeIds: [124216119978534],
   },
   {
-    id: "steal-an-egg",
-    name: "Steal an Egg",
+    id: "loot-to-forge",
+    name: "Loot To Forge",
     status: "WORK",
     category: "Roblox",
+    placeIds: [118805555015549],
+  },
+  {
+    id: "fishing-master",
+    name: "Fishing Master",
+    status: "WORK",
+    category: "Roblox",
+    placeIds: [99925503388128],
+  },
+  {
+    id: "steal-an-egg",
+    name: "Steal an Egg",
+    status: "MAINTENANCE",
+    category: "Roblox",
+    note: "Sedang dalam perbaikan & pemeliharaan",
     placeIds: [107778070777162],
+  },
+  {
+    id: "break-and-steal",
+    name: "Break and Steal an Egg",
+    status: "MAINTENANCE",
+    category: "Roblox",
+    note: "Sedang dalam perbaikan & pemeliharaan",
+    placeIds: [114326934417838],
   },
   {
     id: "fish-and-monster",
@@ -103,6 +128,7 @@ export function buildSupportedGamesV2(
   // Catatan: Tidak menggunakan .setAccentColor(...) agar tidak ada garis warna di sisi kiri
 
   const supported = games.filter((g) => g.status === "WORK");
+  const maintenance = games.filter((g) => g.status === "MAINTENANCE");
   const needUpdate = games.filter((g) => g.status === "NEED_UPDATE");
   const discontinued = games.filter((g) => g.status === "DISCONTINUED" || g.status === "DOWN");
 
@@ -129,6 +155,15 @@ export function buildSupportedGamesV2(
   const supportedSection = buildGameSection("Supported Games", supported);
   if (supportedSection) {
     container.addTextDisplayComponents(supportedSection);
+  }
+
+  // Maintenance (only shows if non-empty)
+  const maintenanceSection = buildGameSection("Maintenance", maintenance);
+  if (maintenanceSection) {
+    container.addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
+    );
+    container.addTextDisplayComponents(maintenanceSection);
   }
 
   // Need Update (only shows if non-empty)
@@ -158,7 +193,8 @@ export function buildSupportedGamesV2(
     new TextDisplayBuilder().setContent(
       "### 📊 Status Legend\n" +
       "🟢 `WORK` — Script berjalan normal & stabil\n" +
-      "🟠 `NEED UPDATE` — Sedang maintenance / beta test\n" +
+      "🔧 `MAINTENANCE` — Sedang dalam perbaikan & pemeliharaan\n" +
+      "🟠 `NEED UPDATE` — Membutuhkan update game / beta test\n" +
       "🔴 `DISCONTINUED` — Dukungan script telah dihentikan"
     )
   );

@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import crypto from "node:crypto";
+import { SupportedGame, GameStatus, DEFAULT_SUPPORTED_GAMES } from "./supported-games.js";
 
 const dbPath = process.env.DATABASE_PATH || "data/bot.db";
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -131,6 +132,17 @@ db.exec(`
     first_failure INTEGER NOT NULL,
     last_failure INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS supported_games (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    category TEXT DEFAULT 'Roblox',
+    note TEXT,
+    place_ids TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all() as Array<{ name: string }>;
@@ -174,6 +186,42 @@ const existingUserKeyColumns = new Set(userKeyColumns.map((column) => column.nam
 if (!existingUserKeyColumns.has("last_reset_at")) {
   db.exec("ALTER TABLE user_keys ADD COLUMN last_reset_at TEXT");
   console.log("Database migration: user_keys.last_reset_at ditambahkan");
+}
+if (!existingUserKeyColumns.has("is_active")) {
+  db.exec("ALTER TABLE user_keys ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
+  console.log("Database migration: user_keys.is_active ditambahkan");
+}
+if (!existingUserKeyColumns.has("last_reactivated_at")) {
+  db.exec("ALTER TABLE user_keys ADD COLUMN last_reactivated_at TEXT");
+  console.log("Database migration: user_keys.last_reactivated_at ditambahkan");
+}
+
+// Seeding / initial sync supported_games jika kosong
+const gameCountRow = db.prepare("SELECT COUNT(*) as count FROM supported_games").get() as { count: number };
+if (gameCountRow.count === 0) {
+  const insertGameStmt = db.prepare(`
+    INSERT INTO supported_games (id, name, status, category, note, place_ids)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      status = excluded.status,
+      category = excluded.category,
+      note = excluded.note,
+      place_ids = excluded.place_ids,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+  for (const g of DEFAULT_SUPPORTED_GAMES) {
+    const id = g.id || g.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    insertGameStmt.run(
+      id,
+      g.name,
+      g.status,
+      g.category || "Roblox",
+      g.note || null,
+      g.placeIds ? JSON.stringify(g.placeIds) : null
+    );
+  }
+  console.log(`Database seeded: ${DEFAULT_SUPPORTED_GAMES.length} supported games dimasukkan ke database.`);
 }
 
 // Auto-purge any accidentally banned private / internal IPs (Railway internal CGNAT 100.64.0.0/10, localhost, etc.)
@@ -341,10 +389,15 @@ export function validateUserKey(
       roblox_id: string | null;
       hwid: string | null;
       created_at: string;
+      is_active?: number;
     } | undefined;
 
     if (!row) {
       return { valid: false, message: "Key tidak valid atau tidak terdaftar." };
+    }
+
+    if (row.is_active === 0) {
+      return { valid: false, message: "Key Anda sedang nonaktif. Silakan reaktifkan key melalui website." };
     }
 
     // If key already has hwid registered, it must match
@@ -415,6 +468,61 @@ export function resetUserKeyBinding(discordId: string, bypassCooldown: boolean =
   });
 
   return runReset();
+}
+
+export function reactivateUserKey(
+  discordId: string,
+  bypassCooldown: boolean = false
+): { success: boolean; message: string; key?: string } {
+  const runReactivate = db.transaction(() => {
+    const row = db.prepare("SELECT * FROM user_keys WHERE discord_id = ?").get(discordId) as {
+      discord_id: string;
+      key: string;
+      roblox_id: string | null;
+      hwid: string | null;
+      last_reset_at: string | null;
+      last_reactivated_at?: string | null;
+      is_active?: number;
+    } | undefined;
+
+    if (!row) {
+      return { success: false, message: "Anda belum memiliki key yang terdaftar. Silakan gunakan `/script` terlebih dahulu." };
+    }
+
+    // Cooldown check (5 minutes) unless bypassed
+    if (!bypassCooldown && row.last_reactivated_at) {
+      const last = new Date(row.last_reactivated_at).getTime();
+      const now = Date.now();
+      const diffMs = now - last;
+      const COOLDOWN_MS = 5 * 60 * 1000;
+      if (diffMs < COOLDOWN_MS) {
+        const remainingMinutes = Math.ceil((COOLDOWN_MS - diffMs) / 60000);
+        return {
+          success: false,
+          message: `Anda hanya dapat mereaktivasi key sekali setiap 5 menit. Silakan coba lagi dalam ${remainingMinutes} menit.`
+        };
+      }
+    }
+
+    const nowString = new Date().toISOString();
+    // 1. Set is_active = 1, update last_reactivated_at
+    db.prepare("UPDATE user_keys SET is_active = 1, last_reactivated_at = ? WHERE discord_id = ?")
+      .run(nowString, discordId);
+
+    // 2. Remove key locks if key was locked
+    db.prepare("DELETE FROM key_locks WHERE key = ?").run(row.key);
+
+    // 3. Reset global failure counter
+    db.prepare("DELETE FROM global_key_failures WHERE key = ?").run(row.key);
+
+    return {
+      success: true,
+      message: "Key berhasil direaktivasi dan status keamanan telah dipulihkan. Silakan gunakan kembali script di Roblox.",
+      key: row.key
+    };
+  });
+
+  return runReactivate();
 }
 
 export function isPrivateOrInternalIp(ip: string): boolean {
@@ -490,6 +598,8 @@ export function getUserKeyInfo(discordId: string): {
   roblox_id: string | null;
   hwid: string | null;
   last_reset_at: string | null;
+  last_reactivated_at: string | null;
+  is_active: number;
   created_at: string;
   execution_count: number;
 } | null {
@@ -498,6 +608,8 @@ export function getUserKeyInfo(discordId: string): {
     roblox_id: string | null;
     hwid: string | null;
     last_reset_at: string | null;
+    last_reactivated_at?: string | null;
+    is_active?: number;
     created_at: string;
   } | undefined;
 
@@ -506,7 +618,13 @@ export function getUserKeyInfo(discordId: string): {
   const countRow = db.prepare("SELECT COUNT(*) as count FROM script_executions WHERE discord_id = ?").get(discordId) as { count: number } | undefined;
 
   return {
-    ...row,
+    key: row.key,
+    roblox_id: row.roblox_id,
+    hwid: row.hwid,
+    last_reset_at: row.last_reset_at,
+    last_reactivated_at: row.last_reactivated_at || null,
+    is_active: row.is_active !== undefined ? row.is_active : 1,
+    created_at: row.created_at,
     execution_count: countRow?.count || 0
   };
 }
@@ -604,4 +722,171 @@ export function upsertGlobalKeyFailure(key: string, count: number, firstFailure:
 export function deleteGlobalKeyFailure(key: string): void {
   db.prepare("DELETE FROM global_key_failures WHERE key = ?").run(key);
 }
+
+// ── Supported Games Database Operations ──
+
+export function getAllSupportedGames(): SupportedGame[] {
+  const rows = db.prepare("SELECT * FROM supported_games ORDER BY id ASC").all() as Array<{
+    id: string;
+    name: string;
+    status: GameStatus;
+    category?: string | null;
+    note?: string | null;
+    place_ids?: string | null;
+  }>;
+
+  if (rows.length === 0) {
+    return DEFAULT_SUPPORTED_GAMES;
+  }
+
+  return rows.map((r) => {
+    let placeIds: (number | string)[] | undefined = undefined;
+    if (r.place_ids) {
+      try {
+        placeIds = JSON.parse(r.place_ids);
+      } catch {
+        placeIds = undefined;
+      }
+    }
+    return {
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      category: r.category || "Roblox",
+      note: r.note || undefined,
+      placeIds
+    };
+  });
+}
+
+export function getSupportedGameById(id: string): SupportedGame | undefined {
+  const cleanId = id.trim().toLowerCase();
+  const row = db.prepare("SELECT * FROM supported_games WHERE id = ? OR LOWER(name) = ?").get(cleanId, cleanId) as {
+    id: string;
+    name: string;
+    status: GameStatus;
+    category?: string | null;
+    note?: string | null;
+    place_ids?: string | null;
+  } | undefined;
+
+  if (!row) return undefined;
+  let placeIds: (number | string)[] | undefined = undefined;
+  if (row.place_ids) {
+    try {
+      placeIds = JSON.parse(row.place_ids);
+    } catch {
+      placeIds = undefined;
+    }
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    category: row.category || "Roblox",
+    note: row.note || undefined,
+    placeIds
+  };
+}
+
+export function addSupportedGame(game: {
+  id?: string;
+  name: string;
+  status: GameStatus;
+  category?: string;
+  note?: string;
+  placeIds?: (number | string)[];
+}): SupportedGame {
+  const slug = (game.id || game.name)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  const placeIdsJson = game.placeIds && game.placeIds.length > 0 ? JSON.stringify(game.placeIds) : null;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO supported_games (id, name, status, category, note, place_ids, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      status = excluded.status,
+      category = excluded.category,
+      note = excluded.note,
+      place_ids = excluded.place_ids,
+      updated_at = excluded.updated_at
+  `).run(
+    slug,
+    game.name.trim(),
+    game.status,
+    game.category || "Roblox",
+    game.note ? game.note.trim() : null,
+    placeIdsJson,
+    now,
+    now
+  );
+
+  return {
+    id: slug,
+    name: game.name.trim(),
+    status: game.status,
+    category: game.category || "Roblox",
+    note: game.note ? game.note.trim() : undefined,
+    placeIds: game.placeIds
+  };
+}
+
+export function updateSupportedGame(
+  id: string,
+  updates: {
+    name?: string;
+    status?: GameStatus;
+    category?: string;
+    note?: string | null;
+    placeIds?: (number | string)[];
+  }
+): SupportedGame | null {
+  const current = getSupportedGameById(id);
+  if (!current || !current.id) return null;
+
+  const newName = updates.name !== undefined ? updates.name.trim() : current.name;
+  const newStatus = updates.status !== undefined ? updates.status : current.status;
+  const newCategory = updates.category !== undefined ? updates.category : current.category;
+  const newNote = updates.note !== undefined ? (updates.note ? updates.note.trim() : null) : (current.note || null);
+  const newPlaceIds = updates.placeIds !== undefined ? updates.placeIds : current.placeIds;
+  const placeIdsJson = newPlaceIds && newPlaceIds.length > 0 ? JSON.stringify(newPlaceIds) : null;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    UPDATE supported_games
+    SET name = ?, status = ?, category = ?, note = ?, place_ids = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    newName,
+    newStatus,
+    newCategory || "Roblox",
+    newNote,
+    placeIdsJson,
+    now,
+    current.id
+  );
+
+  return {
+    id: current.id,
+    name: newName,
+    status: newStatus,
+    category: newCategory,
+    note: newNote || undefined,
+    placeIds: newPlaceIds
+  };
+}
+
+export function deleteSupportedGame(id: string): boolean {
+  const target = getSupportedGameById(id);
+  if (!target || !target.id) return false;
+  const res = db.prepare("DELETE FROM supported_games WHERE id = ?").run(target.id);
+  return res.changes > 0;
+}
+
 
